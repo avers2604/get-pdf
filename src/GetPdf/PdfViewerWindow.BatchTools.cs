@@ -5,6 +5,32 @@ namespace GetPdf;
 
 public partial class PdfViewerWindow
 {
+    internal PdfCrossTabSnapshot? GetCleanTransferSnapshot()
+    {
+        if (IsBusy || !_canModify || _plan is null || _sourcePath is null ||
+            _originalPath is null || _plan.HasChanges || HasPendingChanges ||
+            _pageIndex < 0 || _pageIndex >= _plan.Pages.Count)
+            return null;
+        return new PdfCrossTabSnapshot(_sourcePath, _originalPath,
+            _plan.Snapshot(), _pageIndex, _plan.SourcePageCount);
+    }
+
+    internal void SetCrossTabExportBusy(CancellationTokenSource? job)
+    {
+        if (job is not null && IsBusy)
+            throw new InvalidOperationException("В документе выполняется другое задание.");
+        _batchCancel = job;
+        _loading = job is not null;
+        SetControls();
+    }
+
+    private void CopyPageToTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button button &&
+            HostWindow is PdfTabbedWindow host)
+            host.ShowPageCopyTargets(this, button);
+    }
+
     private void NumberAllPages_Click(object sender, RoutedEventArgs e)
     {
         if (!_workspace.CanEdit || _plan is null) return;

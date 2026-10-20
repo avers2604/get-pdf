@@ -10,7 +10,7 @@ namespace GetPdf;
 /// Tab host for independent PDF reader controls. Every tab retains its own
 /// PDF source adapter, edit history, render scheduler and scratch folder.
 /// </summary>
-internal sealed class PdfTabbedWindow : Window
+internal sealed partial class PdfTabbedWindow : Window
 {
     private sealed record Handle(Guid Id, PdfViewerWindow Viewer, TabItem Tab,
         TextBlock Caption, Action OnReady);

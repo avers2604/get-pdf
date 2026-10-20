@@ -5,6 +5,9 @@ namespace GetPdf;
 /// Any visible annotations, source revisions or page rotations in the plans are
 /// refused rather than silently dropped when writing a mixed-source PDF.
 /// </summary>
+internal sealed record PdfCrossTabSnapshot(string WorkingPath, string OriginalPath,
+    PdfPageReference[] Pages, int SelectedPageIndex, int SourcePageCount);
+
 internal static class PdfCrossTabPageTransfer
 {
     internal static PdfSourcePageReference[] Build(

@@ -271,7 +271,10 @@
             </StackPanel>
             <StackPanel x:Name="PageTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed">
           <Button Content="Пронумеровать страницы…" Click="NumberAllPages_Click" Margin="0,0,0,8"/>
-          <Button Content="Разделить по страницам…" Click="SplitIntoPages_Click" Margin="0,0,0,8"/><WrapPanel Margin="0,0,0,8"><Button Content="↶ 90°" Click="RotateLeft_Click"/><Button Content="↷ 90°" Click="RotateRight_Click"/><Button Content="↑" Click="MoveUp_Click"/><Button Content="↓" Click="MoveDown_Click"/><Button Content="Дублировать" Click="Duplicate_Click"/><Button Content="Удалить" Click="Delete_Click"/></WrapPanel>
+          <Button Content="Разделить по страницам…" Click="SplitIntoPages_Click" Margin="0,0,0,8"/>
+          <Button x:Name="CrossTabPageCopyButton" Content="Копировать страницу в другой PDF…"
+                  Click="CopyPageToTab_Click" Margin="0,0,0,8"
+                  ToolTip="Создать новый PDF из страниц другой вкладки и этой страницы; оригиналы не меняются"/><WrapPanel Margin="0,0,0,8"><Button Content="↶ 90°" Click="RotateLeft_Click"/><Button Content="↷ 90°" Click="RotateRight_Click"/><Button Content="↑" Click="MoveUp_Click"/><Button Content="↓" Click="MoveDown_Click"/><Button Content="Дублировать" Click="Duplicate_Click"/><Button Content="Удалить" Click="Delete_Click"/></WrapPanel>
           <Button x:Name="ExtractButton" IsEnabled="{Binding CanExtract, Mode=OneWay}" Content="Извлечь" Click="Extract_Click" Margin="0,0,5,0"
                   ToolTip="Сохранить текущую страницу в отдельный PDF"/>
           <TextBox x:Name="PageRangeBox" IsEnabled="{Binding CanSetPageRange, Mode=OneWay}" Width="120" Height="32" Text="1" Margin="0,0,5,0"
