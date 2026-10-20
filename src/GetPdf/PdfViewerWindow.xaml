@@ -239,7 +239,9 @@
             </Button.ContextMenu>
           </Button>
             </StackPanel>
-            <StackPanel x:Name="PageTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed"><WrapPanel Margin="0,0,0,8"><Button Content="↶ 90°" Click="RotateLeft_Click"/><Button Content="↷ 90°" Click="RotateRight_Click"/><Button Content="↑" Click="MoveUp_Click"/><Button Content="↓" Click="MoveDown_Click"/><Button Content="Дублировать" Click="Duplicate_Click"/><Button Content="Удалить" Click="Delete_Click"/></WrapPanel>
+            <StackPanel x:Name="PageTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed">
+          <Button Content="Пронумеровать страницы…" Click="NumberAllPages_Click" Margin="0,0,0,8"/>
+          <Button Content="Разделить по страницам…" Click="SplitIntoPages_Click" Margin="0,0,0,8"/><WrapPanel Margin="0,0,0,8"><Button Content="↶ 90°" Click="RotateLeft_Click"/><Button Content="↷ 90°" Click="RotateRight_Click"/><Button Content="↑" Click="MoveUp_Click"/><Button Content="↓" Click="MoveDown_Click"/><Button Content="Дублировать" Click="Duplicate_Click"/><Button Content="Удалить" Click="Delete_Click"/></WrapPanel>
           <Button x:Name="ExtractButton" IsEnabled="{Binding CanExtract, Mode=OneWay}" Content="Извлечь" Click="Extract_Click" Margin="0,0,5,0"
                   ToolTip="Сохранить текущую страницу в отдельный PDF"/>
           <TextBox x:Name="PageRangeBox" IsEnabled="{Binding CanSetPageRange, Mode=OneWay}" Width="120" Height="32" Text="1" Margin="0,0,5,0"
@@ -249,6 +251,8 @@
                   ToolTip="Извлечь указанные страницы в отдельный PDF"/>
             </StackPanel>
             <StackPanel x:Name="DocumentTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed">
+          <Button Content="Копировать текст текущей страницы" Click="CopyPageText_Click" Margin="0,0,0,8"
+                  ToolTip="Копирует распознанный текст страницы в буфер обмена; только по вашему запросу"/>
           <Button Content="Оптимизировать PDF (qpdf)…" Click="OptimizePdf_Click" Margin="0,0,5,10"
                   ToolTip="Создать отдельную оптимизированную копию без обработки изображений с потерями"/>
           <Button Content="Сравнить с другим PDF…" Click="ComparePdf_Click" Margin="0,0,5,10"
