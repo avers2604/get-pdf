@@ -76,6 +76,11 @@ internal sealed partial class PdfTabbedWindow : Window
         actions.Children.Add(ActionButton("←", () => MoveSelected(-1)));
         actions.Children.Add(ActionButton("→", () => MoveSelected(1)));
         actions.Children.Add(ActionButton("В отдельное окно", DetachSelected));
+        var help = ActionButton("?", ShowKeyboardHelp);
+        help.ToolTip = "Клавиатурная справка (F1)";
+        System.Windows.Automation.AutomationProperties.SetName(
+            help, "Справка по клавиатурным командам ГЭТ PDF");
+        actions.Children.Add(help);
         _tabs.SelectionChanged += (_, e) =>
         {
             if (_suppressSelection || !ReferenceEquals(e.OriginalSource, _tabs)) return;
@@ -101,6 +106,12 @@ internal sealed partial class PdfTabbedWindow : Window
         Loaded += (_, _) => DocumentWindowLayout.Clamp(this);
         PreviewKeyDown += async (_, e) =>
         {
+            if (e.Key == Key.F1)
+            {
+                ShowKeyboardHelp();
+                e.Handled = true;
+                return;
+            }
             if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
             bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
             if (e.Key == Key.Tab)
@@ -131,6 +142,10 @@ internal sealed partial class PdfTabbedWindow : Window
         AddWorkspace(moved.Path, viewer, moved, persist: false);
         SaveSessions();
     }
+
+    private void ShowKeyboardHelp() =>
+        MessageBox.Show(this, PdfKeyboardHelp.Text, "ГЭТ PDF — справка",
+            MessageBoxButton.OK, MessageBoxImage.Information);
 
     private static Button ActionButton(string label, Action action)
     {
