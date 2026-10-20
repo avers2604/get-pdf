@@ -22,6 +22,17 @@ public partial class App : Application
             Shutdown(3);
             return;
         }
+        // Disabled corporate history options purge old user-local path metadata.
+        try
+        {
+            if (!WorkstationPolicy.Current.RememberRecentDocuments)
+                PdfRecentDocuments.Clear();
+            if (!WorkstationPolicy.Current.RestoreTabs)
+                PdfTabSessionStore.Clear();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { DiagnosticLog.Failure("pdf-privacy-cleanup", ex); }
+
         string[] paths;
         int activeIndex = 0;
         if (e.Args.Length > 0)

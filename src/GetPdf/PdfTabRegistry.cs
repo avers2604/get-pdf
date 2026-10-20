@@ -131,6 +131,11 @@ internal static class PdfTabSessionStore
     }
 
     internal static void Save(PdfTabSnapshot state) => SaveTo(DefaultPath, state);
+    internal static void Clear() => ClearFrom(DefaultPath);
+    internal static void ClearFrom(string path)
+    {
+        if (File.Exists(path)) File.Delete(path);
+    }
 
     internal static void SaveTo(string path, PdfTabSnapshot state)
     {

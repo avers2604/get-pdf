@@ -22,6 +22,28 @@ internal sealed class PdfTabbedWindow : Window
     private bool _shutdownApproved;
     private bool _shutdownPending;
     private bool _suppressSelection;
+    private WindowState _normalWindowState = WindowState.Normal;
+    private WindowStyle _normalWindowStyle = WindowStyle.SingleBorderWindow;
+    internal bool IsFullscreen { get; private set; }
+
+    internal void ToggleFullscreen()
+    {
+        if (!IsFullscreen)
+        {
+            _normalWindowState = WindowState;
+            _normalWindowStyle = WindowStyle;
+            WindowState = WindowState.Normal;
+            WindowStyle = WindowStyle.None;
+            WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            WindowState = WindowState.Normal;
+            WindowStyle = _normalWindowStyle;
+            WindowState = _normalWindowState;
+        }
+        IsFullscreen = !IsFullscreen;
+    }
 
     internal PdfTabbedWindow(IReadOnlyList<string> paths, int activeIndex = 0)
     {
@@ -40,7 +62,13 @@ internal sealed class PdfTabbedWindow : Window
         };
         DockPanel.SetDock(actions, Dock.Top);
         root.Children.Add(actions);
-        actions.Children.Add(ActionButton("＋ Вкладка", () => AddWorkspace(null)));
+        actions.Children.Add(ActionButton("＋ Вкладка", () =>
+        {
+            if (_registry.Items.Count >= 16)
+                MessageBox.Show(this, "Допускается до 16 вкладок в одном окне.",
+                    "ГЭТ PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
+            else AddWorkspace(null);
+        }));
         actions.Children.Add(ActionButton("←", () => MoveSelected(-1)));
         actions.Children.Add(ActionButton("→", () => MoveSelected(1)));
         actions.Children.Add(ActionButton("В отдельное окно", DetachSelected));
@@ -211,7 +239,7 @@ internal sealed class PdfTabbedWindow : Window
     private void DetachSelected()
     {
         if (_tabs.SelectedItem is not TabItem tab || tab.Tag is not Guid id ||
-            !_handles.TryGetValue(id, out var handle) || handle.Viewer.IsBusy)
+            !_handles.TryGetValue(id, out var handle) || handle.Viewer.IsBusy || IsFullscreen)
             return;
 
         handle.Viewer.DocumentReady -= handle.OnReady;

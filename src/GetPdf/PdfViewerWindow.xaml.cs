@@ -142,29 +142,9 @@ public partial class PdfViewerWindow : UserControl
         if (_plan is not null) ShowPage();
     }
 
-    private WindowState _previousWindowState = WindowState.Normal;
-    private WindowStyle _previousWindowStyle = WindowStyle.SingleBorderWindow;
-    private bool _fullscreen;
-
     private void Fullscreen_Click(object sender, RoutedEventArgs e)
     {
-        Window host = HostWindow;
-        if (!_fullscreen)
-        {
-            _previousWindowState = host.WindowState;
-            _previousWindowStyle = host.WindowStyle;
-            host.WindowState = WindowState.Normal;
-            host.WindowStyle = WindowStyle.None;
-            host.WindowState = WindowState.Maximized;
-            _fullscreen = true;
-        }
-        else
-        {
-            host.WindowState = WindowState.Normal;
-            host.WindowStyle = _previousWindowStyle;
-            host.WindowState = _previousWindowState;
-            _fullscreen = false;
-        }
+        if (HostWindow is PdfTabbedWindow shell) shell.ToggleFullscreen();
     }
 
     private void Bookmark_Click(object sender, RoutedEventArgs e)
@@ -1477,7 +1457,8 @@ public partial class PdfViewerWindow : UserControl
             return;
         }
         if (e.Key == Key.F11) { Fullscreen_Click(sender, new RoutedEventArgs()); e.Handled = true; return; }
-        if (e.Key == Key.Escape && _fullscreen) { Fullscreen_Click(sender, new RoutedEventArgs()); e.Handled = true; return; }
+        if (e.Key == Key.Escape && HostWindow is PdfTabbedWindow { IsFullscreen: true })
+        { Fullscreen_Click(sender, new RoutedEventArgs()); e.Handled = true; return; }
         if (e.Key == Key.Escape && _batchCancel is { IsCancellationRequested: false })
         {
             CancelPdfJob_Click(sender, new RoutedEventArgs());
