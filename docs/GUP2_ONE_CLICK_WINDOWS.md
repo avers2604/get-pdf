@@ -58,6 +58,20 @@ SmartScreen продолжает проверять загрузки; автоз
 - https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies/autoopenfiletypes
 - https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies/autoopenallowedforurls
 
+## Read-only проверка политик
+
+На Windows запустите подготовленный скрипт (адрес замените на
+фактический утверждённый HTTPS origin GUP-2):
+
+```powershell
+.\\scripts\\windows-check-gup2-oneclick.ps1 -ApprovedOrigin "https://gup2.corp.example"
+```
+
+Скрипт читает Edge policy и выбранную Windows-ассоциацию `.pdf`,
+но не меняет реестр, не открывает PDF и не передаёт учётные данные.
+`ReadyForManualBrowserTest=true` означает только готовность
+конфигурации к ручному испытанию, **не** успешную проверку запуска.
+
 ## Приёмка на тестовом рабочем месте
 
 1. Пользователь с доступом открывает карточку WORM PDF в GUP-2.
