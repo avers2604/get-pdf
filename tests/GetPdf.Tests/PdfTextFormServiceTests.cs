@@ -70,6 +70,22 @@ public sealed class PdfTextFormServiceTests
     }
 
     [TestMethod]
+    public void RejectsInvisibleBidiControlsInFormsAndJsonRequests()
+    {
+        string spoofed = "ФИО" + '\u202e' + "123";
+        Assert.IsTrue(PdfFormFillLabPolicy.HasUnsafeText(spoofed));
+        Assert.IsFalse(PdfFormFillLabPolicy.HasUnsafeText("Иван Иванов"));
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            PdfTextFormService.ValidateValues(
+                new Dictionary<string, string> { ["ФИО"] = spoofed }));
+        var request = System.Text.Encoding.UTF8.GetBytes(
+            System.Text.Json.JsonSerializer.Serialize(
+                new { version = 1, fields = new Dictionary<string, string> { ["ФИО"] = spoofed } }));
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            PdfFormFillLabPolicy.ReadRequest(request));
+    }
+
+    [TestMethod]
     public void RequiresFreshOutputName()
     {
         string path = Path.Combine(Path.GetTempPath(), "sample.pdf");
