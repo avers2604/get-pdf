@@ -92,8 +92,17 @@
     </Border>
     <Border Grid.Row="2" Background="White" Padding="18,6"
             BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
-      <DockPanel LastChildFill="False">
-        <StackPanel DockPanel.Dock="Left" x:Name="SearchTools" Orientation="Horizontal" VerticalAlignment="Center">
+      <!-- Keep editor mode reachable while secondary actions scroll on narrow or scaled desktops. -->
+      <DockPanel LastChildFill="True">
+        <Button x:Name="EditModeButton" Content="Редактирование"
+                Click="ToggleEditor_Click" DockPanel.Dock="Right" Margin="8,0,0,0"
+                AutomationProperties.Name="Показать или скрыть инструменты редактирования PDF"
+                ToolTip="Показать или скрыть дополнительные инструменты"/>
+        <ScrollViewer x:Name="SecondaryToolbarScroll"
+                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                      Focusable="False" AutomationProperties.Name="Поиск и режимы PDF">
+         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <StackPanel x:Name="SearchTools" Orientation="Horizontal" VerticalAlignment="Center">
           <TextBox x:Name="SearchBox" IsEnabled="{Binding CanSearch, Mode=OneWay}" Width="250" Height="32" Margin="0,0,5,0"
                    ToolTip="Поиск по имеющемуся текстовому слою PDF" AutomationProperties.Name="Найти текст PDF"
                     KeyDown="SearchBox_KeyDown" TextChanged="SearchBox_TextChanged"/>
@@ -109,8 +118,8 @@
                   IsEnabled="False" Margin="0,0,12,0"
                   ToolTip="Копировать выбранный текст (Ctrl+C)"/>
             </StackPanel>
-        <Button x:Name="EditModeButton" Content="Редактирование" Click="ToggleEditor_Click" Margin="0,0,8,0" DockPanel.Dock="Right" ToolTip="Показать или скрыть дополнительные инструменты"/><TabControl x:Name="PdfToolModeBox" Visibility="Collapsed" Style="{StaticResource DocumentToolTabs}" Width="650" Height="40" Margin="0,0,10,0"
-                  DockPanel.Dock="Left" VerticalAlignment="Center"
+          <TabControl x:Name="PdfToolModeBox" Visibility="Collapsed" Style="{StaticResource DocumentToolTabs}" Width="650" Height="40" Margin="0,0,10,0"
+                  VerticalAlignment="Center"
                   SelectionChanged="PdfToolMode_SelectionChanged"
                   ToolTip="Контекстные инструменты PDF"
                   AutomationProperties.Name="Группа инструментов PDF">
@@ -119,8 +128,9 @@
           <TabItem Header="Страницы"/>
           <TabItem Header="Разметка"/>
           <TabItem Header="OCR"/>
-        </TabControl>
-
+          </TabControl>
+         </StackPanel>
+        </ScrollViewer>
       </DockPanel>
     </Border>
     <Grid Grid.Row="3" Margin="0">
