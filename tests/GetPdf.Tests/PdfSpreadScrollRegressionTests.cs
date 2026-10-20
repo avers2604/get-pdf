@@ -24,6 +24,8 @@ public sealed class PdfSpreadScrollRegressionTests
         var bounds = DocumentViewportLayout.MeasureSpread(
             [new Size(120, 200), new Size(120, 200)], 1, 16);
         Assert.AreEqual(0, DocumentViewportLayout.PageAtVerticalOffset(bounds, -100, 0));
-        Assert.AreEqual(0, DocumentViewportLayout.PageAtVerticalOffset(bounds, 1000, 1));
+        // Below all pages, the layout returns the last page rather than
+        // jumping back to the first page of the spread.
+        Assert.AreEqual(1, DocumentViewportLayout.PageAtVerticalOffset(bounds, 1000, 1));
     }
 }

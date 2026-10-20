@@ -27,9 +27,20 @@ public sealed class PdfGetSystemStatusTests
         Assert.AreEqual("get-system.pdf.status.v1",
             document.RootElement.GetProperty("Schema").GetString());
         Assert.AreEqual(12, document.RootElement.GetProperty("OpenDocuments").GetInt32());
-        Assert.IsFalse(json.Contains(".pdf", StringComparison.OrdinalIgnoreCase));
+        // The public schema ID deliberately includes ".pdf", so checking
+        // that substring would yield a false positive. Assert an explicit
+        // minimal allowlist instead of guessing from incidental text.
+        var allowed = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Schema", "Product", "ApplicationVersion", "GeneratedUtc",
+            "OpenWindows", "OpenDocuments", "PrintingAllowed", "OfflineOnly"
+        };
+        var actual = document.RootElement.EnumerateObject()
+            .Select(property => property.Name).ToHashSet(StringComparer.Ordinal);
+        Assert.IsTrue(allowed.SetEquals(actual));
         Assert.IsFalse(json.Contains("C:\\", StringComparison.OrdinalIgnoreCase));
-        Assert.IsFalse(json.Contains("user", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(json.Contains("\\"SourcePath\\"", StringComparison.Ordinal));
+        Assert.IsFalse(json.Contains("\\"FileName\\"", StringComparison.Ordinal));
     }
 
     [TestMethod]
