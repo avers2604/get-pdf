@@ -109,10 +109,9 @@ public partial class PdfViewerWindow : Window
     {
         // WPF may raise SelectionChanged while loading XAML. The groups only
         // become available after InitializeComponent has finished.
-        if (SearchTools is null || MarkupTools is null || PageTools is null ||
+        if (MarkupTools is null || PageTools is null ||
             DocumentTools is null || PdfToolModeBox is null) return;
         int index = ActiveToolIndex;
-        SearchTools.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
         MarkupTools.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
         PageTools.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
         DocumentTools.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
@@ -123,7 +122,13 @@ public partial class PdfViewerWindow : Window
     private void ToggleEditor_Click(object sender, RoutedEventArgs e)
     {
         _editingToolsVisible = !_editingToolsVisible;
+        if (_editingToolsVisible && PdfToolModeBox.SelectedIndex == 0)
+            PdfToolModeBox.SelectedIndex = 2; // Page tools on first entry, not an empty panel.
         PdfToolModeBox.Visibility = _editingToolsVisible ? Visibility.Visible : Visibility.Collapsed;
+        EditModeButton.Content = _editingToolsVisible ? "Закрыть редактор" : "Редактирование";
+        UndoButton.Visibility = _editingToolsVisible ? Visibility.Visible : Visibility.Collapsed;
+        RedoButton.Visibility = _editingToolsVisible ? Visibility.Visible : Visibility.Collapsed;
+        SaveAsButton.Visibility = _editingToolsVisible ? Visibility.Visible : Visibility.Collapsed;
         ApplyResponsiveLayout();
     }
 
@@ -207,8 +212,10 @@ public partial class PdfViewerWindow : Window
             PdfPreviewScroll.Focus();
         else if (PdfPreviewScroll.IsKeyboardFocusWithin && SaveAsButton.IsEnabled)
             SaveAsButton.Focus();
-        else
+        else if (_editingToolsVisible)
             PdfToolModeBox.Focus();
+        else
+            SearchBox.Focus();
     }
 
     private async void Viewer_Loaded(object sender, RoutedEventArgs e)
@@ -247,17 +254,65 @@ public partial class PdfViewerWindow : Window
 
     private async void Open_Click(object sender, RoutedEventArgs e)
     {
-        if (_loading || _rendering) return;
+        if (_loading || _rendering || _closing) return;
         var dialog = new OpenFileDialog { Title = "Открыть PDF", Filter = "PDF (*.pdf)|*.pdf", Multiselect = true };
-        if (dialog.ShowDialog(this) != true) return;
-        foreach (var path in dialog.FileNames)
+        if (dialog.ShowDialog(this) == true)
+            await OpenPdfPathsAsync(dialog.FileNames);
+    }
+
+    private async Task OpenPdfPathsAsync(IEnumerable<string> paths)
+    {
+        foreach (string path in paths.Take(32))
         {
-            // Never replace an open PDF or discard unsaved edits.
-            if (_sourcePath is null && !_loading)
-                await LoadPdfAsync(path);
-            else
-                new PdfViewerWindow(path).Show();
+            if (!PdfOpenRequest.TryParse([path], out var validPath) || validPath is null)
+            {
+                MessageBox.Show(this, "Выберите существующий PDF-файл.", "ГЭТ PDF",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                continue;
+            }
+            if (_sourcePath is null && !_loading) await LoadPdfAsync(validPath);
+            else new PdfViewerWindow(validPath).Show();
         }
+    }
+
+    private void Viewer_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = !_loading && !_closing && e.Data.GetDataPresent(DataFormats.FileDrop)
+            ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void Viewer_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (_closing || _loading || e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
+        await OpenPdfPathsAsync(paths);
+    }
+
+    private void Recent_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button owner) return;
+        var menu = new ContextMenu();
+        foreach (string path in PdfRecentDocuments.Read())
+        {
+            var item = new MenuItem { Header = Path.GetFileName(path), ToolTip = path };
+            item.Click += async (_, _) =>
+            {
+                if (_closing || _loading) return;
+                await OpenPdfPathsAsync([path]);
+            };
+            menu.Items.Add(item);
+        }
+        if (menu.Items.Count == 0)
+            menu.Items.Add(new MenuItem { Header = "Список пуст", IsEnabled = false });
+        menu.Items.Add(new Separator());
+        var clear = new MenuItem { Header = "Очистить недавние" };
+        clear.Click += (_, _) => PdfRecentDocuments.Clear();
+        menu.Items.Add(clear);
+        owner.ContextMenu = menu;
+        menu.PlacementTarget = owner;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
     }
 
     private async Task LoadPdfAsync(string path)
@@ -319,6 +374,9 @@ public partial class PdfViewerWindow : Window
             RefreshList();
             DocumentView.RestoreViewport(_pageIndex, viewState.RelativeOffset, _zoom);
             DocumentReady?.Invoke();
+            try { PdfRecentDocuments.Remember(_originalPath); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { DiagnosticLog.Failure("pdf-recent", ex); }
             StatusText.Text = draftStatus ?? (_canModify
                 ? "Просмотр PDF. Исходный файл не изменён."
                 : "Только просмотр: редактирование структуры документа не подтверждено.");
@@ -1242,7 +1300,6 @@ public partial class PdfViewerWindow : Window
         else if (control && e.Key == Key.S) { SaveAs_Click(sender, new RoutedEventArgs()); e.Handled = true; }
         else if (control && e.Key == Key.F)
         {
-            ActiveToolIndex = 0;
             SearchBox.Focus();
             SearchBox.SelectAll();
             e.Handled = true;
@@ -1375,6 +1432,8 @@ public partial class PdfViewerWindow : Window
             _activeSearchQuery = query;
             _searchHits = await Task.Run(() => textIndex.Find(visiblePages, query));
             _activeHit = 0;
+            if (_searchHits.Count > 0 && _pagePaneOverride != false)
+            { _pagePaneOverride = true; ApplyResponsiveLayout(); }
             if (_searchHits.Count == 0)
             {
                 RefreshSearchResults();
