@@ -18,8 +18,21 @@ internal sealed class PdfPagePrintPaginator : DocumentPaginator
     public PdfPagePrintPaginator(IReadOnlyList<string> rasterFiles,
         IReadOnlyList<PdfPageReference> plannedPages, Size printableSize)
     {
-        _rasterFiles = rasterFiles;
-        _plannedPages = plannedPages;
+        ArgumentNullException.ThrowIfNull(rasterFiles);
+        ArgumentNullException.ThrowIfNull(plannedPages);
+        if (!double.IsFinite(printableSize.Width) || !double.IsFinite(printableSize.Height) ||
+            printableSize.Width <= 0 || printableSize.Height <= 0)
+            throw new ArgumentOutOfRangeException(nameof(printableSize));
+        if (rasterFiles.Count < 1 || plannedPages.Count < 1)
+            throw new ArgumentException("Нет страниц для печати.");
+        foreach (var page in plannedPages)
+        {
+            if (page is null || page.SourcePage < 0 || page.SourcePage >= rasterFiles.Count ||
+                string.IsNullOrWhiteSpace(rasterFiles[page.SourcePage]))
+                throw new ArgumentException("Неверная таблица растровых страниц печати.");
+        }
+        _rasterFiles = rasterFiles.ToArray();
+        _plannedPages = plannedPages.ToArray();
         PageSize = printableSize;
     }
 
