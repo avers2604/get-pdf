@@ -17,7 +17,7 @@ public sealed class PdfTextSelectionTests
         Assert.AreEqual(2, model.HitTest(.14, .22));
         Assert.AreEqual(-1, model.HitTest(.85, .85));
         Assert.AreEqual("Первый тест\nСтрока", model.Extract(0, 2));
-        Assert.AreEqual("тест Строка", model.Extract(2, 1));
+        Assert.AreEqual("тест\nСтрока", model.Extract(2, 1));
     }
 
     [TestMethod]
