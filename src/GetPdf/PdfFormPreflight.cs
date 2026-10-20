@@ -181,7 +181,10 @@ internal sealed record PdfFormPreflightSummary(
         result.AppendLine($"Обязательных: {RequiredFields}; только для чтения: {ReadOnlyFields}; многострочных: {MultilineTextFields}; парольных: {PasswordTextFields}.");
         result.AppendLine($"С ограничением длины: {FieldsWithMaxLength}; с действиями: {FieldsWithActions}.");
         result.AppendLine($"XFA: {(HasXfa ? "есть" : "нет")}; порядок вычислений: {(HasCalculationOrder ? "есть" : "нет")}; запрос генерации внешнего вида: {(HasNeedAppearances ? "есть" : "нет")}; действия документа: {(HasCatalogActions ? "есть" : "нет")}.");
-        result.Append("Заполнение в GET-PDF пока не включено: создание визуального представления полей и сохранность исходной формы не прошли проверку. Оригинал не изменяется.");
+        result.Append("Основной редактор PDFsharp не перезаписывает интерактивную форму. " +
+            "Для простых неподписанных текстовых полей доступен отдельный ограниченный " +
+            "инструмент «Заполнить текстовую форму» с сохранением новой PDF-копии. " +
+            "Сложные/XFA/подписанные формы не поддерживаются; Windows-проверка ещё не выполнена.");
         return result.ToString();
     }
 }
