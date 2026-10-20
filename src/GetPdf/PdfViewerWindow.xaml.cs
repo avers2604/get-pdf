@@ -69,6 +69,7 @@ public partial class PdfViewerWindow : Window
     private bool _deferredClose;
     private bool _closeApproved;
     private bool? _pagePaneOverride;
+    private bool _editingToolsVisible;
 
     private string? CurrentPlanFingerprint() =>
         _plan is null ? null : string.Join(";", _plan.Pages.Select(p =>
@@ -119,6 +120,13 @@ public partial class PdfViewerWindow : Window
         if (index == 4) _ = LoadTextFragmentsAsync();
     }
 
+    private void ToggleEditor_Click(object sender, RoutedEventArgs e)
+    {
+        _editingToolsVisible = !_editingToolsVisible;
+        PdfToolModeBox.Visibility = _editingToolsVisible ? Visibility.Visible : Visibility.Collapsed;
+        ApplyResponsiveLayout();
+    }
+
     private void Viewer_SizeChanged(object sender, SizeChangedEventArgs e) =>
         ApplyResponsiveLayout();
 
@@ -131,7 +139,7 @@ public partial class PdfViewerWindow : Window
         bool wasVisible = PagePaneBorder.Visibility == Visibility.Visible;
         PagePaneBorder.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         PagePaneColumn.Width = new GridLength(show ? 205 : 0);
-        ToolPaneColumn.Width = new GridLength(ActualWidth < 1000 ? 230 : 280);
+        ToolPaneColumn.Width = new GridLength(_editingToolsVisible ? (ActualWidth < 1000 ? 230 : 280) : 0);
         PagePaneToggleButton.Content = show ? "Скрыть страницы"
             : _searchHits.Count > 0 ? $"Результаты ({_searchHits.Count})" : "Страницы";
         SearchResultsList.Height = PdfWorkspaceLayout.ResultsHeight(ActualHeight);
@@ -239,10 +247,17 @@ public partial class PdfViewerWindow : Window
 
     private async void Open_Click(object sender, RoutedEventArgs e)
     {
-        if (_loading || _rendering || !DiscardEditsIfNeeded()) return;
-        var dialog = new OpenFileDialog { Title = "Открыть PDF", Filter = "PDF (*.pdf)|*.pdf" };
-        if (dialog.ShowDialog(this) == true)
-            await LoadPdfAsync(dialog.FileName);
+        if (_loading || _rendering) return;
+        var dialog = new OpenFileDialog { Title = "Открыть PDF", Filter = "PDF (*.pdf)|*.pdf", Multiselect = true };
+        if (dialog.ShowDialog(this) != true) return;
+        foreach (var path in dialog.FileNames)
+        {
+            // Never replace an open PDF or discard unsaved edits.
+            if (_sourcePath is null && !_loading)
+                await LoadPdfAsync(path);
+            else
+                new PdfViewerWindow(path).Show();
+        }
     }
 
     private async Task LoadPdfAsync(string path)
