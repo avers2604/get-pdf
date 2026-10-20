@@ -46,7 +46,14 @@
                   AutomationProperties.Name="Предыдущая страница PDF" Click="Previous_Click" Margin="0,0,6,0"/>
           <Button x:Name="NextButton" IsEnabled="{Binding CanNavigateNext, Mode=OneWay}" Content="→" ToolTip="Следующая страница"
                   AutomationProperties.Name="Следующая страница PDF" Click="Next_Click" Margin="0,0,13,0"/>
-          <TextBlock x:Name="PagePosition" Text="Нет страниц" VerticalAlignment="Center" Margin="0,0,20,0"/>
+          <TextBlock x:Name="PagePosition" Text="Нет страниц" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <TextBox x:Name="PageNumberBox" Width="48" Height="30" Margin="0,0,4,0"
+                   IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
+                   KeyDown="PageNumberBox_KeyDown" MaxLength="7"
+                   ToolTip="Номер страницы для перехода (Ctrl+G)"
+                   AutomationProperties.Name="Перейти на страницу номер"/>
+          <Button Content="Перейти" Click="GoToPage_Click" Margin="0,0,13,0"
+                  IsEnabled="{Binding CanSelectPage, Mode=OneWay}"/>
           <Button x:Name="ZoomOutButton" IsEnabled="{Binding CanZoom, Mode=OneWay}" Content="−" Click="ZoomOut_Click"
                   AutomationProperties.Name="Уменьшить масштаб PDF" Margin="0,0,4,0"/>
           <Button Content="Вся страница" Click="FitPage_Click"/>
@@ -89,7 +96,10 @@
                    ToolTip="Поиск по имеющемуся текстовому слою PDF" AutomationProperties.Name="Найти текст PDF"
                     KeyDown="SearchBox_KeyDown" TextChanged="SearchBox_TextChanged"/>
           <Button x:Name="FindButton" IsEnabled="{Binding CanSearch, Mode=OneWay}" Content="Найти" Click="Find_Click" Margin="0,0,5,0"/>
-          <Button x:Name="FindNextButton" IsEnabled="{Binding CanFindNext, Mode=OneWay}" Content="Следующее" Click="FindNext_Click" Margin="0,0,12,0"/>
+          <Button x:Name="FindNextButton" IsEnabled="{Binding CanFindNext, Mode=OneWay}" Content="Следующее" Click="FindNext_Click" Margin="0,0,5,0"/>
+          <Button x:Name="FindPreviousButton" IsEnabled="{Binding CanFindNext, Mode=OneWay}"
+                  Content="Предыдущее" Click="FindPrevious_Click" Margin="0,0,12,0"
+                  ToolTip="Предыдущее совпадение (Shift+F3)"/>
             </StackPanel>
         <Button x:Name="EditModeButton" Content="Редактирование" Click="ToggleEditor_Click" Margin="0,0,8,0" DockPanel.Dock="Right" ToolTip="Показать или скрыть дополнительные инструменты"/><TabControl x:Name="PdfToolModeBox" Visibility="Collapsed" Style="{StaticResource DocumentToolTabs}" Width="650" Height="40" Margin="0,0,10,0"
                   DockPanel.Dock="Left" VerticalAlignment="Center"

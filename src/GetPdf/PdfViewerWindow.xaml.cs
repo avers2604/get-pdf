@@ -1452,7 +1452,8 @@ public partial class PdfViewerWindow : Window
         }
         if (control && !shift && e.Key == Key.G)
         {
-            ShowPageListAndFocus();
+            PageNumberBox.Focus();
+            PageNumberBox.SelectAll();
             e.Handled = true;
             return;
         }
@@ -1481,7 +1482,12 @@ public partial class PdfViewerWindow : Window
             SearchBox.SelectAll();
             e.Handled = true;
         }
-        else if (e.Key == Key.F3) { FindNext_Click(sender, new RoutedEventArgs()); e.Handled = true; }
+        else if (e.Key == Key.F3)
+        {
+            if (shift) FindPrevious_Click(sender, new RoutedEventArgs());
+            else FindNext_Click(sender, new RoutedEventArgs());
+            e.Handled = true;
+        }
         else if (control && e.Key == Key.P) { Print_Click(sender, new RoutedEventArgs()); e.Handled = true; }
         else if (control && e.Key == Key.Z && Keyboard.FocusedElement is not
             System.Windows.Controls.Primitives.TextBoxBase)
@@ -1652,6 +1658,34 @@ public partial class PdfViewerWindow : Window
         if (_searchHits.Count == 0 || _loading) return;
         _activeHit = (_activeHit + 1) % _searchHits.Count;
         NavigateToHit();
+    }
+
+    private void FindPrevious_Click(object sender, RoutedEventArgs e)
+    {
+        if (_searchHits.Count == 0 || _loading) return;
+        _activeHit = PdfReaderNavigation.PreviousSearchHit(_activeHit, _searchHits.Count);
+        NavigateToHit();
+    }
+
+    private void GoToPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_loading || _closing || _plan is null) return;
+        if (!PdfReaderNavigation.TryParsePage(PageNumberBox.Text, _plan.Pages.Count,
+                out int target))
+        {
+            StatusText.Text = $"Введите номер страницы от 1 до {_plan.Pages.Count}.";
+            return;
+        }
+        _pageIndex = target;
+        RefreshList();
+        PdfPreviewScroll.Focus();
+    }
+
+    private void PageNumberBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        GoToPage_Click(sender, new RoutedEventArgs());
+        e.Handled = true;
     }
 
     private void Stamp_Click(object sender, RoutedEventArgs e)
