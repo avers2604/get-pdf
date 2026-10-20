@@ -26,6 +26,26 @@ public sealed class PdfNativeGdiPrinterTests
     }
 
     [TestMethod]
+    public void NativeLayoutRefusesMarginsLargerThanDriverArea()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            PdfNativeGdiPrintLayout.Fit(595, 842, 200, 300, 100, 300));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            PdfNativeGdiPrintLayout.Fit(595, 842, 200, 300, 150, 300));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            PdfNativeGdiPrintLayout.Fit(595, 842, 200, 300, int.MaxValue, 300));
+    }
+
+    [TestMethod]
+    public void NativeLayoutNeverViolatesRequestedMargins()
+    {
+        var box = PdfNativeGdiPrintLayout.Fit(842, 595, 4000, 3000, 150, 300);
+        Assert.IsTrue(box.X >= 150 && box.Y >= 150);
+        Assert.IsTrue(box.X + box.Width <= 4000 - 150);
+        Assert.IsTrue(box.Y + box.Height <= 3000 - 150);
+    }
+
+    [TestMethod]
     public void NativeGdiDisabledUnlessItPolicyAllows()
     {
         var no = WorkstationPolicy.Parse("{\"Version\":1}");
