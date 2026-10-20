@@ -10,7 +10,6 @@
     <RootNamespace>GetPdf</RootNamespace>
     <Version>0.1.0</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <ApplicationIcon></ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Using Include="System.IO" />

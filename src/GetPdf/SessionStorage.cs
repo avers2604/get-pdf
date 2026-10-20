@@ -1,7 +1,7 @@
 namespace GetPdf;
 
 /// <summary>
-/// Per-user scan/PDF sessions. A FileShare.None OS lease prevents a second
+/// Per-user PDF sessions. A FileShare.None OS lease prevents a second
 /// instance or startup cleanup from deleting an in-use session. Recovery
 /// manifests and image snapshots survive abandoned OCR/print scratch cleanup.
 /// Only exact GUID-named children of the known session root are eligible.
@@ -70,7 +70,7 @@ internal static class SessionStorage
         lock (Gate)
         {
             // Legacy folders have no owner lock. They may belong to an
-            // older still-running application and must not be auto-claimed.
+            // older still-running PDF instance and must not be auto-claimed.
             if ((!allowNewSession && !File.Exists(Path.Combine(path, LeaseFile))) ||
                 Owned.ContainsKey(path) ||
                 File.Exists(Path.Combine(path, RetiredFile))) return false;
@@ -156,7 +156,7 @@ internal static class SessionStorage
                 {
                     if (!IsSession(session, root) ||
                         // Never sweep legacy sessions without a known lease:
-                        // the old GET PDF version may still own them.
+                        // an older PDF version may still own them.
                         !File.Exists(Path.Combine(session, LeaseFile)) ||
                         string.Equals(Path.GetFullPath(session), protectedFolder is null
                             ? null : Path.GetFullPath(protectedFolder),

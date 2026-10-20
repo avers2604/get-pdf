@@ -2,7 +2,7 @@
 
 namespace GetPdf;
 
-/// <summary>Diagnostics NEVER include document content, filenames, emails, paths, IPs or scanner names.</summary>
+/// <summary>PDF diagnostics NEVER contain document content, filenames or file paths.</summary>
 internal static class DiagnosticLog
 {
     public static void Initialize()
@@ -17,11 +17,7 @@ internal static class DiagnosticLog
             .CreateLogger();
         Log.Information("Application started, .NET {Runtime}", Environment.Version.Major);
     }
-    public static void ScanStage(string stage, int pages) =>
-        Log.Information("Scan stage {Stage}, pages {PageCount}", stage, pages);
-    public static void Failure(string operation, Exception exception) =>
+public static void Failure(string operation, Exception exception) =>
         Log.Warning("{Operation} failed with {ErrorType}", operation, exception.GetType().Name);
-    public static string BuildReport(string? backend) =>
-        $"GET-PDF diagnostics\nVersion: 0.2.0\n.NET: {Environment.Version}\nOS version: {Environment.OSVersion.Version}\n64-bit process: {Environment.Is64BitProcess}\nConfigured backend: {backend ?? "none"}\nNo document, file, username or device identifiers included.";
     public static void Close() => Log.CloseAndFlush();
 }

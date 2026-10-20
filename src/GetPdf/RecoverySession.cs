@@ -11,8 +11,21 @@ internal static class RecoverySession
             policy.MaxRecoverySessionMiB * 1024L * 1024L, policy.RecoveryReserveMiB * 1024L * 1024L);
         string name = "recovery-" + Guid.NewGuid().ToString("N") + ".png";
         string file = Path.Combine(folder, name);
-        BitmapSource frozen = image.Clone();
-        frozen.Freeze();
+        BitmapSource frozen;
+        if (image.CanFreeze)
+        {
+            frozen = image.Clone();
+            frozen.Freeze();
+        }
+        else
+        {
+            int stride = checked((image.PixelWidth * image.Format.BitsPerPixel + 7) / 8);
+            var pixels = new byte[checked(stride * image.PixelHeight)];
+            image.CopyPixels(pixels, stride, 0);
+            frozen = BitmapSource.Create(image.PixelWidth, image.PixelHeight,
+                image.DpiX, image.DpiY, image.Format, image.Palette, pixels, stride);
+            frozen.Freeze();
+        }
         await Task.Run(() =>
         {
             var encoder = new PngBitmapEncoder();

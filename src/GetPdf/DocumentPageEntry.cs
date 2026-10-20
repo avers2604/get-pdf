@@ -1,6 +1,6 @@
 namespace GetPdf;
 
-public enum DocumentMode { Scan, PdfEditor }
+public enum DocumentMode { PdfEditor }
 public enum DocumentSourceKind { Pdf, Image }
 
 public sealed record DocumentPageSource(DocumentSourceKind Kind, string Path);
@@ -14,4 +14,4 @@ public sealed record DocumentPageEntry(Guid Id, DocumentPageSource Source, int S
 }
 
 public sealed record DocumentViewState(Guid? PageId, double RelativeOffset = 0,
-    double Zoom = 1, DocumentMode Mode = DocumentMode.Scan);
+    double Zoom = 1, DocumentMode Mode = DocumentMode.PdfEditor);
