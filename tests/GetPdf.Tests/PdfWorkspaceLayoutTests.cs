@@ -15,6 +15,18 @@ public sealed class PdfWorkspaceLayoutTests
     }
 
     [TestMethod]
+    public void EditorInspectorAutoHidesThumbnailsUntilCanvasIsWideEnough()
+    {
+        Assert.IsTrue(PdfWorkspaceLayout.ShowPages(1100));
+        Assert.IsFalse(PdfWorkspaceLayout.ShowPages(1100, editorPanelVisible: true));
+        Assert.IsFalse(PdfWorkspaceLayout.ShowPages(1249, editorPanelVisible: true));
+        Assert.IsTrue(PdfWorkspaceLayout.ShowPages(1250, editorPanelVisible: true));
+        Assert.IsTrue(PdfWorkspaceLayout.ShowPages(1100, true, editorPanelVisible: true));
+        Assert.IsFalse(PdfWorkspaceLayout.ShowPages(1500, false, editorPanelVisible: true));
+        Assert.IsFalse(PdfWorkspaceLayout.ShowPages(double.NaN, editorPanelVisible: true));
+    }
+
+    [TestMethod]
     public void OperatorOverrideWinsOverAutomaticBreakpoint()
     {
         Assert.IsTrue(PdfWorkspaceLayout.ShowPages(680, true));
