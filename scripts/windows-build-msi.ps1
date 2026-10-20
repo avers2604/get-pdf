@@ -39,7 +39,9 @@ if ($OfflineNuGetFeed) { $restores = @('--source', $OfflineNuGetFeed) }
 Invoke-Checked 'dotnet' (@('restore', $project, '-r', 'win-x64') + $restores)
 Invoke-Checked 'dotnet' (@('restore', $tests) + $restores)
 Invoke-Checked 'dotnet' @('build', $project, '-c', 'Release', '-r', 'win-x64', '--no-restore')
-Invoke-Checked 'dotnet' @('test', $tests, '-c', 'Release', '--no-restore')
+# MSTest.Sdk uses MTP via root global.json. Reject zero/partial discovery.
+Invoke-Checked 'dotnet' @('test', $tests, '-c', 'Release', '--no-restore',
+    '--minimum-expected-tests', '35')
 
 # A dirty publish dir could carry old TWAIN/scan binaries into a new MSI.
 if (Test-Path -LiteralPath $publish) {
