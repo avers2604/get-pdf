@@ -12,6 +12,9 @@ internal sealed record WorkstationPolicy
     public bool RestoreTabs { get; init; } = true;
     // Independent, opt-in local JSON contract; NEVER includes PDF paths or contents.
     public bool ExportGetSystemStatus { get; init; } = false;
+    // Separate GUP-2 browser integration, not GET-system.
+    public bool AllowGup2Portal { get; init; } = false;
+    public string Gup2PortalUrl { get; init; } = "";
     public int MaxPdfInputMiB { get; init; } = 1024;
     public int MaxDocumentPages { get; init; } = 1000;
     public int MaxRecoverySessionMiB { get; init; } = 8192;
@@ -37,6 +40,10 @@ internal sealed record WorkstationPolicy
             new JsonSerializerOptions { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow })
             ?? throw new InvalidDataException("Пустая политика."); }
         catch (JsonException ex) { throw new InvalidDataException("Некорректная политика PDF.", ex); }
+        if (!string.IsNullOrWhiteSpace(value.Gup2PortalUrl))
+            _ = Gup2PortalLink.Validate(value.Gup2PortalUrl);
+        if (value.AllowGup2Portal && string.IsNullOrWhiteSpace(value.Gup2PortalUrl))
+            throw new InvalidDataException("Укажите HTTPS-адрес портала GUP-2.");
         if (value.Version != 1 || value.MaxPdfInputMiB is < 1 or > 1024 ||
             value.MaxDocumentPages is < 1 or > 1000 ||
             value.MaxRecoverySessionMiB is < 128 or > 65536 ||

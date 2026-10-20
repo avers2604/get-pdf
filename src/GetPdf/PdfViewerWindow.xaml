@@ -29,7 +29,11 @@
           
           <Button Content="Открыть PDF…" Click="Open_Click" MinWidth="130" Margin="0,0,8,0"/>
           <Button x:Name="RecentButton" Content="Недавние ▾" Click="Recent_Click" Margin="0,0,8,0" ToolTip="Недавно открытые PDF"/>
-          <Button x:Name="ToolbarPrintButton" Content="Печать" Click="Print_Click" IsEnabled="{Binding CanPrint, Mode=OneWay}" Margin="0,0,8,0" ToolTip="Печать PDF (Ctrl+P)"/>
+          <Button x:Name="Gup2PortalButton" Visibility="Collapsed"
+                   Content="GUP-2 ↗" Click="Gup2Portal_Click" Margin="0,0,8,0"
+                   AutomationProperties.Name="Открыть защищённый портал GUP-2"
+                   ToolTip="Перейти в GUP-2 в браузере; файлы и учётные данные не передаются"/>
+           <Button x:Name="ToolbarPrintButton" Content="Печать" Click="Print_Click" IsEnabled="{Binding CanPrint, Mode=OneWay}" Margin="0,0,8,0" ToolTip="Печать PDF (Ctrl+P)"/>
         </StackPanel>
       </Grid>
     </Border>
