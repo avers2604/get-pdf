@@ -69,6 +69,7 @@ public partial class PdfViewerWindow : UserControl
     private bool? _pagePaneOverride;
     private bool _editingToolsVisible;
     private bool _initializedWorkspace;
+    private Task? _initialLoadTask;
     private bool _showOutline;
     private IReadOnlyList<PdfOutlineReader.Node> _pdfOutline = Array.Empty<PdfOutlineReader.Node>();
 
@@ -332,11 +333,21 @@ public partial class PdfViewerWindow : UserControl
     private async void Viewer_Loaded(object sender, RoutedEventArgs e)
     {
         ApplyResponsiveLayout();
-        // Switching WPF tabs unloads/loads the same control; never re-import.
-        if (_initializedWorkspace) return;
-        _initializedWorkspace = true;
-        if (_initialPath is not null)
-            await LoadPdfAsync(_initialPath);
+        await EnsureInitialDocumentLoadedAsync();
+    }
+
+    // Background tabs may not have joined the visual tree. Explicit page
+    // copy can load one on demand, without loading the same file twice.
+    internal Task EnsureInitialDocumentLoadedAsync()
+    {
+        if (_plan is not null || _initialPath is null || _closing)
+            return Task.CompletedTask;
+        if (!_initializedWorkspace)
+        {
+            _initializedWorkspace = true;
+            _initialLoadTask = LoadPdfAsync(_initialPath);
+        }
+        return _initialLoadTask ?? Task.CompletedTask;
     }
 
     private bool DiscardEditsIfNeeded()

@@ -54,6 +54,16 @@ internal sealed partial class PdfTabbedWindow
     private async Task CopyPageToTabAsync(PdfViewerWindow source, PdfViewerWindow destination)
     {
         var sourceState = source.GetCleanTransferSnapshot();
+        // Target tabs are lazy-loaded until selected. An explicit copy
+        // operation may require opening the target without tab switching.
+        try { await destination.EnsureInitialDocumentLoadedAsync(); }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Failure("pdf-cross-tab-target-open", ex);
+            MessageBox.Show(this, "Не удалось открыть PDF назначения.",
+                "Копирование страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         var targetState = destination.GetCleanTransferSnapshot();
         if (sourceState is null || targetState is null)
         {
