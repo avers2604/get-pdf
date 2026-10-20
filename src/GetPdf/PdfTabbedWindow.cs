@@ -97,6 +97,7 @@ internal sealed partial class PdfTabbedWindow : Window
         if (_tabs.Items.Count > 0)
             _tabs.SelectedIndex = Math.Clamp(activeIndex, 0, _tabs.Items.Count - 1);
         OpenShells.Add(this);
+        PublishGetSystemStatus();
         Loaded += (_, _) => DocumentWindowLayout.Clamp(this);
         PreviewKeyDown += async (_, e) =>
         {
@@ -311,8 +312,26 @@ internal sealed partial class PdfTabbedWindow : Window
         }
     }
 
+    private static void PublishGetSystemStatus()
+    {
+        if (!WorkstationPolicy.Current.ExportGetSystemStatus) return;
+        try
+        {
+            var status = PdfGetSystemStatusWriter.Create(DateTimeOffset.UtcNow,
+                OpenShells.Count,
+                OpenShells.Sum(shell => shell._registry.Items.Count(
+                    tab => tab.Path is not null)),
+                WorkstationPolicy.Current.AllowPrinting);
+            PdfGetSystemStatusWriter.Write(status);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                                   ArgumentException or InvalidOperationException)
+        { DiagnosticLog.Failure("get-system-status-export", ex); }
+    }
+
     private static void SaveSessions()
     {
+        PublishGetSystemStatus();
         if (!WorkstationPolicy.Current.RestoreTabs || OpenShells.Count == 0) return;
         try
         {
@@ -362,6 +381,7 @@ internal sealed partial class PdfTabbedWindow : Window
         if (!last) OpenShells.Remove(this);
         SaveSessions();
         OpenShells.Remove(this);
+        PublishGetSystemStatus();
         base.OnClosed(e);
     }
 }

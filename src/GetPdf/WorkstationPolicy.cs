@@ -10,6 +10,8 @@ internal sealed record WorkstationPolicy
     // Corporate privacy controls: paths may disclose internal document names.
     public bool RememberRecentDocuments { get; init; } = true;
     public bool RestoreTabs { get; init; } = true;
+    // Independent, opt-in local JSON contract; NEVER includes PDF paths or contents.
+    public bool ExportGetSystemStatus { get; init; } = false;
     public int MaxPdfInputMiB { get; init; } = 1024;
     public int MaxDocumentPages { get; init; } = 1000;
     public int MaxRecoverySessionMiB { get; init; } = 8192;
