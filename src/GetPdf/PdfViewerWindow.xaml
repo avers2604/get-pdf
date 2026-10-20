@@ -123,11 +123,11 @@
                   SelectionChanged="PdfToolMode_SelectionChanged"
                   ToolTip="Контекстные инструменты PDF"
                   AutomationProperties.Name="Группа инструментов PDF">
-          <TabItem Header="Просмотр"/>
-          <TabItem Header="Редактировать"/>
-          <TabItem Header="Страницы"/>
-          <TabItem Header="Разметка"/>
-          <TabItem Header="OCR"/>
+          <TabItem Header="Просмотр" ToolTip="Только просмотр и навигация по PDF"/>
+          <TabItem Header="Разметка" ToolTip="Видимые штампы, рамки и заметки"/>
+          <TabItem Header="Страницы" ToolTip="Порядок, повороты и извлечение страниц"/>
+          <TabItem Header="Документ" ToolTip="Объединение, формы, подписи, OCR и печать"/>
+          <TabItem Header="Текст" ToolTip="Экспериментальное редактирование текста PDF"/>
           </TabControl>
          </StackPanel>
         </ScrollViewer>
