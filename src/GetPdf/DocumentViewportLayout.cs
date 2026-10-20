@@ -48,6 +48,28 @@ internal static class DocumentViewportLayout
         return result;
     }
 
+    /// <summary>
+    /// Keeps the chosen right-hand page selected while scrolling within the
+    /// same spread row, instead of jumping back to the left-hand page.
+    /// </summary>
+    internal static int PageAtVerticalOffset(IReadOnlyList<Rect> pages,
+        double y, int preferredPage)
+    {
+        ArgumentNullException.ThrowIfNull(pages);
+        if (pages.Count == 0) return -1;
+        if (preferredPage >= 0 && preferredPage < pages.Count &&
+            pages[preferredPage].Height > 0 &&
+            pages[preferredPage].Top <= y && pages[preferredPage].Bottom >= y)
+            return preferredPage;
+        for (int i = 0; i < pages.Count; i++)
+            if (pages[i].Height > 0 && pages[i].Top <= y && pages[i].Bottom >= y)
+                return i;
+        if (y < pages[0].Top) return 0;
+        for (int i = pages.Count - 1; i >= 0; i--)
+            if (pages[i].Height > 0 && pages[i].Top <= y) return i;
+        return 0;
+    }
+
     public static int[] VisibleRange(IReadOnlyList<Rect> pages, Rect viewport, int overscan)
     {
         if (pages.Count == 0) return [];

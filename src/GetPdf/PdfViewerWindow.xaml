@@ -133,6 +133,7 @@
               </ListBox.ItemTemplate>
             </ListBox>
           </StackPanel>
+          <Grid>
           <TreeView x:Name="PdfOutlineTree" Visibility="Collapsed" Margin="7"
                     IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
                     SelectedItemChanged="PdfOutline_SelectedItemChanged"
@@ -173,6 +174,7 @@
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
+          </Grid>
         </DockPanel>
       </Border>
       <Border Grid.Column="1" Background="{StaticResource Raised}" Style="{StaticResource CardBorder}" ClipToBounds="True">

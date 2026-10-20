@@ -128,8 +128,8 @@ public partial class ContinuousDocumentView : UserControl
         if (_bounds.Length > 0 && _mode != PdfPageLayoutMode.Single)
         {
             double y = Math.Max(0, Scroller.VerticalOffset - 24) + Math.Min(Scroller.ViewportHeight * .25, 150);
-            int current = Array.FindIndex(_bounds, b => b.Bottom >= y);
-            SelectPage(current < 0 ? _bounds.Length - 1 : current);
+            int current = DocumentViewportLayout.PageAtVerticalOffset(_bounds, y, _current);
+            if (current >= 0) SelectPage(current);
         }
         QueueRender();
     }
