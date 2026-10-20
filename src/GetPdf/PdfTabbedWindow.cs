@@ -250,11 +250,18 @@ internal sealed class PdfTabbedWindow : Window
 
     private static void SaveSessions()
     {
+        if (!WorkstationPolicy.Current.RestoreTabs) return;
         try
         {
             string[] all = OpenShells.SelectMany(shell => shell._registry.Snapshot().Paths)
                 .Distinct(StringComparer.OrdinalIgnoreCase).Take(16).ToArray();
-            PdfTabSessionStore.Save(new PdfTabSnapshot(all, 0));
+            var activeShell = OpenShells.FirstOrDefault(w => w.IsActive) ??
+                              OpenShells.FirstOrDefault();
+            string? activePath = activeShell?._registry.Items
+                .FirstOrDefault(item => item.Id == activeShell._registry.ActiveId)?.Path;
+            int activeIndex = Array.FindIndex(all, path =>
+                string.Equals(path, activePath, StringComparison.OrdinalIgnoreCase));
+            PdfTabSessionStore.Save(new PdfTabSnapshot(all, Math.Max(0, activeIndex)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         { DiagnosticLog.Failure("pdf-tabs-persist", ex); }

@@ -106,6 +106,8 @@ public partial class PdfViewerWindow : UserControl
         InitializeComponent();
         DataContext = _workspace;
         InitializeContinuousView();
+        RecentButton.Visibility = WorkstationPolicy.Current.RememberRecentDocuments
+            ? Visibility.Visible : Visibility.Collapsed;
         PdfJobProgressBar.DataContext = _jobProgress;
         var preferences = PdfWorkspacePreferencesStore.Load();
         ActiveToolIndex = PdfWorkspaceToolGroups.ToIndex(preferences.ActiveTool);
@@ -414,7 +416,8 @@ public partial class PdfViewerWindow : UserControl
 
     private void Recent_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button owner) return;
+        if (sender is not Button owner ||
+            !WorkstationPolicy.Current.RememberRecentDocuments) return;
         var menu = new ContextMenu();
         foreach (string path in PdfRecentDocuments.Read())
         {
@@ -534,9 +537,12 @@ public partial class PdfViewerWindow : UserControl
             DocumentView.RestoreViewport(_pageIndex, viewState.RelativeOffset, _zoom);
             DocumentReady?.Invoke();
             UpdateBookmarkButton();
-            try { PdfRecentDocuments.Remember(_originalPath); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            { DiagnosticLog.Failure("pdf-recent", ex); }
+            if (WorkstationPolicy.Current.RememberRecentDocuments)
+            {
+                try { PdfRecentDocuments.Remember(_originalPath); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                { DiagnosticLog.Failure("pdf-recent", ex); }
+            }
             StatusText.Text = draftStatus ?? (_canModify
                 ? "Просмотр PDF. Исходный файл не изменён."
                 : "Только просмотр: редактирование структуры документа не подтверждено.");

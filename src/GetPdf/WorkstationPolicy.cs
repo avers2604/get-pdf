@@ -7,6 +7,9 @@ internal sealed record WorkstationPolicy
     public int Version { get; init; } = 1;
     public bool AllowPdfViewer { get; init; } = true;
     public bool AllowPrinting { get; init; } = true;
+    // Corporate privacy controls: paths may disclose internal document names.
+    public bool RememberRecentDocuments { get; init; } = true;
+    public bool RestoreTabs { get; init; } = true;
     public int MaxPdfInputMiB { get; init; } = 1024;
     public int MaxDocumentPages { get; init; } = 1000;
     public int MaxRecoverySessionMiB { get; init; } = 8192;

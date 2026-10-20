@@ -35,12 +35,13 @@ public partial class App : Application
             }
             paths = e.Args.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         }
-        else
+        else if (WorkstationPolicy.Current.RestoreTabs)
         {
             var session = PdfTabSessionStore.Load();
             paths = session.Paths.Where(path => PdfOpenRequest.TryParse([path], out _)).ToArray();
             activeIndex = session.ActiveIndex;
         }
+        else paths = [];
         ShutdownMode = ShutdownMode.OnLastWindowClose;
         var shell = new PdfTabbedWindow(paths, activeIndex);
         MainWindow = shell;
