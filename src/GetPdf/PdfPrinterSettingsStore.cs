@@ -68,6 +68,14 @@ internal static class PdfPrinterSettingsStore
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
+    internal static void RejectDriverOverrides(ConflictStatus status)
+    {
+        if (status != ConflictStatus.NoConflict)
+            throw new NotSupportedException(
+                "Драйвер автоматически изменил выбранные параметры печати. " +
+                "Выберите другое сочетание формата, ориентации и дуплекса.");
+    }
+
     /// <summary>
     /// Apply only supported PrintTicket choices to the driver-selected queue.
     /// Do not claim duplex/A3 support unless the driver advertises it.
@@ -118,6 +126,17 @@ internal static class PdfPrinterSettingsStore
             throw new NotSupportedException(
                 $"Принтер допускает не более {max} копий на задание.");
         ticket.CopyCount = settings.Copies;
-        dialog.PrintTicket = ticket;
+
+        // Drivers can advertise each feature individually (A3, duplex,
+        // orientation) while refusing the chosen combination. Prevent
+        // silent substitutions: the printed sheet must match the preview
+        // and the explicit choices shown to the employee.
+        PrintTicket baseTicket = dialog.PrintQueue.DefaultPrintTicket
+            ?? throw new NotSupportedException("Драйвер не предоставляет базовый профиль печати.");
+        ValidationResult result = dialog.PrintQueue.MergeAndValidatePrintTicket(
+            baseTicket, ticket, PrintTicketScope.JobScope);
+        RejectDriverOverrides(result.ConflictStatus);
+        dialog.PrintTicket = result.ValidatedPrintTicket
+            ?? throw new NotSupportedException("Драйвер не вернул корректный профиль печати.");
     }
 }
