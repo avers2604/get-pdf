@@ -2215,7 +2215,24 @@ public partial class PdfViewerWindow : UserControl
                 if (preview.ShowDialog() != true) return false;
                 token.ThrowIfCancellationRequested();
                 StatusText.Text = "Передача документа службе печати Windows…";
-                printer.PrintDocument(paginator, "ГЭТ PDF");
+                if (settingsDialog.Settings.NativeGdi)
+                {
+                    if (!WorkstationPolicy.Current.AllowNativeGdiPrinting ||
+                        !PdfNativeGdiPrintBackend.IsSafeSourceSelection(pages))
+                        throw new InvalidOperationException(
+                            "Нативная печать допускается только для PDF без наложений и поворотов.");
+                    var source = _sourcePath ?? throw new InvalidOperationException(
+                        "Исходный PDF больше не доступен.");
+                    var queueName = printer.PrintQueue.FullName;
+                    var ticket = printer.PrintTicket ?? throw new InvalidOperationException(
+                        "Не указан профиль печати Windows.");
+                    await Task.Run(() => PdfNativeGdiPrintBackend.Print(
+                        source, pages, queueName, ticket, token), token);
+                }
+                else
+                {
+                    printer.PrintDocument(paginator, "ГЭТ PDF");
+                }
                 return true;
             }, cancellation.Token);
             if (submitted)
