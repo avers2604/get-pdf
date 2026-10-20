@@ -7,7 +7,8 @@ public sealed record PdfWorkspacePreferences(int Version = 1, string ActiveTool 
 
 public static class PdfWorkspaceToolGroups
 {
-    private static readonly string[] Ids = ["search", "markup", "pages", "document"];
+    // Persist all five visible tool groups; keep legacy IDs for older installations.
+    private static readonly string[] Ids = ["search", "markup", "pages", "document", "text"];
 
     public static string FromIndex(int index) =>
         index >= 0 && index < Ids.Length ? Ids[index] : Ids[0];
