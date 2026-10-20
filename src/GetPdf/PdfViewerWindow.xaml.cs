@@ -212,7 +212,8 @@ public partial class PdfViewerWindow : UserControl
         if (PagePaneColumn is null || PagePaneBorder is null ||
             PagePaneToggleButton is null || SearchResultsList is null) return;
 
-        bool show = PdfWorkspaceLayout.ShowPages(ActualWidth, _pagePaneOverride);
+        bool show = PdfWorkspaceLayout.ShowPages(
+            ActualWidth, _pagePaneOverride, _editingToolsVisible);
         bool wasVisible = PagePaneBorder.Visibility == Visibility.Visible;
         PagePaneBorder.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         PagePaneColumn.Width = new GridLength(show ? 205 : 0);
