@@ -302,7 +302,8 @@ public partial class PdfViewerWindow : UserControl
 
     private void PagePaneToggle_Click(object sender, RoutedEventArgs e)
     {
-        _pagePaneOverride = !PdfWorkspaceLayout.ShowPages(ActualWidth, _pagePaneOverride);
+        _pagePaneOverride = !PdfWorkspaceLayout.ShowPages(
+            ActualWidth, _pagePaneOverride, _editingToolsVisible);
         ApplyResponsiveLayout();
     }
 
