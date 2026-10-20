@@ -38,7 +38,13 @@ internal sealed partial class PdfTabbedWindow
                 Header = handle.Caption.Text,
                 ToolTip = target.CurrentDocumentPath
             };
-            item.Click += async (_, _) => await CopyPageToTabAsync(source, target);
+            var insert = new MenuItem { Header = "Вставить в черновик (Ctrl+Z)" };
+            insert.Click += async (_, _) =>
+                await InsertPageToTabAsync(source, target);
+            var saveCopy = new MenuItem { Header = "Создать отдельный PDF…" };
+            saveCopy.Click += async (_, _) => await CopyPageToTabAsync(source, target);
+            item.Items.Add(insert);
+            item.Items.Add(saveCopy);
             menu.Items.Add(item);
         }
         if (targets.Length == 0)
@@ -49,6 +55,96 @@ internal sealed partial class PdfTabbedWindow
             });
         owner.ContextMenu = menu;
         menu.IsOpen = true;
+    }
+
+    private async Task InsertPageToTabAsync(PdfViewerWindow source,
+        PdfViewerWindow destination, Guid? draggedPageId = null)
+    {
+        if (_shutdownPending || ReferenceEquals(source, destination)) return;
+        try { await destination.EnsureInitialDocumentLoadedAsync(); }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Failure("pdf-cross-insert-target-load", ex);
+            MessageBox.Show(this, "Не удалось открыть PDF назначения.",
+                "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var from = source.GetCleanTransferSnapshot();
+        var into = destination.GetWritableTransferSnapshot();
+        if (from is null || into is null)
+        {
+            MessageBox.Show(this, "Исходный PDF должен быть без несохранённых правок, " +
+                "а документ назначения — доступен для редактирования.",
+                "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        int at = draggedPageId is Guid id ?
+            PdfCrossTabPageTransfer.FindPageById(from.Pages, id) : from.SelectedPageIndex;
+        if (at < 0 || at >= from.Pages.Length)
+        {
+            MessageBox.Show(this, "Исходная страница была удалена или изменена.",
+                "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (MessageBox.Show(this,
+            $"Вставить страницу {at + 1} из «{System.IO.Path.GetFileName(from.OriginalPath)}» " +
+            $"после страницы {into.SelectedPageIndex + 1} «{System.IO.Path.GetFileName(into.OriginalPath)}»? " +
+            "Это изменит только черновик вкладки назначения. Ctrl+Z отменит вставку, " +
+            "а исходные PDF не изменятся. Структурные подписи, формы и ссылки " +
+            "могут быть утрачены при последующем сохранении новой копии.",
+            "Вставить в черновик PDF", MessageBoxButton.YesNo, MessageBoxImage.Warning)
+            != MessageBoxResult.Yes) return;
+
+        // Revalidate snapshots after modal confirmation, before reserving
+        // both workspaces. A stale drag cannot insert the wrong PDF page.
+        var latestFrom = source.GetCleanTransferSnapshot();
+        var latestInto = destination.GetWritableTransferSnapshot();
+        if (latestFrom is null || latestInto is null ||
+            !from.Pages.SequenceEqual(latestFrom.Pages) ||
+            !into.Pages.SequenceEqual(latestInto.Pages) ||
+            from.WorkingPath != latestFrom.WorkingPath ||
+            into.WorkingPath != latestInto.WorkingPath ||
+            latestFrom.SelectedPageIndex < 0 ||
+            latestInto.SelectedPageIndex != into.SelectedPageIndex)
+        {
+            MessageBox.Show(this, "Один из документов изменился. Повторите перенос.",
+                "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        using var cancellation = new CancellationTokenSource();
+        bool sourceLocked = false, targetLocked = false;
+        try
+        {
+            source.SetCrossTabExportBusy(cancellation);
+            sourceLocked = true;
+            destination.SetCrossTabExportBusy(cancellation);
+            targetLocked = true;
+            await PdfJobCoordinator.Shared.RunAsync(async token =>
+            {
+                await destination.InsertExternalPageInDraftAsync(
+                    latestFrom, latestFrom.Pages[at].Id, latestInto, token);
+                return true;
+            }, cancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            MessageBox.Show(this, "Вставка отменена. Оригиналы не изменены.",
+                "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Failure("pdf-cross-insert", ex);
+            MessageBox.Show(this, "Не удалось вставить страницу. Черновик сохранён " +
+                "без изменений, если подготовка была прервана.",
+                "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            if (targetLocked) destination.SetCrossTabExportBusy(null);
+            if (sourceLocked) source.SetCrossTabExportBusy(null);
+        }
     }
 
     private async Task CopyPageToTabAsync(PdfViewerWindow source,

@@ -186,7 +186,7 @@ internal sealed partial class PdfTabbedWindow : Window
                 !ReferenceEquals(drag.Source, viewer))
             {
                 e.Handled = true;
-                await CopyPageToTabAsync(drag.Source, viewer, drag.PageId);
+                await InsertPageToTabAsync(drag.Source, viewer, drag.PageId);
             }
         };
         var header = new StackPanel { Orientation = Orientation.Horizontal };
