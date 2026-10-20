@@ -1949,8 +1949,14 @@ public partial class PdfViewerWindow : UserControl
             try
             {
                 await foreach (var image in importer.Import(_sourcePath,
-                    new ImportParams { Slice = Slice.Item(sourceIndex) }))
+                    new ImportParams { Slice = Slice.Item(sourceIndex) })
+                    .WithCancellation(token))
                 {
+                    if (token.IsCancellationRequested)
+                    {
+                        image.Dispose();
+                        token.ThrowIfCancellationRequested();
+                    }
                     if (single is not null)
                     {
                         image.Dispose();
