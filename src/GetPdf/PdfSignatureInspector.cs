@@ -15,6 +15,15 @@ internal static class PdfSignatureInspector
     private const int MaxSignatures = 32;
     private const long MaxPdfBytes = 256L * 1024 * 1024;
 
+    internal static void EnsureRecognized(int parsedCount, int byteRangeMarkers)
+    {
+        if (parsedCount < 0 || byteRangeMarkers < 0)
+            throw new ArgumentOutOfRangeException(nameof(parsedCount));
+        if (parsedCount == 0 && byteRangeMarkers > 0)
+            throw new InvalidDataException(
+                "В PDF есть объекты цифровой подписи, которые не удалось проверить.");
+    }
+
     internal static PdfSignatureTrust Classify(bool cryptographic,
         bool chainTrusted, bool coversWholeDocument) =>
         !cryptographic ? PdfSignatureTrust.Failed :
@@ -34,9 +43,9 @@ internal static class PdfSignatureInspector
         var names = inspector.GetSignatureNames();
         // Fail closed if an unrecognized /ByteRange signature dictionary is
         // present: "zero recognized signatures" is NOT "unsigned PDF".
-        if (names.Count == 0 && PdfInteractiveInspector.Inspect(path).SignatureByteRanges != 0)
-            throw new InvalidDataException(
-                "В PDF обнаружены объекты подписи, но криптографическая библиотека их не распознала.");
+        if (names.Count == 0)
+            EnsureRecognized(names.Count,
+                PdfInteractiveInspector.Inspect(path).SignatureByteRanges);
         if (names.Count > MaxSignatures)
             throw new InvalidDataException("Слишком много подписей в PDF.");
         var result = new List<PdfSignatureCheck>();
