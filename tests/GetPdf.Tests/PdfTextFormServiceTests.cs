@@ -100,6 +100,26 @@ public sealed class PdfTextFormServiceTests
     }
 
     [TestMethod]
+    public void PdfAcroFormValidationRejectsSpoofedFieldIdentifier()
+    {
+        using var doc = new PdfDocument();
+        doc.AddPage();
+        var form = new PdfDictionary(doc);
+        var fields = new PdfArray(doc);
+        var field = new PdfDictionary(doc);
+        field.Elements.SetName("/FT", "/Tx");
+        string disguised = "ФИО" + '\u202e';
+        field.Elements.SetString("/T", disguised);
+        fields.Elements.Add(field);
+        form.Elements.SetObject("/Fields", fields);
+        doc.Internals.Catalog.Elements.SetObject("/AcroForm", form);
+
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            PdfFormFillLabPolicy.ValidateDocument(doc,
+                new Dictionary<string, string> { [disguised] = "Тест" }));
+    }
+
+    [TestMethod]
     public void RequiresFreshOutputName()
     {
         string path = Path.Combine(Path.GetTempPath(), "sample.pdf");
