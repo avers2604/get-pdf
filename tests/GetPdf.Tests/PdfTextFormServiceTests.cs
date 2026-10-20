@@ -86,6 +86,20 @@ public sealed class PdfTextFormServiceTests
     }
 
     [TestMethod]
+    public void RejectsInvisibleFormattingInFieldNames()
+    {
+        string disguised = "ФИО" + '\u202e';
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            PdfTextFormService.ValidateValues(
+                new Dictionary<string, string> { [disguised] = "Иван Иванов" }));
+        var request = System.Text.Encoding.UTF8.GetBytes(
+            System.Text.Json.JsonSerializer.Serialize(
+                new { version = 1, fields = new Dictionary<string, string> { [disguised] = "Тест" } }));
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            PdfFormFillLabPolicy.ReadRequest(request));
+    }
+
+    [TestMethod]
     public void RequiresFreshOutputName()
     {
         string path = Path.Combine(Path.GetTempPath(), "sample.pdf");
