@@ -12,7 +12,7 @@ internal sealed class PdfPrintSettingsDialog : Window
         PdfPrinterSettingsStore.Validate(initial);
         Settings = initial;
         Title = "ГЭТ PDF — параметры печати";
-        Width = 425; Height = 380; MinWidth = 390; MinHeight = 335;
+        Width = 425; Height = 410; MinWidth = 390; MinHeight = 365;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Margin = new Thickness(20) };
         Content = root;
@@ -34,6 +34,15 @@ internal sealed class PdfPrintSettingsDialog : Window
         panel.Children.Add(new TextBlock { Text = "Количество копий", Margin = new Thickness(0, 6, 0, 3) });
         var copies = new TextBox { Text = initial.Copies.ToString(), MaxLength = 2, Height = 30 };
         panel.Children.Add(copies);
+        var nativeGdi = new CheckBox
+        {
+            Content = "Нативная печать PDFium/GDI (экспериментально)",
+            IsChecked = initial.NativeGdi && WorkstationPolicy.Current.AllowNativeGdiPrinting,
+            IsEnabled = WorkstationPolicy.Current.AllowNativeGdiPrinting,
+            Margin = new Thickness(0, 12, 0, 0),
+            ToolTip = "Только PDF без правок и наложений; драйверы и векторность требуют проверки"
+        };
+        panel.Children.Add(nativeGdi);
         var commands = new StackPanel { Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
         var ok = new Button { Content = "Предпросмотр", MinWidth = 125,
@@ -51,7 +60,8 @@ internal sealed class PdfPrintSettingsDialog : Window
             var choice = new PdfPrinterSettings(
                 (PdfPaperChoice)paper.SelectedIndex,
                 (PdfOrientationChoice)orientation.SelectedIndex,
-                (PdfDuplexChoice)duplex.SelectedIndex, n);
+                (PdfDuplexChoice)duplex.SelectedIndex, n,
+                WorkstationPolicy.Current.AllowNativeGdiPrinting && nativeGdi.IsChecked == true);
             try { PdfPrinterSettingsStore.Validate(choice); }
             catch (ArgumentOutOfRangeException)
             {

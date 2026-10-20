@@ -10,7 +10,7 @@ internal enum PdfDuplexChoice { Default, OneSided, LongEdge, ShortEdge }
 
 internal sealed record PdfPrinterSettings(
     PdfPaperChoice Paper, PdfOrientationChoice Orientation,
-    PdfDuplexChoice Duplex, int Copies)
+    PdfDuplexChoice Duplex, int Copies, bool NativeGdi = false)
 {
     internal static PdfPrinterSettings Default { get; } = new(
         PdfPaperChoice.Default, PdfOrientationChoice.Default,

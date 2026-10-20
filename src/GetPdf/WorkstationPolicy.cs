@@ -7,6 +7,8 @@ internal sealed record WorkstationPolicy
     public int Version { get; init; } = 1;
     public bool AllowPdfViewer { get; init; } = true;
     public bool AllowPrinting { get; init; } = true;
+    // Experimental native GDI print spool path. Default raster print remains.
+    public bool AllowNativeGdiPrinting { get; init; } = false;
     // Corporate privacy controls: paths may disclose internal document names.
     public bool RememberRecentDocuments { get; init; } = true;
     public bool RestoreTabs { get; init; } = true;
