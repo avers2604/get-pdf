@@ -103,6 +103,10 @@ internal static class PdfNativeGdiPrintBackend
         ArgumentException.ThrowIfNullOrWhiteSpace(printerName);
         ArgumentNullException.ThrowIfNull(printTicket);
         token.ThrowIfCancellationRequested();
+        // The experimental GDI backend must not run concurrently with
+        // the native import workers used by other opened PDF tabs.
+        using var exclusive = PdfRenderConcurrency.EnterExclusiveAsync(token)
+            .GetAwaiter().GetResult();
 
         // Convert the exact selected PrintTicket to printer DEVMODE; otherwise
         // A3/A4/duplex/copy settings would be silently dropped by CreateDC.

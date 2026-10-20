@@ -19,6 +19,24 @@ public sealed class PdfRenderConcurrencyTests
     }
 
     [TestMethod]
+    public async Task ExclusiveGdiPrintMustWaitUntilAllImportersFinish()
+    {
+        using var a = await PdfRenderConcurrency.EnterAsync();
+        using var b = await PdfRenderConcurrency.EnterAsync();
+        var native = PdfRenderConcurrency.EnterExclusiveAsync();
+        Assert.IsFalse(native.IsCompleted);
+        a.Dispose();
+        Assert.IsFalse(native.IsCompleted);
+        b.Dispose();
+        using var exclusive = await native.WaitAsync(TimeSpan.FromSeconds(3));
+        var importer = PdfRenderConcurrency.EnterAsync();
+        Assert.IsFalse(importer.IsCompleted);
+        exclusive.Dispose();
+        using var available = await importer.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.IsNotNull(available);
+    }
+
+    [TestMethod]
     public async Task CancellationNeverConsumesAnotherImportPermit()
     {
         using var one = await PdfRenderConcurrency.EnterAsync();
