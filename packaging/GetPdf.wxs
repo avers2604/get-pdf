@@ -1,0 +1,51 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- Separate product identity from GUP Scan: installations can coexist. -->
+  <Package Name="ГЭТ PDF" Language="1049" Version="0.1.0.0"
+           Manufacturer="SPb GUP Gorelektrotrans"
+           UpgradeCode="BE5C1496-701B-4ED4-937E-DA3B41C2A770" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия ГЭТ PDF." />
+    <MediaTemplate EmbedCab="yes" />
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="GET PDF" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="GetPdfStartMenuFolder" Name="ГЭТ PDF" />
+    </StandardDirectory>
+    <!-- Files harvested ONLY from a freshly rebuilt PDF-specific publish output. -->
+    <Files Directory="INSTALLFOLDER" Include="$(var.PublishDir)\**" />
+    <ComponentRef Id="GetPdfAssociations" />
+    <ComponentRef Id="GetPdfStartMenuShortcut" />
+  </Package>
+
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="GetPdfAssociations" Guid="*">
+        <!-- Windows 10/11 registers availability, never changes UserChoice. -->
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetPdf.PDF"
+                       Type="string" Value="PDF-документ ГЭТ" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetPdf.PDF\DefaultIcon"
+                       Type="string" Value="[INSTALLFOLDER]GetPdf.exe,0" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetPdf.PDF\shell\open\command"
+                       Type="string" Value="&quot;[INSTALLFOLDER]GetPdf.exe&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKLM" Key="Software\GetPdf\Capabilities"
+                       Name="ApplicationName" Type="string" Value="ГЭТ PDF" />
+        <RegistryValue Root="HKLM" Key="Software\GetPdf\Capabilities"
+                       Name="ApplicationDescription" Type="string" Value="Локальный просмотр и печать PDF" />
+        <RegistryValue Root="HKLM" Key="Software\GetPdf\Capabilities\FileAssociations"
+                       Name=".pdf" Type="string" Value="GetPdf.PDF" />
+        <RegistryValue Root="HKLM" Key="Software\RegisteredApplications"
+                       Name="ГЭТ PDF" Type="string" Value="Software\GetPdf\Capabilities" />
+      </Component>
+    </DirectoryRef>
+    <DirectoryRef Id="GetPdfStartMenuFolder">
+      <Component Id="GetPdfStartMenuShortcut" Guid="*">
+        <Shortcut Id="GetPdfStartMenuEntry" Name="ГЭТ PDF"
+                  Target="[INSTALLFOLDER]GetPdf.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="GetPdfRemoveStartMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\GetPdf"
+                       Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>
