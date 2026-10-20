@@ -48,7 +48,7 @@ internal static class PdfFormFillLabPolicy
             foreach (var property in fields.EnumerateObject())
             {
                 string name = property.Name;
-                if (name.Length is 0 or > 120 || name.Any(char.IsControl) ||
+                if (name.Length is 0 or > 120 || HasUnsafeText(name) ||
                     !result.TryAdd(name, ""))
                     throw new InvalidDataException("Некорректные или повторяющиеся имена полей.");
                 if (result.Count > MaxFields || property.Value.ValueKind != JsonValueKind.String)
