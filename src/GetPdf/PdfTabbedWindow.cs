@@ -168,7 +168,27 @@ internal sealed partial class PdfTabbedWindow : Window
             VerticalAlignment = VerticalAlignment.Center
         };
         var tab = new TabItem { Tag = item.Id, Content = viewer,
-            ToolTip = path, MinWidth = 110 };
+            ToolTip = path, MinWidth = 110, AllowDrop = true };
+        tab.DragOver += (_, e) =>
+        {
+            if (e.Data.GetDataPresent(typeof(PdfTabPageDrag)) &&
+                e.Data.GetData(typeof(PdfTabPageDrag)) is PdfTabPageDrag drag &&
+                !ReferenceEquals(drag.Source, viewer))
+            {
+                e.Effects = DragDropEffects.Copy;
+                e.Handled = true;
+            }
+        };
+        tab.Drop += async (_, e) =>
+        {
+            if (e.Data.GetDataPresent(typeof(PdfTabPageDrag)) &&
+                e.Data.GetData(typeof(PdfTabPageDrag)) is PdfTabPageDrag drag &&
+                !ReferenceEquals(drag.Source, viewer))
+            {
+                e.Handled = true;
+                await CopyPageToTabAsync(drag.Source, viewer, drag.PageId);
+            }
+        };
         var header = new StackPanel { Orientation = Orientation.Horizontal };
         header.Children.Add(title);
         var close = new Button

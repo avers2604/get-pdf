@@ -157,7 +157,10 @@
               </HierarchicalDataTemplate>
             </TreeView.ItemTemplate>
           </TreeView>
-          <ListBox x:Name="PageList" IsEnabled="{Binding CanSelectPage, Mode=OneWay}" Margin="7" BorderThickness="0" SelectionChanged="PageList_SelectionChanged"
+          <ListBox x:Name="PageList" IsEnabled="{Binding CanSelectPage, Mode=OneWay}" Margin="7" BorderThickness="0"
+                   SelectionChanged="PageList_SelectionChanged"
+                   PreviewMouseLeftButtonDown="PageList_DragStart"
+                   PreviewMouseMove="PageList_DragMove"
                    VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                    VirtualizingPanel.ScrollUnit="Item"
                    ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Страницы PDF">

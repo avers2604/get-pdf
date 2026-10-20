@@ -51,7 +51,8 @@ internal sealed partial class PdfTabbedWindow
         menu.IsOpen = true;
     }
 
-    private async Task CopyPageToTabAsync(PdfViewerWindow source, PdfViewerWindow destination)
+    private async Task CopyPageToTabAsync(PdfViewerWindow source,
+        PdfViewerWindow destination, Guid? draggedPageId = null)
     {
         var sourceState = source.GetCleanTransferSnapshot();
         // Target tabs are lazy-loaded until selected. An explicit copy
@@ -73,12 +74,21 @@ internal sealed partial class PdfTabbedWindow
             return;
         }
         PdfSourcePageReference[] plan;
+        int sourcePageIndex = draggedPageId is Guid id
+            ? PdfCrossTabPageTransfer.FindPageById(sourceState.Pages, id)
+            : sourceState.SelectedPageIndex;
+        if (sourcePageIndex < 0 || sourcePageIndex >= sourceState.Pages.Length)
+        {
+            MessageBox.Show(this, "Выбранная страница больше не существует.",
+                "Копирование страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         try
         {
             plan = PdfCrossTabPageTransfer.Build(
                 targetState.WorkingPath, targetState.Pages,
                 targetState.SelectedPageIndex, targetState.SourcePageCount,
-                sourceState.WorkingPath, sourceState.Pages[sourceState.SelectedPageIndex],
+                sourceState.WorkingPath, sourceState.Pages[sourcePageIndex],
                 sourceState.SourcePageCount, WorkstationPolicy.Current.MaxDocumentPages);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -107,7 +117,7 @@ internal sealed partial class PdfTabbedWindow
             return;
         }
         if (MessageBox.Show(this,
-            $"Вставить страницу {sourceState.SelectedPageIndex + 1} из «{System.IO.Path.GetFileName(sourceState.OriginalPath)}» " +
+            $"Вставить страницу {sourcePageIndex + 1} из «{System.IO.Path.GetFileName(sourceState.OriginalPath)}» " +
             $"после страницы {targetState.SelectedPageIndex + 1} документа «{System.IO.Path.GetFileName(targetState.OriginalPath)}»? " +
             "Будет создан отдельный PDF. Подписи, формы и интерактивные элементы " +
             "могут не сохраниться; оба оригинала останутся неизменными.",

@@ -8,8 +8,18 @@ namespace GetPdf;
 internal sealed record PdfCrossTabSnapshot(string WorkingPath, string OriginalPath,
     PdfPageReference[] Pages, int SelectedPageIndex, int SourcePageCount);
 
+internal sealed record PdfTabPageDrag(PdfViewerWindow Source, Guid PageId);
+
 internal static class PdfCrossTabPageTransfer
 {
+    internal static int FindPageById(IReadOnlyList<PdfPageReference> pages, Guid id)
+    {
+        ArgumentNullException.ThrowIfNull(pages);
+        for (int i = 0; i < pages.Count; i++)
+            if (pages[i].Id == id) return i;
+        return -1;
+    }
+
     internal static PdfSourcePageReference[] Build(
         string destinationSource,
         IReadOnlyList<PdfPageReference> destinationPages,

@@ -24,6 +24,46 @@ public partial class PdfViewerWindow
         SetControls();
     }
 
+    private Point? _pageDragOrigin;
+    private Guid? _pageDragId;
+
+    private void PageList_DragStart(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _pageDragOrigin = null;
+        _pageDragId = null;
+        if (!_editingToolsVisible || GetCleanTransferSnapshot() is not { } snapshot ||
+            e.OriginalSource is not DependencyObject element)
+            return;
+        var container = System.Windows.Controls.ItemsControl.ContainerFromElement(
+            PageList, element) as System.Windows.Controls.ListBoxItem;
+        if (container is null) return;
+        int index = PageList.ItemContainerGenerator.IndexFromContainer(container);
+        if (index < 0 || index >= snapshot.Pages.Length) return;
+        _pageDragId = snapshot.Pages[index].Id;
+        _pageDragOrigin = e.GetPosition(PageList);
+    }
+
+    private void PageList_DragMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_pageDragOrigin is not Point start || _pageDragId is not Guid pageId) return;
+        if (e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
+        {
+            _pageDragOrigin = null;
+            _pageDragId = null;
+            return;
+        }
+        Point now = e.GetPosition(PageList);
+        if (Math.Abs(now.X - start.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(now.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+        _pageDragOrigin = null;
+        _pageDragId = null;
+        if (GetCleanTransferSnapshot() is null) return;
+        var data = new DataObject(typeof(PdfTabPageDrag),
+            new PdfTabPageDrag(this, pageId));
+        DragDrop.DoDragDrop(PageList, data, DragDropEffects.Copy);
+    }
+
     private void CopyPageToTab_Click(object sender, RoutedEventArgs e)
     {
         if (sender is System.Windows.Controls.Button button &&
