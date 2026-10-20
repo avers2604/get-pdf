@@ -160,20 +160,30 @@ public partial class PdfViewerWindow
         double width = PdfTextSelectionCanvas.Width;
         double height = PdfTextSelectionCanvas.Height;
         if (width <= 0 || height <= 0) return;
-        for (int i = Math.Min(_selectionAnchor, _selectionEnd);
-             i <= Math.Max(_selectionAnchor, _selectionEnd); i++)
+        // One frozen stream geometry instead of up to 2500 WPF Rectangle
+        // controls re-created on every mouse move.
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
         {
-            var b = _selectedWords.Words[i].Bounds;
-            var rectangle = new Rectangle
+            for (int i = Math.Min(_selectionAnchor, _selectionEnd);
+                 i <= Math.Max(_selectionAnchor, _selectionEnd); i++)
             {
-                Width = b.Width * width, Height = b.Height * height,
-                Fill = new SolidColorBrush(Color.FromArgb(100, 0, 130, 190)),
-                IsHitTestVisible = false
-            };
-            Canvas.SetLeft(rectangle, b.X * width);
-            Canvas.SetTop(rectangle, b.Y * height);
-            PdfTextSelectionCanvas.Children.Add(rectangle);
+                var b = _selectedWords.Words[i].Bounds;
+                double x = b.X * width, y = b.Y * height;
+                double right = x + b.Width * width, bottom = y + b.Height * height;
+                context.BeginFigure(new Point(x, y), isFilled: true, isClosed: true);
+                context.LineTo(new Point(right, y), isStroked: true, isSmoothJoin: false);
+                context.LineTo(new Point(right, bottom), isStroked: true, isSmoothJoin: false);
+                context.LineTo(new Point(x, bottom), isStroked: true, isSmoothJoin: false);
+            }
         }
+        geometry.Freeze();
+        PdfTextSelectionCanvas.Children.Add(new System.Windows.Shapes.Path
+        {
+            Data = geometry,
+            Fill = new SolidColorBrush(Color.FromArgb(100, 0, 130, 190)),
+            IsHitTestVisible = false
+        });
         CopySelectedTextButton.IsEnabled = true;
     }
 
