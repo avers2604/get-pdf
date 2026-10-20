@@ -3,14 +3,14 @@
 | Функция | Статус реализации | Что обязательно подтвердить на Windows |
 |---|---|---|
 | Много PDF во вкладках | Код есть | WPF memory, закрытие и черновики |
-| Выделение текста | Слова одной текущей страницы; отмена устаревших задач; единый StreamGeometry для подсветки | Кириллица, координаты, сканы, UI на 2500 слов; посимвольный выбор ещё не реализован |
+| Выделение текста | Посимвольное по реальным PdfPig glyph rectangles текущей страницы, отмена устаревших задач, единый StreamGeometry | Кириллица, колонки, вращение/crop, сканы, UI до 10000 glyphs |
 | Заполнение AcroForm | Простые текстовые поля; signed/XFA/JS отказ | Шрифты, appearance, сохранение русских букв на внешних PDF-reader |
 | Проверка ЭП | Локальная криптография + локальная цепочка | КЭП, ГOCT/CryptoPro, timestamp, OCSP/CRL, отказ доверия |
-| PDF print preview | Raster spool, профиль драйвера A3/A4, duplex, copies | МФУ, физическая печать; векторный backend отсутствует |
+| PDF print preview | Raster spool по умолчанию, A3/A4/duplex/copies; отдельно экспериментальный native PDFium → GDI по политике | Windows/.NET build, аппаратный GDI print, сравнение EMF/spool и физическая векторность, отмена/дуплекс |
 | Производительность | 2 одновременных native импортера, 32 МиБ bitmap кэша на вкладку; отмена передаётся в импорт | Native peak/CPU на PDF до 1000 стр. и закрытие вкладки во время импорта |
 | MSI | Source WiX5 и offline PowerShell gate | Windows build, MSTest, install/upgrade/remove, Authenticode |
 | Обновления | Read-only offline MSI preflight с SHA-256 и Authenticode; установка не производится | Проверить PowerShell/WindowsInstaller COM, PKI, реальный rollback |
-| GUP-2 | Защищённое скачивание WORM PDF из карточки → Windows GET PDF, локальная сверка SHA-256 из карточки, opt-in HTTPS портал | Проверить GUP-2 Django ACL/ДСП и браузер, реальный Windows hash-check/ассоциации, затем secure native handoff |
+| GUP-2 | Защищённое скачивание; локальная сверка SHA; обратная отправка PDF как WORM-приложение черновика через защищённый POST с проверкой исходного SHA/версии и AV | Проверить Django/ДСП/ОСП/ревокацию, WORM/SILO, автоматический native handoff и корректный workflow юридической редакции |
 | GET-system | Опциональный локальный JSON v1, отключён по умолчанию; при запрете очищается прежний файл статуса | Согласовать reader/ACL и будущий API интеграции на стенде |
 | GUP-Scan | Отдельный репозиторий без изменений | Сохранить экспорт сканов в PDF при будущей миграции |
 
