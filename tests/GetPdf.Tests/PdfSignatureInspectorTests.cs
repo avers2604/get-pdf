@@ -38,6 +38,16 @@ public sealed class PdfSignatureInspectorTests
     }
 
     [TestMethod]
+    public void CancelledInspectionDoesNotStartCryptographicPdfParsing()
+    {
+        using var cancel = new CancellationTokenSource();
+        cancel.Cancel();
+        Assert.ThrowsExactly<OperationCanceledException>(() =>
+            PdfSignatureInspector.VerifyOffline(
+                Path.Combine(Path.GetTempPath(), "nonexistent.pdf"), cancel.Token));
+    }
+
+    [TestMethod]
     public void SignatureStatusNeedsCryptographyAndLocalTrust()
     {
         Assert.AreEqual(PdfSignatureTrust.Unverified,
