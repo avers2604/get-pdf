@@ -249,6 +249,8 @@
                   ToolTip="Извлечь указанные страницы в отдельный PDF"/>
             </StackPanel>
             <StackPanel x:Name="DocumentTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed">
+          <Button Content="Оптимизировать PDF (qpdf)…" Click="OptimizePdf_Click" Margin="0,0,5,10"
+                  ToolTip="Создать отдельную оптимизированную копию без обработки изображений с потерями"/>
           <Button Content="Сравнить с другим PDF…" Click="ComparePdf_Click" Margin="0,0,5,10"
                   ToolTip="Сравнение по извлечённому тексту; изображения и графика не анализируются"/>
           <Button x:Name="PdfStructureButton" Content="Состав PDF…" Click="PdfStructure_Click"
