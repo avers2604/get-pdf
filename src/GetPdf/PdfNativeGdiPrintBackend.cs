@@ -195,8 +195,14 @@ internal static class PdfNativeGdiPrintLayout
             pageWidth <= 0 || pageHeight <= 0 || printableWidth < 1 ||
             printableHeight < 1 || marginPixels < 0 || dpiX < 1)
             throw new ArgumentOutOfRangeException(nameof(pageWidth));
-        double usableW = Math.Max(1, printableWidth - marginPixels * 2.0);
-        double usableH = Math.Max(1, printableHeight - marginPixels * 2.0);
+        // Fail closed instead of silently discarding user-requested margins
+        // when the chosen paper/driver reports a very small printable area.
+        if (marginPixels * 2L >= printableWidth ||
+            marginPixels * 2L >= printableHeight)
+            throw new ArgumentOutOfRangeException(nameof(marginPixels),
+                "Поля больше доступной области печати.");
+        double usableW = printableWidth - marginPixels * 2.0;
+        double usableH = printableHeight - marginPixels * 2.0;
         double aspect = pageWidth / pageHeight;
         double w = Math.Min(usableW, usableH * aspect);
         double h = w / aspect;
