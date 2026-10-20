@@ -3,11 +3,12 @@ using UglyToad.PdfPig;
 namespace GetPdf;
 
 /// <summary>Read-only normalized word geometry, with no simulated character positions.</summary>
-internal sealed record PdfSelectableWord(string Text, PdfSearchHighlightRect Bounds);
+internal sealed record PdfSelectableWord(string Text, PdfSearchHighlightRect Bounds,
+    bool JoinWithPrevious = false);
 
 internal sealed class PdfWordSelection
 {
-    internal const int MaxWords = 2500;
+    internal const int MaxWords = 10000;
     internal const int MaxCopiedChars = 50000;
     internal IReadOnlyList<PdfSelectableWord> Words { get; }
 
@@ -66,7 +67,8 @@ internal sealed class PdfWordSelection
                     current.Bounds.Height);
                 bool nextLine = Math.Abs(current.Bounds.Y - previous.Bounds.Y) >
                     Math.Max(.004, rowHeight * .75);
-                result.Append(nextLine ? '\n' : ' ');
+                if (nextLine) result.Append('\n');
+                else if (!current.JoinWithPrevious) result.Append(' ');
             }
             result.Append(current.Text);
             previous = current;
@@ -99,26 +101,37 @@ internal static class PdfTextSelectionReader
             Math.Abs(Convert.ToDouble(page.Width) - width) > .001 ||
             Math.Abs(Convert.ToDouble(page.Height) - height) > .001)
             return new PdfWordSelection([]);
-        var rawWords = page.GetWords().Take(PdfWordSelection.MaxWords + 1).ToArray();
-        if (rawWords.Length > PdfWordSelection.MaxWords)
-            return new PdfWordSelection([]);
-        var words = new List<PdfSelectableWord>();
-        foreach (var word in rawWords)
+        // PdfPig's Word extractor groups letters in reading order.
+        // Keep each real glyph rectangle to permit character-level drag
+        // selection without inventing character coordinates from word width.
+        var glyphs = new List<PdfSelectableWord>();
+        foreach (var word in page.GetWords())
         {
             cancellation.ThrowIfCancellationRequested();
             if (word.TextOrientation != UglyToad.PdfPig.Content.TextOrientation.Horizontal)
                 return new PdfWordSelection([]);
-            if (string.IsNullOrWhiteSpace(word.Text) || word.Text.Length > 512 ||
-                word.Text.Any(char.IsControl))
-                continue;
-            var box = word.BoundingBox;
-            var bounds = PdfSearchHighlightGeometry.FromPdfBox(
-                Convert.ToDouble(box.Left), Convert.ToDouble(box.Bottom),
-                Convert.ToDouble(box.Width), Convert.ToDouble(box.Height),
-                left, bottom, width, height);
-            if (bounds is null) return new PdfWordSelection([]);
-            words.Add(new PdfSelectableWord(word.Text, bounds.Rotate(rotation)));
+            bool first = true;
+            foreach (var letter in word.Letters)
+            {
+                cancellation.ThrowIfCancellationRequested();
+                if (glyphs.Count >= PdfWordSelection.MaxWords)
+                    return new PdfWordSelection([]);
+                string value = letter.Value;
+                if (string.IsNullOrEmpty(value) || value.Length > 8 ||
+                    value.Any(char.IsControl))
+                    return new PdfWordSelection([]);
+                var box = letter.GlyphRectangle;
+                var bounds = PdfSearchHighlightGeometry.FromPdfBox(
+                    Convert.ToDouble(box.Left), Convert.ToDouble(box.Bottom),
+                    Convert.ToDouble(box.Width), Convert.ToDouble(box.Height),
+                    left, bottom, width, height);
+                if (bounds is null)
+                    return new PdfWordSelection([]);
+                glyphs.Add(new PdfSelectableWord(value, bounds.Rotate(rotation),
+                    JoinWithPrevious: !first));
+                first = false;
+            }
         }
-        return new PdfWordSelection(words);
+        return new PdfWordSelection(glyphs);
     }
 }

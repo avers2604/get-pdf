@@ -38,7 +38,7 @@ public partial class PdfViewerWindow
         NoteModeCheckBox.IsChecked = false;
         _nativeDraftMode = null;
         SelectTextButton.Content = "Выделение: вкл.";
-        StatusText.Text = "Выделяйте слова текущей страницы мышью. Ctrl+C копирует выделение.";
+        StatusText.Text = "Выделяйте символы текущей страницы мышью. Ctrl+C копирует выделение.";
         await EnsureSelectionWordsAsync();
     }
 
@@ -87,7 +87,7 @@ public partial class PdfViewerWindow
             _selectedWords = selection;
             StatusText.Text = selection.Words.Count == 0
                 ? "Текстовый слой недоступен для точного выделения. Для скана используйте OCR."
-                : "Проведите мышью по словам PDF, затем нажмите Ctrl+C.";
+                : "Выделите нужные символы мышью, затем нажмите Ctrl+C.";
         }
         catch (OperationCanceledException)
         {
@@ -116,7 +116,7 @@ public partial class PdfViewerWindow
             point.X / PdfMarkupCanvas.ActualWidth, point.Y / PdfMarkupCanvas.ActualHeight);
         if (index < 0) { _selectionAnchor = _selectionEnd = -1; RenderTextSelection(); return; }
         _selectionAnchor = _selectionEnd = index;
-        PdfPreviewScroll.Focus(); // Ctrl+C stays in this reader workspace.
+        DocumentView.Scroll.Focus(); // Ctrl+C stays in this reader workspace.
         _textSelectionDragging = true;
         PdfMarkupCanvas.CaptureMouse();
         RenderTextSelection();
