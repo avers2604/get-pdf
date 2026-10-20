@@ -80,6 +80,10 @@ public partial class PdfViewerWindow : Window
                 FormattableString.Invariant($"{n.X:R},{n.Y:R}") + "," +
                 Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(n.Text))))));
 
+    internal static long EstimateBitmapBytes(BitmapSource bitmap) =>
+        checked((long)bitmap.PixelWidth * bitmap.PixelHeight *
+            Math.Max(1, (bitmap.Format.BitsPerPixel + 7) / 8));
+
     private bool HasPendingChanges => _nativeDrafts.Count > 0 ||
         (_plan?.HasChanges == true &&
         !string.Equals(CurrentPlanFingerprint(), _savedPlanFingerprint, StringComparison.Ordinal));
@@ -412,7 +416,8 @@ public partial class PdfViewerWindow : Window
             _context = new ScanningContext(new WpfImageContext());
             _context.FileStorageManager = FileStorageManager.CreateFolder(_sessionFolder);
             _pageStore = new PdfLazyPageStore(_context, _sourcePath);
-            _thumbnailCache = new PdfLruCache<(int, int), BitmapSource>(12, _ => { });
+            _thumbnailCache = new PdfLruCache<(int, int), BitmapSource>(12, _ => { },
+                48L * 1024 * 1024, EstimateBitmapBytes);
             if (_closing) return;
             if (_pageStore.PageCount > WorkstationPolicy.Current.MaxDocumentPages)
                 throw new InvalidDataException("Превышен лимит страниц корпоративной политики.");

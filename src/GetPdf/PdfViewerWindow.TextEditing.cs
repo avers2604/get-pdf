@@ -120,7 +120,8 @@ public partial class PdfViewerWindow
             _markupAllowed = PdfMarkupPolicy.ReadEligibleSourcePages(master);
             ReadContinuousPageSizes();
             _textIndex = null; _textReadKey = null; _searchGeometryCache.Clear(); _continuousFingerprint = null;
-            _thumbnailCache?.Dispose(); _thumbnailCache = new PdfLruCache<(int, int), System.Windows.Media.Imaging.BitmapSource>(12, _ => { });
+            _thumbnailCache?.Dispose(); _thumbnailCache = new PdfLruCache<(int, int), System.Windows.Media.Imaging.BitmapSource>(12, _ => { },
+                48L * 1024 * 1024, EstimateBitmapBytes);
             _thumbnailItems = []; _pageIndex = index;
             if (_activeSearchQuery.Length > 0) _textIndex = await Task.Run(() => PdfTextReader.Build(master));
             RefreshList(); PersistPdfDraft();
