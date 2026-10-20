@@ -104,6 +104,7 @@ internal static class PdfFormFillLabPolicy
                 throw new InvalidDataException("Неподдерживаемый формат поля.");
             string name = field.Elements.GetString("/T");
             if (string.IsNullOrWhiteSpace(name) || name.Length > 120 ||
+                HasUnsafeText(name) ||
                 !allowed.TryAdd(name, field.Elements.ContainsKey("/MaxLen")
                     ? field.Elements.GetInteger("/MaxLen") : MaxValueLength))
                 throw new InvalidDataException("Отсутствует уникальное имя текстового поля.");
