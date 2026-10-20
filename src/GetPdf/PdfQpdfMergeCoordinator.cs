@@ -89,7 +89,7 @@ internal static class PdfQpdfMergeCoordinator
             // Final copy may land on a different volume from the OCR session.
             PdfQpdfDiskBudget.RequireAvailableSpace(destinationDir, [files[0]], availableBytes);
             var stagedCopy = Path.Combine(destinationDir,
-                ".gupscan-qpdf-copy-" + Guid.NewGuid().ToString("N") + ".pdf");
+                ".getpdf-qpdf-copy-" + Guid.NewGuid().ToString("N") + ".pdf");
             try
             {
                 File.Copy(files[0], stagedCopy);

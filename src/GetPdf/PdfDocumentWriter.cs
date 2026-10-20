@@ -214,7 +214,7 @@ internal static class PdfDocumentWriter
     {
         var folder = Path.GetDirectoryName(destination)!;
         Directory.CreateDirectory(folder);
-        var temp = Path.Combine(folder, ".gupscan-" + Guid.NewGuid().ToString("N") + ".pdf");
+        var temp = Path.Combine(folder, ".getpdf-" + Guid.NewGuid().ToString("N") + ".pdf");
         try
         {
             cancellation.ThrowIfCancellationRequested();
