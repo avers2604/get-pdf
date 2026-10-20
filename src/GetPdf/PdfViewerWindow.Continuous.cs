@@ -32,6 +32,8 @@ public partial class PdfViewerWindow
             try { PageList.SelectedIndex = index; }
             finally { _refreshingList = false; }
             PagePosition.Text = $"{index + 1} / {_plan.Pages.Count}";
+            if (!PageNumberBox.IsKeyboardFocusWithin)
+                PageNumberBox.Text = (index + 1).ToString();
             SetControls();
             if (ActiveToolIndex == 4) _ = LoadTextFragmentsAsync();
         };

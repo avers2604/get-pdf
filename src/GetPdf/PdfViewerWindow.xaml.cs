@@ -745,6 +745,8 @@ public partial class PdfViewerWindow : Window
         DocumentView.Zoom = _zoom;
         DocumentView.ScrollToPage(_pageIndex);
         PagePosition.Text = $"{_pageIndex + 1} / {_plan.Pages.Count}";
+        if (!PageNumberBox.IsKeyboardFocusWithin)
+            PageNumberBox.Text = (_pageIndex + 1).ToString();
         UpdateBookmarkButton();
         if (_displayedPageIndex == _pageIndex && _displayedFingerprint == _continuousFingerprint && PdfPageImage.Source is BitmapSource bitmap)
             _ = RefreshPageSearchHighlightAsync(_pageIndex, _plan.Pages[_pageIndex], bitmap.Width, bitmap.Height);
@@ -1648,6 +1650,13 @@ public partial class PdfViewerWindow : Window
         if (_plan is null || _searchHits.Count == 0) return;
         _activeHit = Math.Clamp(_activeHit, 0, _searchHits.Count - 1);
         _pageIndex = _searchHits[_activeHit].PageIndex;
+        _refreshingSearchResults = true;
+        try
+        {
+            SearchResultsList.SelectedIndex = _activeHit;
+            SearchResultsList.ScrollIntoView(_searchHits[_activeHit]);
+        }
+        finally { _refreshingSearchResults = false; }
         RefreshList();
         StatusText.Text = $"Совпадение {_activeHit + 1} / {_searchHits.Count}: " +
             _searchHits[_activeHit].Snippet;
