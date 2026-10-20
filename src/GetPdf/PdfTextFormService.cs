@@ -91,6 +91,9 @@ internal static class PdfTextFormService
                     textbox.DefaultAppearance = new Aspose.Pdf.Annotations.DefaultAppearance(
                         font, 10, System.Drawing.Color.Black);
                     textbox.Value = value;
+                    // Persist a real /AP /N visual appearance. Setting /V
+                    // alone often displays a blank field in other readers.
+                    textbox.UpdateAppearances();
                 }
                 doc.Save(temporary);
             }
@@ -99,8 +102,9 @@ internal static class PdfTextFormService
             {
                 foreach (var (name, value) in values)
                     if (check.Form[name] is not Aspose.Pdf.Forms.TextBoxField filled ||
-                        filled.Value != value)
-                        throw new InvalidDataException("Значение текстового поля не сохранилось.");
+                        filled.Value != value || filled.NormalAppearance is null)
+                        throw new InvalidDataException(
+                            "Значение или визуальное представление текстового поля не сохранилось.");
             }
             using (var original = PdfReader.Open(source, PdfDocumentOpenMode.Import))
                 PdfOutputVerifier.Verify(temporary, original.PageCount);
