@@ -249,6 +249,8 @@
                   ToolTip="Извлечь указанные страницы в отдельный PDF"/>
             </StackPanel>
             <StackPanel x:Name="DocumentTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed">
+          <Button Content="Сравнить с другим PDF…" Click="ComparePdf_Click" Margin="0,0,5,10"
+                  ToolTip="Сравнение по извлечённому тексту; изображения и графика не анализируются"/>
           <Button x:Name="PdfStructureButton" Content="Состав PDF…" Click="PdfStructure_Click"
                   IsEnabled="False" Margin="0,0,10,0"
                   ToolTip="Только сведения о полях и аннотациях без их содержимого; не проверка цифровой подписи"
