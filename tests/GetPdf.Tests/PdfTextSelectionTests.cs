@@ -33,6 +33,32 @@ public sealed class PdfTextSelectionTests
     }
 
     [TestMethod]
+    public void GlyphSelectionCopiesExactlyChosenLettersWithoutWordInsertedSpaces()
+    {
+        var glyphs = new PdfWordSelection([
+            new PdfSelectableWord("Т", new(.10, .10, .015, .02)),
+            new PdfSelectableWord("р", new(.12, .10, .015, .02), JoinWithPrevious: true),
+            new PdfSelectableWord("а", new(.14, .10, .015, .02), JoinWithPrevious: true),
+            new PdfSelectableWord("м", new(.16, .10, .015, .02), JoinWithPrevious: true),
+            new PdfSelectableWord("вай", new(.20, .10, .045, .02), JoinWithPrevious: true),
+            new PdfSelectableWord("СПб", new(.29, .10, .05, .02))
+        ]);
+        Assert.AreEqual("рам", glyphs.Extract(1, 3));
+        Assert.AreEqual("Трамвай СПб", glyphs.Extract(0, 5));
+        Assert.AreEqual("рам", glyphs.Extract(3, 1));
+    }
+
+    [TestMethod]
+    public void GlyphSelectionPreservesLineBreakEvenForJoinedFragments()
+    {
+        var glyphs = new PdfWordSelection([
+            new PdfSelectableWord("A", new(.1, .1, .02, .015)),
+            new PdfSelectableWord("B", new(.1, .125, .02, .015), JoinWithPrevious: true)
+        ]);
+        Assert.AreEqual("A\\nB".Replace("\\n", "\n"), glyphs.Extract(0, 1));
+    }
+
+    [TestMethod]
     public void RejectsInvalidWordsAndOversizedSelection()
     {
         Assert.ThrowsExactly<ArgumentException>(() => new PdfWordSelection([
