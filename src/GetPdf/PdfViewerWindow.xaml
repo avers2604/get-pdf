@@ -63,6 +63,9 @@
           <Button x:Name="BookmarkButton" Content="Закладка ☆" Click="Bookmark_Click" Margin="0,0,10,0"
                   ToolTip="Добавить или снять закладку текущей страницы"/>
           <Button Content="Закладки ▾" Click="BookmarksMenu_Click" Margin="0,0,10,0"/>
+          <Button x:Name="InternalLinksButton" Content="Переходы ▾" Click="InternalLinks_Click"
+                  Margin="0,0,10,0" ToolTip="Безопасные внутренние ссылки текущей страницы, без переходов в интернет"
+                  AutomationProperties.Name="Внутренние ссылки страницы PDF"/>
           <Button x:Name="ZoomInButton" IsEnabled="{Binding CanZoom, Mode=OneWay}" Content="+" Click="ZoomIn_Click"
                   AutomationProperties.Name="Увеличить масштаб PDF" Margin="0,0,13,0"/>
           <Button x:Name="RotateLeftButton" IsEnabled="{Binding CanRotate, Mode=OneWay}" Content="↶ 90°" Click="RotateLeft_Click" ToolTip="Повернуть страницу влево" Margin="0,0,5,0" Visibility="Collapsed" />

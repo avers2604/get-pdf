@@ -475,12 +475,21 @@ public partial class PdfViewerWindow : Window
             try
             {
                 var outlineSource = _sourcePath;
-                _pdfOutline = await Task.Run(() => PdfOutlineReader.Read(outlineSource));
+                var navigation = await Task.Run(() =>
+                {
+                    using var pdf = PdfSharp.Pdf.IO.PdfReader.Open(outlineSource,
+                        PdfSharp.Pdf.IO.PdfDocumentOpenMode.Import);
+                    return (Outline: PdfOutlineReader.Read(pdf),
+                            Links: PdfInternalLinkReader.Read(pdf));
+                });
+                _pdfOutline = navigation.Outline;
+                _pdfInternalLinks = navigation.Links;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 _pdfOutline = Array.Empty<PdfOutlineReader.Node>();
-                DiagnosticLog.Failure("pdf-outline-read", ex);
+                _pdfInternalLinks = new Dictionary<int, IReadOnlyList<PdfInternalLinkReader.Link>>();
+                DiagnosticLog.Failure("pdf-navigation-read", ex);
             }
             PdfOutlineTree.ItemsSource = _pdfOutline;
             UpdateOutlinePane();
@@ -523,6 +532,7 @@ public partial class PdfViewerWindow : Window
             DiagnosticLog.Failure("pdf-viewer-load", ex);
             ReleaseDocument();
             _pdfOutline = Array.Empty<PdfOutlineReader.Node>();
+            _pdfInternalLinks = new Dictionary<int, IReadOnlyList<PdfInternalLinkReader.Link>>();
             PdfOutlineTree.ItemsSource = null;
             DocumentTitle.Text = "Откройте документ";
             StatusText.Text = "Не удалось открыть PDF.";

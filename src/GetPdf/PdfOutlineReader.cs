@@ -60,13 +60,15 @@ internal static class PdfOutlineReader
         return output;
     }
 
-    private static int ResolveTarget(PdfDocument document, PdfDictionary node)
+    internal static int ResolveTarget(PdfDocument document, PdfDictionary node)
     {
-        // External /URI, /GoToR, /Launch, /JavaScript, /SubmitForm actions
-        // are NEVER dereferenced or executed by navigation.
+        // Reject the entire item if it includes an action other than local /GoTo.
+        // A malicious item with both /Dest and /A /URI must not bypass this gate.
+        var action = node.Elements.GetDictionary("/A");
+        if (action is not null && action.Elements.GetName("/S") != "/GoTo")
+            return -1;
         PdfArray? destination = node.Elements.GetArray("/Dest");
-        if (destination is null && node.Elements.GetDictionary("/A") is { } action &&
-            action.Elements.GetName("/S") == "/GoTo")
+        if (destination is null && action is not null)
             destination = action.Elements.GetArray("/D");
         if (destination is null || destination.Elements.Count == 0) return -1;
 
