@@ -19,6 +19,32 @@ pwsh -File .\scripts\windows-build-msi.ps1 -OfflineNuGetFeed 'D:\ApprovedNuGet' 
 
 **Важно:** установщик `ГЭТ PDF` не имеет права удалять драйверы сканера, профили GUP-Scan или документы пользователя.
 
+## Независимая проверка сборки и тестов, без WiX
+
+Для устранения ошибок компиляции не нужно сначала собирать MSI.
+На тестовой Windows-машине с .NET SDK 10 выполните:
+
+```powershell
+pwsh -File .\scripts\windows-verify-code.ps1 -OfflineNuGetFeed 'D:\ApprovedNuGet'
+```
+
+Скрипт выполняет restore решения, `dotnet build` для WPF и
+`dotnet test` для `GetPdf.Tests`; WiX, signtool, МФУ и MSI не требуются.
+В корне `global.json` теперь задаёт **Microsoft.Testing.Platform** для
+`MSTest.Sdk` на .NET 10: без явного выбора тестового движка команда
+`dotnet test` может работать в несовместимом режиме VSTest.
+Обе проверочные команды отвергают обнаружение менее **35 тестов**
+(`--minimum-expected-tests 35`), чтобы нулевая или частичная
+дискавери не считалась успешным тестированием.
+
+Это подтверждает только локальные сборку и выполнение MSTest после
+фактического запуска скрипта. Не является проверкой WPF UI,
+периферийных принтеров, КЭП или MSI. Скрипт в данной среде **не запускался**.
+
+Ссылки на спецификацию .NET:
+https://learn.microsoft.com/dotnet/core/testing/microsoft-testing-platform-integration-dotnet-test
+https://learn.microsoft.com/dotnet/core/tools/dotnet-test-mtp
+
 ## Дополнительные обязательные этапы для выпуска
 
 - Выполнить реальный `dotnet build` и `dotnet test`, затем проверить 10–16 WPF-вкладок и передачу страниц с Undo/Redo.
