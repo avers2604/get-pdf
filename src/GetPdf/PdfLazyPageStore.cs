@@ -42,6 +42,9 @@ internal sealed class PdfLazyPageStore : IDisposable
             if (_disposed) throw new ObjectDisposedException(nameof(PdfLazyPageStore));
             if (_pages.TryGet(zeroBasedPage, out var hit) && hit is not null)
                 return hit;
+            // Bound native PDFium imports across all WPF document tabs.
+            using var importQuota = await PdfRenderConcurrency.EnterAsync();
+            if (_disposed) throw new ObjectDisposedException(nameof(PdfLazyPageStore));
             var importer = new PdfImporter(_context);
             ProcessedImage? result = null;
             try

@@ -5,7 +5,7 @@ namespace GetPdf;
 internal readonly record struct DocumentRenderKey(int Page, long Revision, int PixelWidth);
 
 /// <summary>Single reader, bounded detached bitmap cache. Invalidation never disposes an in-flight source.</summary>
-internal sealed class DocumentRenderScheduler(int maxImages = 6, long maxBytes = 128L * 1024 * 1024)
+internal sealed class DocumentRenderScheduler(int maxImages = 3, long maxBytes = 32L * 1024 * 1024)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly LinkedList<(DocumentRenderKey Key, BitmapSource Bitmap, long Bytes)> _cache = new();
