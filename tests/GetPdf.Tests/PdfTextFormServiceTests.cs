@@ -46,6 +46,30 @@ public sealed class PdfTextFormServiceTests
     }
 
     [TestMethod]
+    public void FormFillNeverOverwritesOriginalEvenWhenDestinationIsSameFile()
+    {
+        string folder = Path.Combine(Path.GetTempPath(),
+            "getpdf-worm-form-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string original = Path.Combine(folder, "original.pdf");
+            using (var doc = new PdfDocument())
+            {
+                doc.AddPage();
+                doc.Save(original);
+            }
+            byte[] before = File.ReadAllBytes(original);
+            Assert.ThrowsExactly<IOException>(() =>
+                PdfTextFormService.FillNewCopy(original, original,
+                    new Dictionary<string, string> { ["ФИО"] = "Тест" }));
+            CollectionAssert.AreEqual(before, File.ReadAllBytes(original));
+            Assert.AreEqual(1, Directory.GetFiles(folder).Length);
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    [TestMethod]
     public void RequiresFreshOutputName()
     {
         string path = Path.Combine(Path.GetTempPath(), "sample.pdf");
