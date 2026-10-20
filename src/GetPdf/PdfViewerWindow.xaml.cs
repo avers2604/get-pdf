@@ -2149,6 +2149,24 @@ public partial class PdfViewerWindow : UserControl
         if (!_workspace.CanPrint || !WorkstationPolicy.Current.AllowPrinting || _plan is null) return;
         var printer = new PrintDialog();
         if (printer.ShowDialog() != true) return;
+        var settingsDialog = new PdfPrintSettingsDialog(PdfPrinterSettingsStore.Read())
+        { Owner = HostWindow };
+        if (settingsDialog.ShowDialog() != true) return;
+        try
+        {
+            PdfPrinterSettingsStore.ApplyTo(printer, settingsDialog.Settings);
+            try { PdfPrinterSettingsStore.Save(settingsDialog.Settings); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { DiagnosticLog.Failure("pdf-print-settings", ex); }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or
+                                   NotSupportedException or ArgumentOutOfRangeException)
+        {
+            MessageBox.Show(HostWindow, ex.Message,
+                "Неподдерживаемые параметры принтера",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         PdfBatchSelection selection;
         try { selection = PdfBatchSelection.Build(pages); }
         catch (Exception ex)
