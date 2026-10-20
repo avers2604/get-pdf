@@ -75,7 +75,7 @@ internal static class PdfOutlineReader
         if (destination.Elements[0] is PdfReference pageRef)
         {
             for (int i = 0; i < document.PageCount; i++)
-                if (document.Pages[i].ObjectNumber == pageRef.ObjectNumber)
+                if (document.Pages[i].Reference?.ObjectID == pageRef.ObjectID)
                     return i;
         }
         else if (destination.Elements[0] is PdfDictionary dictionary)
