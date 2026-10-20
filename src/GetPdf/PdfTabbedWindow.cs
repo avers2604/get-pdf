@@ -46,6 +46,10 @@ internal sealed class PdfTabbedWindow : Window
     }
 
     internal PdfTabbedWindow(IReadOnlyList<string> paths, int activeIndex = 0)
+        : this(paths, activeIndex, includeEmptyPlaceholder: true) { }
+
+    private PdfTabbedWindow(IReadOnlyList<string> paths, int activeIndex,
+        bool includeEmptyPlaceholder)
     {
         Title = "ГЭТ PDF — просмотр документов";
         Width = 1440;
@@ -88,8 +92,10 @@ internal sealed class PdfTabbedWindow : Window
             if (PdfOpenRequest.TryParse([path], out string? valid) && valid is not null)
                 AddWorkspace(valid, persist: false);
         }
-        if (_tabs.Items.Count == 0) AddWorkspace(null, persist: false);
-        _tabs.SelectedIndex = Math.Clamp(activeIndex, 0, _tabs.Items.Count - 1);
+        if (_tabs.Items.Count == 0 && includeEmptyPlaceholder)
+            AddWorkspace(null, persist: false);
+        if (_tabs.Items.Count > 0)
+            _tabs.SelectedIndex = Math.Clamp(activeIndex, 0, _tabs.Items.Count - 1);
         OpenShells.Add(this);
         Loaded += (_, _) => DocumentWindowLayout.Clamp(this);
         PreviewKeyDown += async (_, e) =>
@@ -117,12 +123,10 @@ internal sealed class PdfTabbedWindow : Window
         };
     }
 
-    private PdfTabbedWindow(PdfViewerWindow viewer, PdfTabItem moved) : this([], 0)
+    private PdfTabbedWindow(PdfViewerWindow viewer, PdfTabItem moved)
+        : this([], 0, includeEmptyPlaceholder: false)
     {
-        var placeholder = _handles.Values.Single();
-        _tabs.Items.Remove(placeholder.Tab);
-        _handles.Remove(placeholder.Id);
-        _registry.Close(placeholder.Id);
+        // Do not allocate an unused PDF control/scratch adapter on detach.
         AddWorkspace(moved.Path, viewer, moved, persist: false);
         SaveSessions();
     }
@@ -289,7 +293,7 @@ internal sealed class PdfTabbedWindow : Window
 
     private static void SaveSessions()
     {
-        if (!WorkstationPolicy.Current.RestoreTabs) return;
+        if (!WorkstationPolicy.Current.RestoreTabs || OpenShells.Count == 0) return;
         try
         {
             string[] all = OpenShells.SelectMany(shell => shell._registry.Snapshot().Paths)
