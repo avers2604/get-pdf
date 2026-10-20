@@ -99,8 +99,21 @@ public partial class PdfViewerWindow
             _history.Execute(p => p.InsertSourcePageAfter(
                 destination.SelectedPageIndex, appended));
             _pageIndex = destination.SelectedPageIndex + 1;
+            // New source page indices invalidate all derived lookup state.
+            // Do not let old search hits or text-editor fragments target a
+            // page in the new append-only source document.
             _textIndex = null;
+            _textReadRequest++;
             _textReadKey = null;
+            _textEditInput = null;
+            _textEditPageKey = null;
+            _editableFragments = [];
+            TextFragmentList.ItemsSource = null;
+            _searchHits = [];
+            _activeHit = 0;
+            _activeSearchQuery = string.Empty;
+            SearchBox.Clear();
+            PdfSearchHighlightCanvas.Children.Clear();
             _searchGeometryCache.Clear();
             _continuousFingerprint = null;
             _thumbnailCache?.Dispose();
