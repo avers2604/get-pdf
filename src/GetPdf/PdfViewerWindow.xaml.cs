@@ -1479,6 +1479,9 @@ public partial class PdfViewerWindow : UserControl
         }
         if (control && !shift && e.Key is Key.D1 or Key.D2 or Key.D3 or Key.D4 or Key.D5)
         {
+            // A shortcut must reveal the requested panel even in reader mode.
+            if (!_editingToolsVisible)
+                ToggleEditor_Click(sender, new RoutedEventArgs());
             PdfToolModeBox.SelectedIndex = e.Key switch
             {
                 Key.D1 => 0, Key.D2 => 1, Key.D3 => 2, Key.D4 => 3, _ => 4
