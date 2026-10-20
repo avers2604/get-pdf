@@ -2384,7 +2384,7 @@ public partial class PdfViewerWindow : UserControl
         try
         {
             PdfWorkspacePreferencesStore.Save(new PdfWorkspacePreferences(
-                1, PdfWorkspaceToolGroups.FromIndex(Math.Min(3, ActiveToolIndex)),
+                1, PdfWorkspaceToolGroups.FromIndex(ActiveToolIndex),
                 (int)DocumentView.LayoutMode));
         }
         catch (Exception ex) { DiagnosticLog.Failure("pdf-view-preferences", ex); }
