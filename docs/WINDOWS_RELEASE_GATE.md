@@ -34,3 +34,28 @@ pwsh -File .\scripts\windows-build-msi.ps1 -OfflineNuGetFeed 'D:\ApprovedNuGet' 
 - Включить `ExportGetSystemStatus=true` в политике и проверить атомарный JSON при открытии/закрытии 1–16 вкладок, отсутствие путей/текста PDF; выключить и убедиться, что сетевых запросов нет.
 - Испытать `windows-check-offline-update.ps1` на действительной подписанной MSI, повреждённом SHA, чужом сертификате, неправильном UpgradeCode и попытке downgrade; ни один случай не должен запускать MSI.
 - Проверить закрытие WPF вкладки при занятой очереди PDFium: отмена должна прерывать ожидающих импортеров и не обновлять старые миниатюры. Native PDFium память и результат работы с архивными документами фиксировать отдельно.
+
+## Ручной запуск WPF после сборки
+
+После локального `windows-build-msi.ps1` проверить запуск на тестовой
+Windows-машине:
+
+```powershell
+pwsh -File .\scripts\windows-smoke-viewer.ps1 `
+  -PdfPaths @('C:\\Samples\\a.pdf', 'C:\\Samples\\b.pdf') `
+  -EvidenceFile '.\\dist\\release\\smoke-launch.json'
+```
+
+Скрипт запускает `GetPdf.exe` с 1–16 PDF и ждёт появления окна.
+Он **не** утверждает, что страницы отображаются правильно, не нажимает
+кнопки, не печатает, не изменяет PDF и не закрывает процесс.
+
+Свидетельство содержит только версию схемы, время, SHA-256 EXE,
+количество открываемых файлов и PID. **Пути и имена PDF не записываются.**
+Все флаги `windowsUiAccepted`, `realPrintingValidated`,
+`msInstallerValidated` и `releaseApproved` установлены в `false`.
+
+После открытия вручную выполнить сценарии из
+`docs/SPLIT_ACCEPTANCE.md` и `docs/PDF_TABS_ACCEPTANCE.md`.
+Если окно не появилось, скрипт завершится ошибкой, а основной release
+gate остаётся незавершённым.
