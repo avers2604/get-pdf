@@ -52,10 +52,29 @@ public sealed class PdfPagePlan
     public IReadOnlyList<PdfPageReference> Pages => _pages.AsReadOnly();
 
     // New content versions are retained in an append-only private source PDF, so undo never reparses deleted data.
-    public int RegisterSourcePage()
+    public int RegisterSourcePage(int maxSourcePages = 10000)
     {
-        if (_sourcePageCount >= 10000) throw new InvalidOperationException("Достигнут лимит версий страниц. Сохраните и откройте новый PDF.");
+        if (maxSourcePages < 1 || maxSourcePages > 10000)
+            throw new ArgumentOutOfRangeException(nameof(maxSourcePages));
+        if (_sourcePageCount >= maxSourcePages)
+            throw new InvalidOperationException(
+                "Достигнут лимит версий страниц. Сохраните и откройте новый PDF.");
         return _sourcePageCount++;
+    }
+
+    /// <summary>
+    /// Insert an already verified, append-only private source page.
+    /// External PDF content must be appended before calling this method.
+    /// Undo/Redo snapshots preserve its source index and unique page identity.
+    /// </summary>
+    public void InsertSourcePageAfter(int index, int sourcePage)
+    {
+        ValidateIndex(index);
+        if (sourcePage < 0 || sourcePage >= _sourcePageCount)
+            throw new ArgumentOutOfRangeException(nameof(sourcePage));
+        if (_pages.Count >= WorkstationPolicy.Current.MaxDocumentPages)
+            throw new InvalidOperationException("Превышен лимит страниц PDF.");
+        _pages.Insert(index + 1, new PdfPageReference(sourcePage, 0));
     }
     public void ReplaceSourcePage(int index, int sourcePage)
     {
