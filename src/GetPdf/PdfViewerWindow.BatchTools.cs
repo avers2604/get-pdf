@@ -15,6 +15,21 @@ public partial class PdfViewerWindow
             _plan.Snapshot(), _pageIndex, _plan.SourcePageCount);
     }
 
+    // Destination may already contain page-order changes and notes. Its
+    // append-only working PDF still retains all source versions for Undo.
+    internal PdfCrossTabSnapshot? GetWritableTransferSnapshot()
+    {
+        if (IsBusy || !_canModify || _nativeDrafts.Count > 0 ||
+            _plan is null || _history is null || _sourcePath is null ||
+            _originalPath is null || _pageIndex < 0 ||
+            _pageIndex >= _plan.Pages.Count ||
+            _plan.Pages.Count >= WorkstationPolicy.Current.MaxDocumentPages ||
+            _plan.SourcePageCount >= 10000)
+            return null;
+        return new PdfCrossTabSnapshot(_sourcePath, _originalPath,
+            _plan.Snapshot(), _pageIndex, _plan.SourcePageCount);
+    }
+
     internal void SetCrossTabExportBusy(CancellationTokenSource? job)
     {
         if (job is not null && IsBusy)
