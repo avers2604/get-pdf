@@ -41,9 +41,10 @@ pwsh -File .\scripts\windows-build-msi.ps1 -OfflineNuGetFeed 'D:\ApprovedNuGet' 
 Windows-машине:
 
 ```powershell
-pwsh -File .\scripts\windows-smoke-viewer.ps1 `
-  -PdfPaths @('C:\\Samples\\a.pdf', 'C:\\Samples\\b.pdf') `
-  -EvidenceFile '.\\dist\\release\\smoke-launch.json'
+# Выполнить внутри интерактивного PowerShell 7 (pwsh):
+.\scripts\windows-smoke-viewer.ps1 `
+  -PdfPaths @('C:\Samples\a.pdf', 'C:\Samples\b.pdf') `
+  -EvidenceFile '.\dist\release\smoke-launch.json'
 ```
 
 Скрипт запускает `GetPdf.exe` с 1–16 PDF и ждёт появления окна.
