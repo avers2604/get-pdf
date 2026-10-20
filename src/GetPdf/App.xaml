@@ -10,7 +10,10 @@
         <ControlTemplate.Triggers>
           <Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="#00809A"/><Setter Property="FontWeight" Value="SemiBold"/><Setter TargetName="TabRoot" Property="BorderBrush" Value="#00809A"/></Trigger>
           <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="TabRoot" Property="Background" Value="#E6F5F9"/></Trigger>
-          <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="TabRoot" Property="Background" Value="#E6F5F9"/></Trigger>
+          <Trigger Property="IsKeyboardFocused" Value="True">
+            <Setter TargetName="TabRoot" Property="Background" Value="#E6F5F9"/>
+            <Setter TargetName="TabRoot" Property="BorderBrush" Value="#00809A"/>
+          </Trigger>
         </ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
     </Style>
@@ -84,6 +87,11 @@
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.87"/></Trigger>
               <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72"/></Trigger>
               <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.42"/></Trigger>
+              <!-- Template-based buttons otherwise lose the Windows keyboard-focus cue. -->
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource Teal}"/>
+                <Setter TargetName="Root" Property="BorderThickness" Value="2"/>
+              </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
