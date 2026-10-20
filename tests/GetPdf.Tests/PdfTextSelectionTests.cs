@@ -29,8 +29,7 @@ public sealed class PdfTextSelectionTests
             new PdfSelectableWord("Документ", new(.10, .130, .19, .012)),
             new PdfSelectableWord("номер", new(.31, .131, .10, .012))
         ]);
-        Assert.AreEqual("Управление ГЭТ\\nДокумент номер".Replace("\\n", "\n"),
-            model.Extract(0, 3));
+        Assert.AreEqual("Управление ГЭТ\nДокумент номер", model.Extract(0, 3));
     }
 
     [TestMethod]
