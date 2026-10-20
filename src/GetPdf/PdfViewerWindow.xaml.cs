@@ -1300,7 +1300,7 @@ public partial class PdfViewerWindow : UserControl
                         continue;
                     }
                     // Reuse the same PDFium importer/store; never prefetch hidden pages.
-                    var page = await store.GetPageAsync(item.SourcePage);
+                    var page = await store.GetPageAsync(item.SourcePage, token);
                     if (token.IsCancellationRequested || _closing || !_visibleThumbnails.Contains(item) ||
                         !_thumbnailItems.Contains(item)) continue;
                     var bitmap = PdfThumbnailRenderer.Render(page, item.Rotation);

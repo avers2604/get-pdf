@@ -31,27 +31,37 @@ internal sealed class PdfLazyPageStore : IDisposable
         if (PageCount < 1) throw new InvalidDataException("PDF не содержит страниц.");
     }
 
-    public async Task<ProcessedImage> GetPageAsync(int zeroBasedPage)
+    public async Task<ProcessedImage> GetPageAsync(int zeroBasedPage,
+        CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         if (_disposed) throw new ObjectDisposedException(nameof(PdfLazyPageStore));
         if (zeroBasedPage < 0 || zeroBasedPage >= PageCount)
             throw new ArgumentOutOfRangeException(nameof(zeroBasedPage));
-        await _mutex.WaitAsync();
+        await _mutex.WaitAsync(cancellation);
         try
         {
+            cancellation.ThrowIfCancellationRequested();
             if (_disposed) throw new ObjectDisposedException(nameof(PdfLazyPageStore));
             if (_pages.TryGet(zeroBasedPage, out var hit) && hit is not null)
                 return hit;
             // Bound native PDFium imports across all WPF document tabs.
-            using var importQuota = await PdfRenderConcurrency.EnterAsync();
+            using var importQuota = await PdfRenderConcurrency.EnterAsync(cancellation);
+            cancellation.ThrowIfCancellationRequested();
             if (_disposed) throw new ObjectDisposedException(nameof(PdfLazyPageStore));
             var importer = new PdfImporter(_context);
             ProcessedImage? result = null;
             try
             {
                 await foreach (var image in importer.Import(_path,
-                    new ImportParams { Slice = Slice.Item(zeroBasedPage) }))
+                    new ImportParams { Slice = Slice.Item(zeroBasedPage) })
+                    .WithCancellation(cancellation))
                 {
+                    if (cancellation.IsCancellationRequested)
+                    {
+                        image.Dispose();
+                        cancellation.ThrowIfCancellationRequested();
+                    }
                     if (result is not null)
                     {
                         image.Dispose();
@@ -61,6 +71,7 @@ internal sealed class PdfLazyPageStore : IDisposable
                 }
                 if (result is null)
                     throw new InvalidDataException("Не удалось загрузить выбранную страницу PDF.");
+                cancellation.ThrowIfCancellationRequested();
                 _pages.Add(zeroBasedPage, result);
                 return result;
             }

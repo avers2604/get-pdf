@@ -117,7 +117,7 @@ public partial class PdfViewerWindow
         {
             cancellation.ThrowIfCancellationRequested();
             var reference = references[index];
-            var image = await store.GetPageAsync(reference.SourcePage);
+            var image = await store.GetPageAsync(reference.SourcePage, cancellation);
             cancellation.ThrowIfCancellationRequested();
             BitmapSource bitmap = PdfPreviewRenderer.RenderBounded(image);
             if (reference.Rotation != 0) bitmap = new TransformedBitmap(bitmap, new RotateTransform(reference.Rotation));
