@@ -21,9 +21,25 @@ public partial class ContinuousDocumentView : UserControl
     private bool _queued;
     private bool _needsRender;
     private double _zoom = .9;
+    private PdfPageLayoutMode _mode;
     public event Action<int>? CurrentPageChanged;
     public event Action<int, BitmapSource>? PageRendered;
     public ScrollViewer Scroll => Scroller;
+    internal PdfPageLayoutMode LayoutMode
+    {
+        get => _mode;
+        set
+        {
+            if (_mode == value) return;
+            _mode = value;
+            DetachActive();
+            foreach (var border in _realized.Values) PageCanvas.Children.Remove(border);
+            _realized.Clear();
+            _renderer.Invalidate();
+            LayoutPages();
+            ScrollToPage(_current);
+        }
+    }
     public FrameworkElement? ActivePageContent { get; set; }
     public Func<int, BitmapSource, FrameworkElement>? DecoratePage { get; set; }
     public int CurrentPage => _current;
@@ -68,13 +84,15 @@ public partial class ContinuousDocumentView : UserControl
     {
         if (index < 0 || index >= _bounds.Length) return;
         SelectPage(index);
+        if (_mode == PdfPageLayoutMode.Single) LayoutPages();
         Scroller.ScrollToVerticalOffset(_bounds[index].Top + 24);
         QueueRender();
     }
     public void FitWidth()
     {
         if (_sizes.Count > 0 && Scroller.ViewportWidth > 80)
-            Zoom = (Scroller.ViewportWidth - 64) / _sizes[_current].Width;
+            Zoom = (Scroller.ViewportWidth - 64) / (_mode == PdfPageLayoutMode.Spread
+                ? _sizes.Max(s => s.Width) * 2 + 24 : _sizes[_current].Width);
     }
     public void UpdatePageSize(int index, Size size)
     {
@@ -83,18 +101,31 @@ public partial class ContinuousDocumentView : UserControl
     }
     private void LayoutPages()
     {
-        _bounds = DocumentViewportLayout.Measure(_sizes, _zoom, 24);
+        _bounds = _mode == PdfPageLayoutMode.Spread
+            ? DocumentViewportLayout.MeasureSpread(_sizes, _zoom, 24)
+            : _mode == PdfPageLayoutMode.Single ? SinglePageBounds() :
+                DocumentViewportLayout.Measure(_sizes, _zoom, 24);
         PageCanvas.Width = _bounds.Length == 0 ? 0 : _bounds.Max(r => r.Right);
-        PageCanvas.Height = _bounds.Length == 0 ? 0 : _bounds[^1].Bottom;
+        PageCanvas.Height = _bounds.Length == 0 ? 0 : _bounds.Max(r => r.Bottom);
         foreach (var (i, border) in _realized) Position(border, _bounds[i]);
         QueueRender();
+    }
+    private Rect[] SinglePageBounds()
+    {
+        var result = new Rect[_sizes.Count];
+        if (_sizes.Count > 0)
+        {
+            var size = _sizes[_current];
+            result[_current] = new Rect(0, 0, size.Width * _zoom, size.Height * _zoom);
+        }
+        return result;
     }
     private static void Position(Border border, Rect rect)
     { border.Width = rect.Width; border.Height = rect.Height; Canvas.SetLeft(border, rect.Left); Canvas.SetTop(border, rect.Top); }
     private void OnViewportChanged(object sender, SizeChangedEventArgs e) => QueueRender();
     private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (_bounds.Length > 0)
+        if (_bounds.Length > 0 && _mode != PdfPageLayoutMode.Single)
         {
             double y = Math.Max(0, Scroller.VerticalOffset - 24) + Math.Min(Scroller.ViewportHeight * .25, 150);
             int current = Array.FindIndex(_bounds, b => b.Bottom >= y);
@@ -140,7 +171,8 @@ public partial class ContinuousDocumentView : UserControl
         var render = _render;
         if (render is null || Scroller.ViewportHeight <= 0) return;
         var viewport = new Rect(0, Math.Max(0, Scroller.VerticalOffset - 24), Math.Max(1, PageCanvas.Width), Scroller.ViewportHeight);
-        int[] desired = DocumentViewportLayout.VisibleRange(_bounds, viewport, 1);
+        int[] desired = _mode == PdfPageLayoutMode.Single ? [_current] :
+            DocumentViewportLayout.VisibleRange(_bounds, viewport, 1);
         foreach (int index in _realized.Keys.Except(desired).ToArray())
         {
             if (index == _current) DetachActive();
@@ -178,7 +210,8 @@ public partial class ContinuousDocumentView : UserControl
         }
         // A scroll during await may have changed the desired range.
         var now = new Rect(0, Math.Max(0, Scroller.VerticalOffset - 24), Math.Max(1, PageCanvas.Width), Scroller.ViewportHeight);
-        if (!DocumentViewportLayout.VisibleRange(_bounds, now, 1).SequenceEqual(desired))
+        if (!(_mode == PdfPageLayoutMode.Single ? new[] { _current } :
+            DocumentViewportLayout.VisibleRange(_bounds, now, 1)).SequenceEqual(desired))
             _ = Dispatcher.BeginInvoke(new Action(QueueRender), DispatcherPriority.ContextIdle);
     }
 }

@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace GetPdf;
 
 /// <summary>Only UI layout is persisted. Document paths, content, user names and scanner settings are excluded.</summary>
-public sealed record PdfWorkspacePreferences(int Version = 1, string ActiveTool = "search");
+public sealed record PdfWorkspacePreferences(int Version = 1, string ActiveTool = "search", int ViewMode = 0);
 
 public static class PdfWorkspaceToolGroups
 {
@@ -39,7 +39,7 @@ public static class PdfWorkspacePreferencesStore
             if (!File.Exists(path) || new FileInfo(path).Length > MaxFileBytes)
                 return new PdfWorkspacePreferences();
             var result = JsonSerializer.Deserialize<PdfWorkspacePreferences>(File.ReadAllText(path));
-            return result is { Version: 1 } && PdfWorkspaceToolGroups.IsKnown(result.ActiveTool)
+            return result is { Version: 1, ViewMode: >= 0 and <= 2 } && PdfWorkspaceToolGroups.IsKnown(result.ActiveTool)
                 ? result : new PdfWorkspacePreferences();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException
@@ -58,7 +58,8 @@ public static class PdfWorkspacePreferencesStore
         ArgumentNullException.ThrowIfNull(preferences);
         var safe = new PdfWorkspacePreferences(1,
             PdfWorkspaceToolGroups.IsKnown(preferences.ActiveTool)
-                ? preferences.ActiveTool : "search");
+                ? preferences.ActiveTool : "search",
+            Math.Clamp(preferences.ViewMode, 0, 2));
         string directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
         Directory.CreateDirectory(directory);
         string staging = Path.Combine(directory, ".pdf-workspace-" + Guid.NewGuid().ToString("N") + ".tmp");

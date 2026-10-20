@@ -95,8 +95,10 @@ public partial class PdfViewerWindow : Window
         DataContext = _workspace;
         InitializeContinuousView();
         PdfJobProgressBar.DataContext = _jobProgress;
-        ActiveToolIndex = PdfWorkspaceToolGroups.ToIndex(
-            PdfWorkspacePreferencesStore.Load().ActiveTool);
+        var preferences = PdfWorkspacePreferencesStore.Load();
+        ActiveToolIndex = PdfWorkspaceToolGroups.ToIndex(preferences.ActiveTool);
+        LayoutModeBox.SelectedIndex = preferences.ViewMode;
+        DocumentView.LayoutMode = (PdfPageLayoutMode)preferences.ViewMode;
         UpdateToolMode();
         ApplyResponsiveLayout();
         SetControls();
@@ -117,6 +119,76 @@ public partial class PdfViewerWindow : Window
         DocumentTools.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
         if (SourceTextTools is not null) SourceTextTools.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
         if (index == 4) _ = LoadTextFragmentsAsync();
+    }
+
+    private void LayoutMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (DocumentView is null || LayoutModeBox is null || LayoutModeBox.SelectedIndex < 0) return;
+        DocumentView.LayoutMode = (PdfPageLayoutMode)LayoutModeBox.SelectedIndex;
+        if (_plan is not null) ShowPage();
+    }
+
+    private WindowState _previousWindowState = WindowState.Normal;
+    private WindowStyle _previousWindowStyle = WindowStyle.SingleBorderWindow;
+    private bool _fullscreen;
+
+    private void Fullscreen_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_fullscreen)
+        {
+            _previousWindowState = WindowState;
+            _previousWindowStyle = WindowStyle;
+            WindowState = WindowState.Normal;
+            WindowStyle = WindowStyle.None;
+            WindowState = WindowState.Maximized;
+            _fullscreen = true;
+        }
+        else
+        {
+            WindowState = WindowState.Normal;
+            WindowStyle = _previousWindowStyle;
+            WindowState = _previousWindowState;
+            _fullscreen = false;
+        }
+    }
+
+    private void Bookmark_Click(object sender, RoutedEventArgs e)
+    {
+        if (_originalPath is null || _plan is null || _loading) return;
+        try
+        {
+            bool added = PdfPageBookmarks.Toggle(_originalPath, _pageIndex);
+            BookmarkButton.Content = added ? "Закладка ★" : "Закладка ☆";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            DiagnosticLog.Failure("pdf-bookmark-write", ex);
+            StatusText.Text = "Не удалось сохранить закладку.";
+        }
+    }
+
+    private void BookmarksMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button owner || _originalPath is null || _plan is null) return;
+        var menu = new ContextMenu();
+        foreach (int page in PdfPageBookmarks.Read(_originalPath).Where(i => i < _plan.Pages.Count))
+        {
+            int selected = page;
+            var item = new MenuItem { Header = $"Страница {selected + 1}" };
+            item.Click += (_, _) =>
+            {
+                if (_plan is null || selected >= _plan.Pages.Count) return;
+                _pageIndex = selected;
+                RefreshList();
+            };
+            menu.Items.Add(item);
+        }
+        if (menu.Items.Count == 0)
+            menu.Items.Add(new MenuItem { Header = "Закладок пока нет", IsEnabled = false });
+        owner.ContextMenu = menu;
+        menu.PlacementTarget = owner;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
     }
 
     private void ToggleEditor_Click(object sender, RoutedEventArgs e)
@@ -374,6 +446,7 @@ public partial class PdfViewerWindow : Window
             RefreshList();
             DocumentView.RestoreViewport(_pageIndex, viewState.RelativeOffset, _zoom);
             DocumentReady?.Invoke();
+            UpdateBookmarkButton();
             try { PdfRecentDocuments.Remember(_originalPath); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             { DiagnosticLog.Failure("pdf-recent", ex); }
@@ -524,6 +597,13 @@ public partial class PdfViewerWindow : Window
         _sessionFolder = null;
     }
 
+    private void UpdateBookmarkButton()
+    {
+        if (BookmarkButton is null) return;
+        BookmarkButton.Content = _originalPath is not null &&
+            PdfPageBookmarks.Read(_originalPath).Contains(_pageIndex) ? "Закладка ★" : "Закладка ☆";
+    }
+
     private void RefreshList()
     {
         if (_plan is null) return;
@@ -571,6 +651,7 @@ public partial class PdfViewerWindow : Window
         DocumentView.Zoom = _zoom;
         DocumentView.ScrollToPage(_pageIndex);
         PagePosition.Text = $"{_pageIndex + 1} / {_plan.Pages.Count}";
+        UpdateBookmarkButton();
         if (_displayedPageIndex == _pageIndex && _displayedFingerprint == _continuousFingerprint && PdfPageImage.Source is BitmapSource bitmap)
             _ = RefreshPageSearchHighlightAsync(_pageIndex, _plan.Pages[_pageIndex], bitmap.Width, bitmap.Height);
         SetControls();
@@ -1291,6 +1372,8 @@ public partial class PdfViewerWindow : Window
             e.Handled = true;
             return;
         }
+        if (e.Key == Key.F11) { Fullscreen_Click(sender, new RoutedEventArgs()); e.Handled = true; return; }
+        if (e.Key == Key.Escape && _fullscreen) { Fullscreen_Click(sender, new RoutedEventArgs()); e.Handled = true; return; }
         if (e.Key == Key.Escape && _batchCancel is { IsCancellationRequested: false })
         {
             CancelPdfJob_Click(sender, new RoutedEventArgs());
@@ -2076,7 +2159,8 @@ public partial class PdfViewerWindow : Window
             try
             {
                 PdfWorkspacePreferencesStore.Save(new PdfWorkspacePreferences(
-                    1, PdfWorkspaceToolGroups.FromIndex(Math.Min(3, ActiveToolIndex))));
+                    1, PdfWorkspaceToolGroups.FromIndex(Math.Min(3, ActiveToolIndex)),
+                    (int)DocumentView.LayoutMode));
             }
             catch (Exception ex) { DiagnosticLog.Failure("pdf-view-preferences", ex); }
             ReleaseDocument();

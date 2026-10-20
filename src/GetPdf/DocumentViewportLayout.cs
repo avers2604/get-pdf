@@ -2,6 +2,8 @@ using System.Windows;
 
 namespace GetPdf;
 
+internal enum PdfPageLayoutMode { Continuous, Single, Spread }
+
 internal static class DocumentViewportLayout
 {
     public static Rect[] Measure(IReadOnlyList<Size> sizes, double zoom, double gap)
@@ -19,6 +21,33 @@ internal static class DocumentViewportLayout
             return rect;
         }).ToArray();
     }
+    public static Rect[] MeasureSpread(IReadOnlyList<Size> sizes, double zoom, double gap)
+    {
+        if (!double.IsFinite(zoom) || zoom <= 0 || !double.IsFinite(gap) || gap < 0)
+            throw new ArgumentOutOfRangeException(nameof(zoom));
+        if (sizes.Any(s => s.IsEmpty || s.Width <= 0 || s.Height <= 0 ||
+                           !double.IsFinite(s.Width + s.Height)))
+            throw new ArgumentException("Неверный размер страницы.", nameof(sizes));
+        if (sizes.Count == 0) return [];
+        double columnWidth = sizes.Max(s => s.Width) * zoom;
+        var result = new Rect[sizes.Count];
+        double y = 0;
+        for (int i = 0; i < sizes.Count; i += 2)
+        {
+            int count = Math.Min(2, sizes.Count - i);
+            double rowHeight = Enumerable.Range(i, count).Max(j => sizes[j].Height * zoom);
+            for (int j = 0; j < count; j++)
+            {
+                Size size = sizes[i + j];
+                double w = size.Width * zoom, h = size.Height * zoom;
+                result[i + j] = new Rect(j * (columnWidth + gap) + (columnWidth - w) / 2,
+                    y, w, h);
+            }
+            y += rowHeight + gap;
+        }
+        return result;
+    }
+
     public static int[] VisibleRange(IReadOnlyList<Rect> pages, Rect viewport, int overscan)
     {
         if (pages.Count == 0) return [];

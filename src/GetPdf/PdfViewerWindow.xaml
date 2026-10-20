@@ -51,6 +51,18 @@
                   AutomationProperties.Name="Уменьшить масштаб PDF" Margin="0,0,4,0"/>
           <Button Content="Вся страница" Click="FitPage_Click"/>
           <Button Content="По ширине" Click="FitWidth_Click"/>
+          <ComboBox x:Name="LayoutModeBox" Width="165" Height="32" SelectedIndex="0"
+                    SelectionChanged="LayoutMode_SelectionChanged" Margin="0,0,10,0"
+                    ToolTip="Режим просмотра страниц">
+            <ComboBoxItem Content="Непрерывно"/>
+            <ComboBoxItem Content="Одна страница"/>
+            <ComboBoxItem Content="Две страницы"/>
+          </ComboBox>
+          <Button Content="Полный экран" Click="Fullscreen_Click" Margin="0,0,10,0"
+                  ToolTip="F11 — полноэкранный просмотр"/>
+          <Button x:Name="BookmarkButton" Content="Закладка ☆" Click="Bookmark_Click" Margin="0,0,10,0"
+                  ToolTip="Добавить или снять закладку текущей страницы"/>
+          <Button Content="Закладки ▾" Click="BookmarksMenu_Click" Margin="0,0,10,0"/>
           <Button x:Name="ZoomInButton" IsEnabled="{Binding CanZoom, Mode=OneWay}" Content="+" Click="ZoomIn_Click"
                   AutomationProperties.Name="Увеличить масштаб PDF" Margin="0,0,13,0"/>
           <Button x:Name="RotateLeftButton" IsEnabled="{Binding CanRotate, Mode=OneWay}" Content="↶ 90°" Click="RotateLeft_Click" ToolTip="Повернуть страницу влево" Margin="0,0,5,0" Visibility="Collapsed" />
