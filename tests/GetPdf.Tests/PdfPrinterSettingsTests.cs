@@ -27,6 +27,15 @@ public sealed class PdfPrinterSettingsTests
     }
 
     [TestMethod]
+    public void PrinterMustNotSilentlyChangeRequestedPaperDuplexOrOrientation()
+    {
+        PdfPrinterSettingsStore.RejectDriverOverrides(System.Printing.ConflictStatus.NoConflict);
+        Assert.ThrowsExactly<NotSupportedException>(() =>
+            PdfPrinterSettingsStore.RejectDriverOverrides(
+                System.Printing.ConflictStatus.ConflictResolved));
+    }
+
+    [TestMethod]
     public void InvalidCopyCountOrEnumRejectedBeforePrinting()
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
