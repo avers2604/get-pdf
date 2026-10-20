@@ -22,21 +22,29 @@ public partial class App : Application
             Shutdown(3);
             return;
         }
-        var paths = e.Args.Length == 0 ? new string?[] { null } : e.Args.Select(x => (string?)x).ToArray();
-        var windows = new List<PdfViewerWindow>();
-        foreach (string? path in paths)
+        string[] paths;
+        int activeIndex = 0;
+        if (e.Args.Length > 0)
         {
-            if (path is not null && !PdfOpenRequest.TryParse([path], out _))
+            if (e.Args.Length > 16 || e.Args.Any(path =>
+                !PdfOpenRequest.TryParse([path], out _)))
             {
-                MessageBox.Show("Укажите существующий PDF-файл.", "ГЭТ PDF");
+                MessageBox.Show("Укажите от 1 до 16 существующих PDF-файлов.", "ГЭТ PDF");
                 Shutdown(2);
                 return;
             }
-            windows.Add(new PdfViewerWindow(path));
+            paths = e.Args.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+        else
+        {
+            var session = PdfTabSessionStore.Load();
+            paths = session.Paths.Where(path => PdfOpenRequest.TryParse([path], out _)).ToArray();
+            activeIndex = session.ActiveIndex;
         }
         ShutdownMode = ShutdownMode.OnLastWindowClose;
-        foreach (var window in windows) window.Show();
-        MainWindow = windows[0];
+        var shell = new PdfTabbedWindow(paths, activeIndex);
+        MainWindow = shell;
+        shell.Show();
     }
     protected override void OnExit(ExitEventArgs e)
     {

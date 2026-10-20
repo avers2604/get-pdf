@@ -13,7 +13,7 @@ public partial class PdfViewerWindow
         string question = existing
             ? "На некоторых страницах уже есть штампы. Заменить их нумерацией всех страниц?"
             : "Добавить номера на все страницы? Их можно отменить (Ctrl+Z).";
-        if (MessageBox.Show(this, question, "Нумерация PDF",
+        if (MessageBox.Show(HostWindow, question, "Нумерация PDF",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         ApplyEdit(p =>
         {
@@ -58,22 +58,22 @@ public partial class PdfViewerWindow
         var pages = _plan.Pages.ToArray();
         if (pages.Length > PdfSplitPageNaming.MaxPerOperation)
         {
-            MessageBox.Show(this, $"За один раз можно разделить не более {PdfSplitPageNaming.MaxPerOperation} страниц.",
+            MessageBox.Show(HostWindow, $"За один раз можно разделить не более {PdfSplitPageNaming.MaxPerOperation} страниц.",
                 "Разделение PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (!ConfirmStructuralExport()) return;
         var dialog = NewPdfOutputDialog(Path.GetFileNameWithoutExtension(_originalPath) + "_страница");
         dialog.Title = "Выберите папку и префикс имён для отдельных PDF";
-        if (dialog.ShowDialog(this) != true) return;
+        if (dialog.ShowDialog(HostWindow) != true) return;
         var outputs = PdfSplitPageNaming.Plan(dialog.FileName, pages.Length);
         if (outputs.Any(File.Exists))
         {
-            MessageBox.Show(this, "Один или несколько файлов уже существуют. Укажите другое имя префикса.",
+            MessageBox.Show(HostWindow, "Один или несколько файлов уже существуют. Укажите другое имя префикса.",
                 "Разделение PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (MessageBox.Show(this, $"Создать {pages.Length} отдельных PDF? Исходный файл не меняется.",
+        if (MessageBox.Show(HostWindow, $"Создать {pages.Length} отдельных PDF? Исходный файл не меняется.",
             "Разделение PDF", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
         using var cancel = new CancellationTokenSource();
@@ -108,7 +108,7 @@ public partial class PdfViewerWindow
             }
             StatusText.Text = "Разделение не завершено. Созданные файлы по возможности удалены.";
             if (ex is not OperationCanceledException)
-                MessageBox.Show(this, "Разделить документ не удалось. Проверьте свободное место и права на папку.",
+                MessageBox.Show(HostWindow, "Разделить документ не удалось. Проверьте свободное место и права на папку.",
                     "Разделение PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally { _batchCancel = null; _loading = false; SetControls(); }

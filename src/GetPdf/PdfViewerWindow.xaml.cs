@@ -22,7 +22,7 @@ namespace GetPdf;
 /// A separate PDF workspace: it reads originals for preview, but writes page-object copies
 /// rather than exporting rendered pixels. Editing source text and annotations comes later.
 /// </summary>
-public partial class PdfViewerWindow : Window
+public partial class PdfViewerWindow : UserControl
 {
     private readonly string? _initialPath;
     private PdfLazyPageStore? _pageStore;
@@ -66,10 +66,9 @@ public partial class PdfViewerWindow : Window
     private PdfLruCache<(int SourcePage, int Rotation), BitmapSource>? _thumbnailCache;
     private CancellationTokenSource _thumbnailCancel = new();
     private Task _thumbnailWorker = Task.CompletedTask;
-    private bool _deferredClose;
-    private bool _closeApproved;
     private bool? _pagePaneOverride;
     private bool _editingToolsVisible;
+    private bool _initializedWorkspace;
     private bool _showOutline;
     private IReadOnlyList<PdfOutlineReader.Node> _pdfOutline = Array.Empty<PdfOutlineReader.Node>();
 
@@ -85,6 +84,13 @@ public partial class PdfViewerWindow : Window
     internal static long EstimateBitmapBytes(BitmapSource bitmap) =>
         checked((long)bitmap.PixelWidth * bitmap.PixelHeight *
             Math.Max(1, (bitmap.Format.BitsPerPixel + 7) / 8));
+
+    private Window HostWindow => Window.GetWindow(this) ??
+        Application.Current?.MainWindow ??
+        throw new InvalidOperationException("Окно ГЭТ PDF недоступно.");
+    internal string? CurrentDocumentPath => _originalPath ?? _initialPath;
+    internal bool IsEmpty => _sourcePath is null && !_loading && !_closing;
+    internal bool IsBusy => _loading || _rendering || _batchCancel is not null || _closing;
 
     private bool HasPendingChanges => _nativeDrafts.Count > 0 ||
         (_plan?.HasChanges == true &&
@@ -140,20 +146,21 @@ public partial class PdfViewerWindow : Window
 
     private void Fullscreen_Click(object sender, RoutedEventArgs e)
     {
+        Window host = HostWindow;
         if (!_fullscreen)
         {
-            _previousWindowState = WindowState;
-            _previousWindowStyle = WindowStyle;
-            WindowState = WindowState.Normal;
-            WindowStyle = WindowStyle.None;
-            WindowState = WindowState.Maximized;
+            _previousWindowState = host.WindowState;
+            _previousWindowStyle = host.WindowStyle;
+            host.WindowState = WindowState.Normal;
+            host.WindowStyle = WindowStyle.None;
+            host.WindowState = WindowState.Maximized;
             _fullscreen = true;
         }
         else
         {
-            WindowState = WindowState.Normal;
-            WindowStyle = _previousWindowStyle;
-            WindowState = _previousWindowState;
+            host.WindowState = WindowState.Normal;
+            host.WindowStyle = _previousWindowStyle;
+            host.WindowState = _previousWindowState;
             _fullscreen = false;
         }
     }
@@ -342,15 +349,17 @@ public partial class PdfViewerWindow : Window
 
     private async void Viewer_Loaded(object sender, RoutedEventArgs e)
     {
-        DocumentWindowLayout.Clamp(this);
         ApplyResponsiveLayout();
+        // Switching WPF tabs unloads/loads the same control; never re-import.
+        if (_initializedWorkspace) return;
+        _initializedWorkspace = true;
         if (_initialPath is not null)
             await LoadPdfAsync(_initialPath);
     }
 
     private bool DiscardEditsIfNeeded()
     {
-        return !HasPendingChanges || MessageBox.Show(this,
+        return !HasPendingChanges || MessageBox.Show(HostWindow,
             _nativeDrafts.Count > 0
                 ? "Эскизы PDF-аннотаций будут удалены — они не записываются в PDF. Продолжить?"
                 : "Изменения не сохранены. Закрыть документ без сохранения?",
@@ -369,7 +378,7 @@ public partial class PdfViewerWindow : Window
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-default-app-settings", ex);
-            MessageBox.Show(this, "Откройте Параметры Windows → Приложения → Приложения по умолчанию " +
+            MessageBox.Show(HostWindow, "Откройте Параметры Windows → Приложения → Приложения по умолчанию " +
                 "и выберите GET PDF для файлов .pdf.", "Приложение PDF по умолчанию");
         }
     }
@@ -378,23 +387,15 @@ public partial class PdfViewerWindow : Window
     {
         if (_loading || _rendering || _closing) return;
         var dialog = new OpenFileDialog { Title = "Открыть PDF", Filter = "PDF (*.pdf)|*.pdf", Multiselect = true };
-        if (dialog.ShowDialog(this) == true)
+        if (dialog.ShowDialog(HostWindow) == true)
             await OpenPdfPathsAsync(dialog.FileNames);
     }
 
-    private async Task OpenPdfPathsAsync(IEnumerable<string> paths)
+    private Task OpenPdfPathsAsync(IEnumerable<string> paths)
     {
-        foreach (string path in paths.Take(32))
-        {
-            if (!PdfOpenRequest.TryParse([path], out var validPath) || validPath is null)
-            {
-                MessageBox.Show(this, "Выберите существующий PDF-файл.", "ГЭТ PDF",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                continue;
-            }
-            if (_sourcePath is null && !_loading) await LoadPdfAsync(validPath);
-            else new PdfViewerWindow(validPath).Show();
-        }
+        if (HostWindow is not PdfTabbedWindow shell)
+            throw new InvalidOperationException("Не найдено окно вкладок ГЭТ PDF.");
+        return shell.OpenPathsAsync(paths);
     }
 
     private void Viewer_DragOver(object sender, DragEventArgs e)
@@ -437,7 +438,7 @@ public partial class PdfViewerWindow : Window
         menu.IsOpen = true;
     }
 
-    private async Task LoadPdfAsync(string path)
+    internal async Task LoadPdfAsync(string path)
     {
         if (_loading) return;
         _loading = true;
@@ -549,7 +550,7 @@ public partial class PdfViewerWindow : Window
             PdfOutlineTree.ItemsSource = null;
             DocumentTitle.Text = "Откройте документ";
             StatusText.Text = "Не удалось открыть PDF.";
-            if (!_closing) MessageBox.Show(this, ex.Message, "Открытие PDF", MessageBoxButton.OK, MessageBoxImage.Error);
+            if (!_closing) MessageBox.Show(HostWindow, ex.Message, "Открытие PDF", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -586,7 +587,7 @@ public partial class PdfViewerWindow : Window
             if (!_draftWarningShown)
             {
                 _draftWarningShown = true;
-                MessageBox.Show(this, "Не удалось обновить аварийный черновик PDF. " +
+                MessageBox.Show(HostWindow, "Не удалось обновить аварийный черновик PDF. " +
                     "Сохраните изменения в новый PDF перед закрытием программы.",
                     "Черновик PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
@@ -602,12 +603,12 @@ public partial class PdfViewerWindow : Window
         if (candidate is null) return null;
         if (!PdfDraftStore.MatchesSource(candidate.State, _draftSourceHash, _pageStore.PageCount))
         {
-            MessageBox.Show(this, "Найден черновик, но исходный PDF изменился. Правки не применены. " +
+            MessageBox.Show(HostWindow, "Найден черновик, но исходный PDF изменился. Правки не применены. " +
                 "Старый черновик сохранён для отдельного восстановления.", "Восстановление PDF",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return "PDF открыт без старых правок: исходник отличается от черновика.";
         }
-        if (MessageBox.Show(this, "Найдены несохранённые правки этого PDF после прерванного сеанса. " +
+        if (MessageBox.Show(HostWindow, "Найдены несохранённые правки этого PDF после прерванного сеанса. " +
             "Восстановить страницы, текст, повороты, штампы, рамки и заметки?",
             "Восстановление PDF", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return "PDF открыт без восстановления. Старый черновик сохранён.";
@@ -1027,7 +1028,7 @@ public partial class PdfViewerWindow : Window
     private void NativeDraftClear_Click(object sender, RoutedEventArgs e)
     {
         if (_nativeDrafts.Count > 0 &&
-            MessageBox.Show(this,
+            MessageBox.Show(HostWindow,
                 "Удалить все эскизы интерактивных аннотаций? В PDF они ещё не записаны.",
                 "Очистить эскизы", MessageBoxButton.YesNo,
                 MessageBoxImage.Question) != MessageBoxResult.Yes) return;
@@ -1359,7 +1360,7 @@ public partial class PdfViewerWindow : Window
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            MessageBox.Show(this, ex.Message, "Редактирование PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(HostWindow, ex.Message, "Редактирование PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -1575,14 +1576,14 @@ public partial class PdfViewerWindow : Window
                     Environment.NewLine + fields.ToRussianSummary();
             });
             StatusText.Text = "Проверка состава PDF завершена. Файл не изменён.";
-            MessageBox.Show(this, report, "Состав PDF — только чтение",
+            MessageBox.Show(HostWindow, report, "Состав PDF — только чтение",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-structure-inspect", ex);
             StatusText.Text = "Не удалось достоверно прочитать структуру PDF.";
-            MessageBox.Show(this,
+            MessageBox.Show(HostWindow,
                 "Структура PDF не распознана или слишком сложна для ограниченной проверки. " +
                 "Это не подтверждает отсутствие подписей или аннотаций. Оригинал не изменён.",
                 "Состав PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -1640,7 +1641,7 @@ public partial class PdfViewerWindow : Window
             RefreshSearchResults();
             DiagnosticLog.Failure("pdf-text-search", ex);
             StatusText.Text = "Поиск недоступен для этого PDF.";
-            MessageBox.Show(this, ex.Message, "Поиск в PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(HostWindow, ex.Message, "Поиск в PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally { _loading = false; SetControls(); }
     }
@@ -1714,12 +1715,12 @@ public partial class PdfViewerWindow : Window
     {
         var inputs = new[] { _originalPath!, _sourcePath! }.Concat(additional ?? Array.Empty<string>());
         if (PdfSaveSafety.TryValidateNewCopy(destination, inputs, out var message)) return true;
-        MessageBox.Show(this, message, "Сохранение PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
+        MessageBox.Show(HostWindow, message, "Сохранение PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
         return false;
     }
 
     private bool ConfirmStructuralExport() =>
-        MessageBox.Show(this,
+        MessageBox.Show(HostWindow,
             "Действующие цифровые подписи, формы, закладки и интерактивные элементы могут " +
             "не сохраниться. Не редактируйте подписанные документы. Продолжить создание отдельной копии?",
             "Проверка PDF", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
@@ -1728,7 +1729,7 @@ public partial class PdfViewerWindow : Window
     {
         if (_sourcePath is null || _plan is null || _loading) return;
         var dialog = NewPdfOutputDialog(Path.GetFileNameWithoutExtension(_originalPath) + "_страница_" + (_pageIndex + 1));
-        if (dialog.ShowDialog(this) != true || !ValidateOutput(dialog.FileName) || !ConfirmStructuralExport()) return;
+        if (dialog.ShowDialog(HostWindow) != true || !ValidateOutput(dialog.FileName) || !ConfirmStructuralExport()) return;
         var page = _plan.Pages[_pageIndex];
         _loading = true;
         SetControls();
@@ -1738,7 +1739,7 @@ public partial class PdfViewerWindow : Window
             StatusText.Text = await PostExportStatusAsync(dialog.FileName, "Страница извлечена, оригинал не изменён.");
         }
         catch (OperationCanceledException) { StatusText.Text = "Операция PDF отменена."; }
-        catch (Exception ex) { DiagnosticLog.Failure("pdf-extract", ex); MessageBox.Show(this, ex.Message, "Извлечение PDF"); }
+        catch (Exception ex) { DiagnosticLog.Failure("pdf-extract", ex); MessageBox.Show(HostWindow, ex.Message, "Извлечение PDF"); }
         finally { _loading = false; SetControls(); }
     }
 
@@ -1752,11 +1753,11 @@ public partial class PdfViewerWindow : Window
         }
         catch (FormatException ex)
         {
-            MessageBox.Show(this, ex.Message, "Диапазон PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(HostWindow, ex.Message, "Диапазон PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         var dialog = NewPdfOutputDialog(Path.GetFileNameWithoutExtension(_originalPath) + "_выдержка");
-        if (dialog.ShowDialog(this) != true || !ValidateOutput(dialog.FileName) || !ConfirmStructuralExport()) return;
+        if (dialog.ShowDialog(HostWindow) != true || !ValidateOutput(dialog.FileName) || !ConfirmStructuralExport()) return;
         string sourcePath = _sourcePath;
         _loading = true;
         SetControls();
@@ -1771,7 +1772,7 @@ public partial class PdfViewerWindow : Window
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-extract-range", ex);
-            MessageBox.Show(this, ex.Message, "Извлечение диапазона", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(HostWindow, ex.Message, "Извлечение диапазона", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { _loading = false; SetControls(); }
     }
@@ -1784,9 +1785,9 @@ public partial class PdfViewerWindow : Window
             Title = "Выберите PDF для добавления в конец",
             Filter = "PDF (*.pdf)|*.pdf", Multiselect = true
         };
-        if (sources.ShowDialog(this) != true || sources.FileNames.Length == 0) return;
+        if (sources.ShowDialog(HostWindow) != true || sources.FileNames.Length == 0) return;
         var dialog = NewPdfOutputDialog(Path.GetFileNameWithoutExtension(_originalPath) + "_объединённый");
-        if (dialog.ShowDialog(this) != true || !ValidateOutput(dialog.FileName) || !ConfirmStructuralExport()) return;
+        if (dialog.ShowDialog(HostWindow) != true || !ValidateOutput(dialog.FileName) || !ConfirmStructuralExport()) return;
         var pages = _plan.Pages.ToArray();
         var originals = sources.FileNames.ToArray();
         _loading = true;
@@ -1798,7 +1799,7 @@ public partial class PdfViewerWindow : Window
             StatusText.Text = await PostExportStatusAsync(dialog.FileName, "PDF объединены, исходные файлы не изменены.");
         }
         catch (OperationCanceledException) { StatusText.Text = "Операция PDF отменена."; }
-        catch (Exception ex) { DiagnosticLog.Failure("pdf-merge", ex); MessageBox.Show(this, ex.Message, "Объединение PDF"); }
+        catch (Exception ex) { DiagnosticLog.Failure("pdf-merge", ex); MessageBox.Show(HostWindow, ex.Message, "Объединение PDF"); }
         finally { _loading = false; SetControls(); }
     }
 
@@ -1972,7 +1973,7 @@ public partial class PdfViewerWindow : Window
             _loading || _rendering || !_canModify) return;
         if (_plan.HasChanges)
         {
-            MessageBox.Show(this,
+            MessageBox.Show(HostWindow,
                 "OCR отдельного PDF не применяет несохранённые повороты, заметки и штампы. " +
                 "Сначала сохраните новую копию и откройте её для OCR.",
                 "OCR", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1983,19 +1984,19 @@ public partial class PdfViewerWindow : Window
         if (!File.Exists(Path.Combine(tessdata, "rus.traineddata")) ||
             !File.Exists(Path.Combine(tessdata, "eng.traineddata")))
         {
-            MessageBox.Show(this, "Для OCR ИТ-служба должна установить одобренные offline модели " +
+            MessageBox.Show(HostWindow, "Для OCR ИТ-служба должна установить одобренные offline модели " +
                 "rus.traineddata и eng.traineddata в папку tessdata.", "OCR",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         var dialog = NewPdfOutputDialog(Path.GetFileNameWithoutExtension(_originalPath) + "_OCR");
-        if (dialog.ShowDialog(this) != true || !ValidateOutput(dialog.FileName) || !ConfirmStructuralExport()) return;
+        if (dialog.ShowDialog(HostWindow) != true || !ValidateOutput(dialog.FileName) || !ConfirmStructuralExport()) return;
         var sourcePath = Path.GetFullPath(_sourcePath);
         var destination = Path.GetFullPath(dialog.FileName);
         if (string.Equals(destination, sourcePath, StringComparison.OrdinalIgnoreCase))
         {
-            MessageBox.Show(this, "OCR должен сохраняться в отдельный PDF. Оригинал не перезаписывается.");
+            MessageBox.Show(HostWindow, "OCR должен сохраняться в отдельный PDF. Оригинал не перезаписывается.");
             return;
         }
 
@@ -2093,7 +2094,7 @@ public partial class PdfViewerWindow : Window
         {
             _jobProgress.Fail();
             StatusText.Text = "Недостаточно места на диске. OCR не запущен.";
-            MessageBox.Show(this, ex.Message, "Недостаточно места для OCR",
+            MessageBox.Show(HostWindow, ex.Message, "Недостаточно места для OCR",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch (Exception ex)
@@ -2101,7 +2102,7 @@ public partial class PdfViewerWindow : Window
             _jobProgress.Fail();
             DiagnosticLog.Failure("pdf-ocr", ex);
             StatusText.Text = "Ошибка OCR PDF.";
-            MessageBox.Show(this, ex.Message, "OCR", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(HostWindow, ex.Message, "OCR", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -2124,7 +2125,7 @@ public partial class PdfViewerWindow : Window
         try { pages = PdfPageRange.Parse(PrintPageRangeBox.Text, _plan.Pages); }
         catch (FormatException ex)
         {
-            MessageBox.Show(this, ex.Message, "Печать диапазона", MessageBoxButton.OK,
+            MessageBox.Show(HostWindow, ex.Message, "Печать диапазона", MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
         }
@@ -2140,7 +2141,7 @@ public partial class PdfViewerWindow : Window
         try { selection = PdfBatchSelection.Build(pages); }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Печать PDF", MessageBoxButton.OK,
+            MessageBox.Show(HostWindow, ex.Message, "Печать PDF", MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
         }
@@ -2168,7 +2169,7 @@ public partial class PdfViewerWindow : Window
                 var paginator = new PdfPagePrintPaginator(spool.Pages, selection.PreparedPages,
                     new Size(printer.PrintableAreaWidth, printer.PrintableAreaHeight));
                 StatusText.Text = "Предпросмотр страниц печати…";
-                var preview = new PdfPrintPreviewWindow(paginator) { Owner = this };
+                var preview = new PdfPrintPreviewWindow(paginator) { Owner = HostWindow };
                 if (preview.ShowDialog() != true) return false;
                 token.ThrowIfCancellationRequested();
                 StatusText.Text = "Передача документа службе печати Windows…";
@@ -2195,7 +2196,7 @@ public partial class PdfViewerWindow : Window
         {
             _jobProgress.Fail();
             DiagnosticLog.Failure("pdf-print", ex);
-            MessageBox.Show(this, ex.Message, "Печать PDF", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(HostWindow, ex.Message, "Печать PDF", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -2231,7 +2232,7 @@ public partial class PdfViewerWindow : Window
         if (_plan is null || _sourcePath is null || _loading || _rendering) return;
         if (_nativeDrafts.Count > 0)
         {
-            MessageBox.Show(this,
+            MessageBox.Show(HostWindow,
                 "Эскизы интерактивных аннотаций пока нельзя сохранить в PDF. " +
                 "Сначала очистите их в меню «Аннотации · эскиз». " +
                 "Исходный документ не изменён.",
@@ -2253,7 +2254,7 @@ public partial class PdfViewerWindow : Window
                        (hasEdits ? "_изменённый.pdf" : "_копия.pdf"),
             OverwritePrompt = true
         };
-        if (dialog.ShowDialog(this) != true || !ValidateOutput(dialog.FileName)) return;
+        if (dialog.ShowDialog(HostWindow) != true || !ValidateOutput(dialog.FileName)) return;
         if (hasEdits && !ConfirmStructuralExport()) return;
 
         string outputPath = dialog.FileName;
@@ -2285,7 +2286,7 @@ public partial class PdfViewerWindow : Window
         {
             DiagnosticLog.Failure("pdf-viewer-save", ex);
             StatusText.Text = "Сохранить PDF не удалось.";
-            MessageBox.Show(this, ex.Message, "Сохранение PDF", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(HostWindow, ex.Message, "Сохранение PDF", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { _loading = false; SetControls(); }
     }
@@ -2294,33 +2295,36 @@ public partial class PdfViewerWindow : Window
         PdfByteCopy.Copy(_originalSourceCopyPath ?? throw new InvalidOperationException("Исходная копия PDF недоступна."), outputPath, token);
 
     private bool _resourcesReleased;
-    private async void Viewer_Closing(object? sender, CancelEventArgs e)
+
+    // Phase 1: validate every tab before releasing any workspace.
+    internal bool CanCloseDocument()
+    {
+        if (_resourcesReleased) return true;
+        if (IsBusy)
+        {
+            MessageBox.Show(HostWindow, "Завершите обработку PDF перед закрытием вкладки.",
+                "ГЭТ PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+        return DiscardEditsIfNeeded();
+    }
+
+    // Phase 2: release exactly this document's renderer, scratch and caches.
+    internal async Task ReleaseForCloseAsync()
     {
         if (_resourcesReleased) return;
-        e.Cancel = true;
-        if (_deferredClose) return;
-        if (_loading)
-        {
-            MessageBox.Show(this, "Дождитесь окончания обработки PDF."); return;
-        }
-        if (!_closeApproved && !DiscardEditsIfNeeded()) return;
-        _closeApproved = true; _deferredClose = true; _closing = true;
+        _closing = true;
+        await StopThumbnailWorkerAsync();
+        await DocumentView.StopAsync();
+        await Task.WhenAll(_textReadTasks.ToArray());
         try
         {
-            await StopThumbnailWorkerAsync();
-            await DocumentView.StopAsync();
-            await Task.WhenAll(_textReadTasks.ToArray());
-            try
-            {
-                PdfWorkspacePreferencesStore.Save(new PdfWorkspacePreferences(
-                    1, PdfWorkspaceToolGroups.FromIndex(Math.Min(3, ActiveToolIndex)),
-                    (int)DocumentView.LayoutMode));
-            }
-            catch (Exception ex) { DiagnosticLog.Failure("pdf-view-preferences", ex); }
-            ReleaseDocument();
-            _resourcesReleased = true;
-            _ = Dispatcher.BeginInvoke(new Action(Close));
+            PdfWorkspacePreferencesStore.Save(new PdfWorkspacePreferences(
+                1, PdfWorkspaceToolGroups.FromIndex(Math.Min(3, ActiveToolIndex)),
+                (int)DocumentView.LayoutMode));
         }
-        finally { _deferredClose = false; }
+        catch (Exception ex) { DiagnosticLog.Failure("pdf-view-preferences", ex); }
+        ReleaseDocument();
+        _resourcesReleased = true;
     }
 }

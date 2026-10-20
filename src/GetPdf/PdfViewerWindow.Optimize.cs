@@ -10,7 +10,7 @@ public partial class PdfViewerWindow
         if (_loading || _closing || !_canModify || _sourcePath is null || _plan is null) return;
         if (_plan.HasChanges)
         {
-            MessageBox.Show(this,
+            MessageBox.Show(HostWindow,
                 "Сначала сохраните изменения в отдельный файл и откройте его. " +
                 "Оптимизация не должна терять несохранённые операции.",
                 "Оптимизация PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -18,7 +18,7 @@ public partial class PdfViewerWindow
         }
         if (!ConfirmStructuralExport()) return;
         var dialog = NewPdfOutputDialog(Path.GetFileNameWithoutExtension(_originalPath!) + "_оптимизированный");
-        if (dialog.ShowDialog(this) != true || !ValidateOutput(dialog.FileName)) return;
+        if (dialog.ShowDialog(HostWindow) != true || !ValidateOutput(dialog.FileName)) return;
         string source = _sourcePath;
         string target = dialog.FileName;
         int pages = _plan.Pages.Count;
@@ -38,7 +38,7 @@ public partial class PdfViewerWindow
         {
             DiagnosticLog.Failure("pdf-optimize", ex);
             StatusText.Text = "Оптимизация не завершена. Исходный PDF не изменён.";
-            MessageBox.Show(this, ex.Message, "Оптимизация PDF",
+            MessageBox.Show(HostWindow, ex.Message, "Оптимизация PDF",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally { _batchCancel = null; _loading = false; SetControls(); }

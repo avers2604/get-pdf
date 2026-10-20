@@ -1,12 +1,10 @@
-<Window x:Class="GetPdf.PdfViewerWindow"
+<UserControl x:Class="GetPdf.PdfViewerWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:GetPdf.Controls"
-        Title="ГЭТ PDF — просмотр документов" Width="1440" Height="950"
-        MinWidth="950" MinHeight="650" Background="{StaticResource CanvasBrush}"
-        WindowStartupLocation="CenterScreen" Loaded="Viewer_Loaded"
+        Background="{StaticResource CanvasBrush}" Loaded="Viewer_Loaded"
         AllowDrop="True" DragOver="Viewer_DragOver" Drop="Viewer_Drop"
-        Closing="Viewer_Closing" PreviewKeyDown="Viewer_PreviewKeyDown"
+        PreviewKeyDown="Viewer_PreviewKeyDown"
         SizeChanged="Viewer_SizeChanged">
   <Grid>
     <Grid.RowDefinitions>
@@ -336,4 +334,4 @@
       </Grid>
     </Border>
   </Grid>
-</Window>
+</UserControl>
