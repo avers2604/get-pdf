@@ -2016,26 +2016,38 @@ public partial class PdfViewerWindow : Window
         StatusText.Text = $"Очередь печати PDF: {pages.Count} страниц…";
         try
         {
-            await PdfJobCoordinator.Shared.RunAsync(async token =>
+            bool submitted = await PdfJobCoordinator.Shared.RunAsync(async token =>
             {
                 _jobProgress.Start();
                 if (_sessionFolder is null)
                     throw new InvalidOperationException("Не подготовлена временная папка печати.");
 
-                // Spool lifetime encloses PrintDocument, including error paths.
-                // At most one decoded source image is staged at a time.
+                // Keep the staged files owned until preview is dismissed and
+                // the Windows spooler has consumed its synchronous paginator.
                 using var spool = PdfPrintSpool.Create(_sessionFolder);
                 await StagePrintPagesAsync(selection, spool, token);
                 token.ThrowIfCancellationRequested();
 
                 var paginator = new PdfPagePrintPaginator(spool.Pages, selection.PreparedPages,
                     new Size(printer.PrintableAreaWidth, printer.PrintableAreaHeight));
+                StatusText.Text = "Предпросмотр страниц печати…";
+                var preview = new PdfPrintPreviewWindow(paginator) { Owner = this };
+                if (preview.ShowDialog() != true) return false;
+                token.ThrowIfCancellationRequested();
                 StatusText.Text = "Передача документа службе печати Windows…";
-                printer.PrintDocument(paginator, "GET PDF · PDF");
+                printer.PrintDocument(paginator, "ГЭТ PDF");
                 return true;
             }, cancellation.Token);
-            _jobProgress.Complete();
-            StatusText.Text = "Задание передано службе печати Windows.";
+            if (submitted)
+            {
+                _jobProgress.Complete();
+                StatusText.Text = "Задание передано службе печати Windows.";
+            }
+            else
+            {
+                _jobProgress.Cancelled();
+                StatusText.Text = "Печать отменена в окне предварительного просмотра.";
+            }
         }
         catch (OperationCanceledException)
         {
