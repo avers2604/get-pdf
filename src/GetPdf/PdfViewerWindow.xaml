@@ -302,6 +302,10 @@
                   ToolTip="Создать отдельную оптимизированную копию без обработки изображений с потерями"/>
           <Button Content="Сравнить с другим PDF…" Click="ComparePdf_Click" Margin="0,0,5,10"
                   ToolTip="Сравнение по извлечённому тексту; изображения и графика не анализируются"/>
+          <Button x:Name="VerifyPdfSignaturesButton" Content="Проверить электронные подписи…"
+                  IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
+                  Click="VerifyPdfSignatures_Click" Margin="0,0,5,10"
+                  ToolTip="Автономная криптографическая проверка и локальная цепочка Windows, без внешних запросов"/>
           <Button x:Name="FillTextFormButton" Content="Заполнить текстовую форму…"
                   IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
                   Click="FillTextForm_Click" Margin="0,0,5,10"

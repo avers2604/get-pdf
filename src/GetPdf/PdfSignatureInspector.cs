@@ -46,7 +46,7 @@ internal static class PdfSignatureInspector
                 // PDF signature digest/CMS verification. In older PDF revisions
                 // "covers whole document" can be false even with a valid digest.
                 cryptographic = inspector.VerifySignature(name);
-                covered = inspector.IsCoversWholeDocument(name);
+                covered = inspector.CoversWholeDocument(name);
 
                 if (inspector.TryExtractCertificate(name,
                         out X509Certificate2 certificate) && certificate is not null)
