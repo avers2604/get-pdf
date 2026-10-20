@@ -34,8 +34,10 @@ internal static class PdfSignatureInspector
         !coversWholeDocument ? PdfSignatureTrust.RevisionOnly :
         PdfSignatureTrust.LocallyTrusted;
 
-    internal static IReadOnlyList<PdfSignatureCheck> VerifyOffline(string source)
+    internal static IReadOnlyList<PdfSignatureCheck> VerifyOffline(string source,
+        CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
         string path = Path.GetFullPath(source);
         long size = new FileInfo(path).Length;
@@ -43,6 +45,7 @@ internal static class PdfSignatureInspector
             throw new InvalidDataException("PDF превышает лимит автономной проверки подписи.");
         using var inspector = new PdfFileSignature();
         inspector.BindPdf(path);
+        cancellation.ThrowIfCancellationRequested();
         var names = inspector.GetSignatureNames();
         // A partially parsed signature set is unsafe even if one of several
         // signatures passed cryptographic verification.
@@ -54,6 +57,7 @@ internal static class PdfSignatureInspector
         int number = 0;
         foreach (var name in names)
         {
+            cancellation.ThrowIfCancellationRequested();
             number++;
             bool cryptographic = false, trusted = false, covered = false;
             string warning = string.Empty;
@@ -62,6 +66,7 @@ internal static class PdfSignatureInspector
                 // PDF signature digest/CMS verification. In older PDF revisions
                 // "covers whole document" can be false even with a valid digest.
                 cryptographic = inspector.VerifySignature(name);
+                cancellation.ThrowIfCancellationRequested();
                 covered = inspector.CoversWholeDocument(name);
 
                 if (inspector.TryExtractCertificate(name,
@@ -79,6 +84,7 @@ internal static class PdfSignatureInspector
                     }
                 }
                 else warning = "Не удалось получить сертификат подписанта.";
+                cancellation.ThrowIfCancellationRequested();
             }
             catch (Exception ex) when (ex is CryptographicException or
                                        InvalidDataException or NotSupportedException or
