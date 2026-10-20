@@ -41,6 +41,14 @@ internal static class PdfGetSystemStatusWriter
     internal static void Write(PdfGetSystemStatusSnapshot status) =>
         WriteTo(DefaultPath, status);
 
+    internal static void Clear() => ClearFrom(DefaultPath);
+
+    internal static void ClearFrom(string path)
+    {
+        string target = Path.GetFullPath(path);
+        if (File.Exists(target)) File.Delete(target);
+    }
+
     internal static void WriteTo(string destination, PdfGetSystemStatusSnapshot status)
     {
         ArgumentNullException.ThrowIfNull(status);

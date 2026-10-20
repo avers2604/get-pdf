@@ -64,6 +64,28 @@ public sealed class PdfGetSystemStatusTests
     }
 
     [TestMethod]
+    public void DisablingExportRemovesStaleLocalSnapshotWithoutDeletingOtherSettings()
+    {
+        string folder = Path.Combine(Path.GetTempPath(),
+            "getpdf-status-clear-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string status = Path.Combine(folder, "getpdf-status.v1.json");
+            string other = Path.Combine(folder, "user-policy.json");
+            File.WriteAllText(other, "{}");
+            PdfGetSystemStatusWriter.WriteTo(status,
+                PdfGetSystemStatusWriter.Create(DateTimeOffset.UtcNow, 1, 2, true));
+            Assert.IsTrue(File.Exists(status));
+            PdfGetSystemStatusWriter.ClearFrom(status);
+            Assert.IsFalse(File.Exists(status));
+            Assert.IsTrue(File.Exists(other));
+            PdfGetSystemStatusWriter.ClearFrom(status);
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    [TestMethod]
     public void RejectsNegativeAndUnreasonablyLargeCounters()
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>

@@ -22,16 +22,14 @@ public partial class App : Application
             Shutdown(3);
             return;
         }
-        // Disabled corporate history options purge old user-local path metadata.
-        try
-        {
-            if (!WorkstationPolicy.Current.RememberRecentDocuments)
-                PdfRecentDocuments.Clear();
-            if (!WorkstationPolicy.Current.RestoreTabs)
-                PdfTabSessionStore.Clear();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { DiagnosticLog.Failure("pdf-privacy-cleanup", ex); }
+        // Independent privacy cleanup: a locked recent-file index must not
+        // prevent tab/session or GET-system status cleanup under IT policy.
+        if (!WorkstationPolicy.Current.RememberRecentDocuments)
+            PrivacyCleanup("pdf-recent-cleanup", PdfRecentDocuments.Clear);
+        if (!WorkstationPolicy.Current.RestoreTabs)
+            PrivacyCleanup("pdf-tabs-cleanup", PdfTabSessionStore.Clear);
+        if (!WorkstationPolicy.Current.ExportGetSystemStatus)
+            PrivacyCleanup("pdf-integration-cleanup", PdfGetSystemStatusWriter.Clear);
 
         string[] paths;
         int activeIndex = 0;
@@ -58,6 +56,13 @@ public partial class App : Application
         MainWindow = shell;
         shell.Show();
     }
+    private static void PrivacyCleanup(string operation, Action cleanup)
+    {
+        try { cleanup(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { DiagnosticLog.Failure(operation, ex); }
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         DiagnosticLog.Close();
