@@ -31,6 +31,10 @@ public sealed class PdfSignatureInspectorTests
             PdfSignatureInspector.EnsureRecognized(0, 1));
         Assert.ThrowsExactly<InvalidDataException>(() =>
             PdfSignatureInspector.EnsureRecognized(0, 100));
+        PdfSignatureInspector.EnsureRecognized(2, 2);
+        PdfSignatureInspector.EnsureRecognized(2, 0); // direct/unindexed dictionary
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            PdfSignatureInspector.EnsureRecognized(1, 2));
     }
 
     [TestMethod]

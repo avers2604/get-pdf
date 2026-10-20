@@ -19,9 +19,12 @@ internal static class PdfSignatureInspector
     {
         if (parsedCount < 0 || byteRangeMarkers < 0)
             throw new ArgumentOutOfRangeException(nameof(parsedCount));
-        if (parsedCount == 0 && byteRangeMarkers > 0)
+        // Reconcile ALL detectable /ByteRange dictionaries against signatures
+        // recognized by the CMS reader. A PDF containing two markers with
+        // only one recognized signature must not be reported as fully checked.
+        if (byteRangeMarkers > parsedCount)
             throw new InvalidDataException(
-                "В PDF есть объекты цифровой подписи, которые не удалось проверить.");
+                "Часть цифровых подписей PDF не распознана и не может быть проверена.");
     }
 
     internal static PdfSignatureTrust Classify(bool cryptographic,
@@ -41,11 +44,10 @@ internal static class PdfSignatureInspector
         using var inspector = new PdfFileSignature();
         inspector.BindPdf(path);
         var names = inspector.GetSignatureNames();
-        // Fail closed if an unrecognized /ByteRange signature dictionary is
-        // present: "zero recognized signatures" is NOT "unsigned PDF".
-        if (names.Count == 0)
-            EnsureRecognized(names.Count,
-                PdfInteractiveInspector.Inspect(path).SignatureByteRanges);
+        // A partially parsed signature set is unsafe even if one of several
+        // signatures passed cryptographic verification.
+        EnsureRecognized(names.Count,
+            PdfInteractiveInspector.Inspect(path).SignatureByteRanges);
         if (names.Count > MaxSignatures)
             throw new InvalidDataException("Слишком много подписей в PDF.");
         var result = new List<PdfSignatureCheck>();
