@@ -2159,10 +2159,12 @@ public partial class PdfViewerWindow : UserControl
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             { DiagnosticLog.Failure("pdf-print-settings", ex); }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or
-                                   NotSupportedException or ArgumentOutOfRangeException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            MessageBox.Show(HostWindow, ex.Message,
+            DiagnosticLog.Failure("pdf-printer-options", ex);
+            MessageBox.Show(HostWindow,
+                "Драйвер отклонил выбранные параметры. Проверьте устройство и его настройки. " +
+                ex.Message,
                 "Неподдерживаемые параметры принтера",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;

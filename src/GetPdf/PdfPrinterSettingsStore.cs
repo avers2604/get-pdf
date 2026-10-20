@@ -114,6 +114,9 @@ internal static class PdfPrinterSettingsStore
                 throw new NotSupportedException("Выбранный дуплекс не поддерживается драйвером принтера.");
             ticket.Duplexing = selected;
         }
+        if (capabilities.MaxCopyCount is int max && settings.Copies > max)
+            throw new NotSupportedException(
+                $"Принтер допускает не более {max} копий на задание.");
         ticket.CopyCount = settings.Copies;
         dialog.PrintTicket = ticket;
     }

@@ -98,6 +98,7 @@ public partial class PdfViewerWindow
             point.X / PdfMarkupCanvas.ActualWidth, point.Y / PdfMarkupCanvas.ActualHeight);
         if (index < 0) { _selectionAnchor = _selectionEnd = -1; RenderTextSelection(); return; }
         _selectionAnchor = _selectionEnd = index;
+        PdfPreviewScroll.Focus(); // Ctrl+C stays in this reader workspace.
         _textSelectionDragging = true;
         PdfMarkupCanvas.CaptureMouse();
         RenderTextSelection();
