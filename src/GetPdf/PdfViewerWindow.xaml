@@ -105,7 +105,12 @@
       <Grid.ColumnDefinitions><ColumnDefinition x:Name="PagePaneColumn" Width="205"/><ColumnDefinition Width="*"/><ColumnDefinition x:Name="ToolPaneColumn" Width="280"/></Grid.ColumnDefinitions>
       <Border x:Name="PagePaneBorder" Background="White" Style="{StaticResource CardBorder}" Margin="0,0,12,0">
         <DockPanel>
-          <TextBlock Text="Страницы" Style="{StaticResource SectionHeading}" DockPanel.Dock="Top" Margin="12,12,12,9"/>
+          <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="8,8,8,7">
+            <Button x:Name="ShowPagesButton" Content="Страницы" Click="ShowPagePane_Click"
+                    Margin="0,0,5,0" AutomationProperties.Name="Показать миниатюры PDF"/>
+            <Button x:Name="ShowOutlineButton" Content="Оглавление" Click="ShowOutlinePane_Click"
+                    AutomationProperties.Name="Показать оглавление PDF"/>
+          </StackPanel>
           <StackPanel x:Name="SearchResultsPanel" DockPanel.Dock="Bottom" Visibility="Collapsed"
                       Margin="8,6,8,9">
             <TextBlock x:Name="SearchResultsHeader" Text="Результаты поиска"
@@ -128,6 +133,17 @@
               </ListBox.ItemTemplate>
             </ListBox>
           </StackPanel>
+          <TreeView x:Name="PdfOutlineTree" Visibility="Collapsed" Margin="7"
+                    IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
+                    SelectedItemChanged="PdfOutline_SelectedItemChanged"
+                    AutomationProperties.Name="Безопасная навигация по оглавлению PDF">
+            <TreeView.ItemTemplate>
+              <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Title}" Foreground="{StaticResource Navy}"/>
+              </HierarchicalDataTemplate>
+            </TreeView.ItemTemplate>
+          </TreeView>
           <ListBox x:Name="PageList" IsEnabled="{Binding CanSelectPage, Mode=OneWay}" Margin="7" BorderThickness="0" SelectionChanged="PageList_SelectionChanged"
                    VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                    VirtualizingPanel.ScrollUnit="Item"

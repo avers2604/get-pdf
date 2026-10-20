@@ -70,6 +70,8 @@ public partial class PdfViewerWindow : Window
     private bool _closeApproved;
     private bool? _pagePaneOverride;
     private bool _editingToolsVisible;
+    private bool _showOutline;
+    private IReadOnlyList<PdfOutlineReader.Node> _pdfOutline = Array.Empty<PdfOutlineReader.Node>();
 
     private string? CurrentPlanFingerprint() =>
         _plan is null ? null : string.Join(";", _plan.Pages.Select(p =>
@@ -224,7 +226,8 @@ public partial class PdfViewerWindow : Window
         PagePaneToggleButton.Content = show ? "Скрыть страницы"
             : _searchHits.Count > 0 ? $"Результаты ({_searchHits.Count})" : "Страницы";
         SearchResultsList.Height = PdfWorkspaceLayout.ResultsHeight(ActualHeight);
-        if (!show && (PageList.IsKeyboardFocusWithin || SearchResultsList.IsKeyboardFocusWithin))
+        if (!show && (PageList.IsKeyboardFocusWithin || PdfOutlineTree.IsKeyboardFocusWithin ||
+                      SearchResultsList.IsKeyboardFocusWithin))
             PdfPreviewScroll.Focus();
         if (!show && wasVisible)
         {
@@ -259,6 +262,49 @@ public partial class PdfViewerWindow : Window
         EnsureThumbnailWorker();
     }
 
+    private void ShowPagePane_Click(object sender, RoutedEventArgs e)
+    {
+        _showOutline = false;
+        _pagePaneOverride = true;
+        UpdateOutlinePane();
+    }
+
+    private void ShowOutlinePane_Click(object sender, RoutedEventArgs e)
+    {
+        _showOutline = true;
+        _pagePaneOverride = true;
+        UpdateOutlinePane();
+    }
+
+    private void UpdateOutlinePane()
+    {
+        if (PdfOutlineTree is null || PageList is null || SearchResultsPanel is null) return;
+        PdfOutlineTree.Visibility = _showOutline ? Visibility.Visible : Visibility.Collapsed;
+        PageList.Visibility = _showOutline ? Visibility.Collapsed : Visibility.Visible;
+        SearchResultsPanel.Visibility = _showOutline || _searchHits.Count == 0
+            ? Visibility.Collapsed : Visibility.Visible;
+        if (ShowOutlineButton is not null)
+            ShowOutlineButton.FontWeight = _showOutline ? FontWeights.Bold : FontWeights.Normal;
+        if (ShowPagesButton is not null)
+            ShowPagesButton.FontWeight = _showOutline ? FontWeights.Normal : FontWeights.Bold;
+        ApplyResponsiveLayout();
+    }
+
+    private void PdfOutline_SelectedItemChanged(object sender,
+        RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (_loading || _closing || _plan is null ||
+            e.NewValue is not PdfOutlineReader.Node item) return;
+        int target = PdfOutlineReader.VisibleIndex(_plan.Pages, item.SourcePageIndex);
+        if (target < 0)
+        {
+            StatusText.Text = "Переход недоступен: цель оглавления не поддерживается или удалена.";
+            return;
+        }
+        _pageIndex = target;
+        RefreshList();
+    }
+
     private void PagePaneToggle_Click(object sender, RoutedEventArgs e)
     {
         _pagePaneOverride = !PdfWorkspaceLayout.ShowPages(ActualWidth, _pagePaneOverride);
@@ -284,7 +330,7 @@ public partial class PdfViewerWindow : Window
             else
                 PdfPreviewScroll.Focus();
         }
-        else if (PageList.IsKeyboardFocusWithin)
+        else if (PageList.IsKeyboardFocusWithin || PdfOutlineTree.IsKeyboardFocusWithin)
             PdfPreviewScroll.Focus();
         else if (PdfPreviewScroll.IsKeyboardFocusWithin && SaveAsButton.IsEnabled)
             SaveAsButton.Focus();
@@ -425,6 +471,19 @@ public partial class PdfViewerWindow : Window
             if (_documentSession.Pages.Count == _plan.Pages.Count)
                 _plan.Restore(_plan.Pages.Select((p, i) => p with { Id = _documentSession.Pages[i].Id }).ToArray());
             ReadContinuousPageSizes();
+            // Outline failures must not prevent viewing or printing a valid PDF.
+            try
+            {
+                var outlineSource = _sourcePath;
+                _pdfOutline = await Task.Run(() => PdfOutlineReader.Read(outlineSource));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _pdfOutline = Array.Empty<PdfOutlineReader.Node>();
+                DiagnosticLog.Failure("pdf-outline-read", ex);
+            }
+            PdfOutlineTree.ItemsSource = _pdfOutline;
+            UpdateOutlinePane();
             _history = new PdfEditHistory(_plan);
             _savedPlanFingerprint = null;
             try
@@ -463,6 +522,8 @@ public partial class PdfViewerWindow : Window
         {
             DiagnosticLog.Failure("pdf-viewer-load", ex);
             ReleaseDocument();
+            _pdfOutline = Array.Empty<PdfOutlineReader.Node>();
+            PdfOutlineTree.ItemsSource = null;
             DocumentTitle.Text = "Откройте документ";
             StatusText.Text = "Не удалось открыть PDF.";
             if (!_closing) MessageBox.Show(this, ex.Message, "Открытие PDF", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1416,7 +1477,8 @@ public partial class PdfViewerWindow : Window
         {
             SearchResultsList.ItemsSource = null;
             SearchResultsList.ItemsSource = _searchHits;
-            SearchResultsPanel.Visibility = _searchHits.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            SearchResultsPanel.Visibility = _searchHits.Count > 0 && !_showOutline
+                ? Visibility.Visible : Visibility.Collapsed;
             SearchResultsHeader.Text = _searchHits.Count >= PdfTextIndex.MaxResults
                 ? $"Совпадения (первые {PdfTextIndex.MaxResults})"
                 : $"Совпадений: {_searchHits.Count}";
@@ -1520,8 +1582,12 @@ public partial class PdfViewerWindow : Window
             _activeSearchQuery = query;
             _searchHits = await Task.Run(() => textIndex.Find(visiblePages, query));
             _activeHit = 0;
-            if (_searchHits.Count > 0 && _pagePaneOverride != false)
-            { _pagePaneOverride = true; ApplyResponsiveLayout(); }
+            if (_searchHits.Count > 0)
+            {
+                _showOutline = false;
+                _pagePaneOverride = true;
+                UpdateOutlinePane();
+            }
             if (_searchHits.Count == 0)
             {
                 RefreshSearchResults();
