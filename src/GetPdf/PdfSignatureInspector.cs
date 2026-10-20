@@ -32,6 +32,11 @@ internal static class PdfSignatureInspector
         using var inspector = new PdfFileSignature();
         inspector.BindPdf(path);
         var names = inspector.GetSignatureNames();
+        // Fail closed if an unrecognized /ByteRange signature dictionary is
+        // present: "zero recognized signatures" is NOT "unsigned PDF".
+        if (names.Count == 0 && PdfInteractiveInspector.Inspect(path).SignatureByteRanges != 0)
+            throw new InvalidDataException(
+                "В PDF обнаружены объекты подписи, но криптографическая библиотека их не распознала.");
         if (names.Count > MaxSignatures)
             throw new InvalidDataException("Слишком много подписей в PDF.");
         var result = new List<PdfSignatureCheck>();

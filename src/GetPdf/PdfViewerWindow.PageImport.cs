@@ -115,6 +115,7 @@ public partial class PdfViewerWindow
             SearchBox.Clear();
             PdfSearchHighlightCanvas.Children.Clear();
             _searchGeometryCache.Clear();
+            ClearTextSelection(resetMode: false);
             _continuousFingerprint = null;
             _thumbnailCache?.Dispose();
             _thumbnailCache = new PdfLruCache<(int, int), BitmapSource>(12, _ => { },
