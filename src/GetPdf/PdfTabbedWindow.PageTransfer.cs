@@ -54,7 +54,6 @@ internal sealed partial class PdfTabbedWindow
     private async Task CopyPageToTabAsync(PdfViewerWindow source,
         PdfViewerWindow destination, Guid? draggedPageId = null)
     {
-        var sourceState = source.GetCleanTransferSnapshot();
         // Target tabs are lazy-loaded until selected. An explicit copy
         // operation may require opening the target without tab switching.
         try { await destination.EnsureInitialDocumentLoadedAsync(); }
@@ -65,6 +64,9 @@ internal sealed partial class PdfTabbedWindow
                 "Копирование страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+        // Recheck BOTH snapshots after the await: a user may have edited the
+        // source while the inactive target was imported.
+        var sourceState = source.GetCleanTransferSnapshot();
         var targetState = destination.GetCleanTransferSnapshot();
         if (sourceState is null || targetState is null)
         {
