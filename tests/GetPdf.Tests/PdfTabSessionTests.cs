@@ -57,6 +57,25 @@ public sealed class PdfTabSessionTests
     }
 
     [TestMethod]
+    public void CycleSupportsReverseAndEmptyCases()
+    {
+        Assert.AreEqual(2, PdfTabNavigation.Cycle(0, 3, -1));
+        Assert.AreEqual(0, PdfTabNavigation.Cycle(2, 3, 1));
+        Assert.AreEqual(-1, PdfTabNavigation.Cycle(0, 0, 1));
+    }
+
+    [TestMethod]
+    public void ReattachingTabPreservesOriginalIdentity()
+    {
+        var a = new PdfTabRegistry();
+        var original = a.Open(Path.Combine(Path.GetTempPath(), "sample.pdf"));
+        var item = a.Detach(original.Id);
+        var b = new PdfTabRegistry();
+        b.Attach(item);
+        Assert.AreEqual(original.Id, b.Items.Single().Id);
+    }
+
+    [TestMethod]
     public void ReorderAndDetachPreserveIdentity()
     {
         var tabs = new PdfTabRegistry();

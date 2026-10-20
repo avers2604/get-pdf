@@ -101,6 +101,16 @@ internal sealed class PdfTabRegistry
     }
 }
 
+internal static class PdfTabNavigation
+{
+    internal static int Cycle(int current, int count, int direction)
+    {
+        if (count <= 0) return -1;
+        int index = Math.Clamp(current, 0, count - 1);
+        return (index + count + (direction < 0 ? -1 : 1)) % count;
+    }
+}
+
 /// <summary>Bounded user-local session metadata; never stores PDF contents or credentials.</summary>
 internal static class PdfTabSessionStore
 {
@@ -152,7 +162,10 @@ internal static class PdfTabSessionStore
             ".tabs-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
-            File.WriteAllText(temporary, JsonSerializer.Serialize(state));
+            string json = JsonSerializer.Serialize(state);
+            if (System.Text.Encoding.UTF8.GetByteCount(json) > MaxBytes)
+                throw new ArgumentException("Сеанс превышает лимит размера.", nameof(state));
+            File.WriteAllText(temporary, json);
             File.Move(temporary, dest, overwrite: true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }

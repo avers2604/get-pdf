@@ -92,15 +92,26 @@ internal sealed class PdfTabbedWindow : Window
         _tabs.SelectedIndex = Math.Clamp(activeIndex, 0, _tabs.Items.Count - 1);
         OpenShells.Add(this);
         Loaded += (_, _) => DocumentWindowLayout.Clamp(this);
-        PreviewKeyDown += (_, e) =>
+        PreviewKeyDown += async (_, e) =>
         {
-            if (e.Key != Key.Tab || (Keyboard.Modifiers & ModifierKeys.Control) == 0)
-                return;
-            if (_tabs.Items.Count > 1)
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
+            bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+            if (e.Key == Key.Tab)
             {
-                int step = (Keyboard.Modifiers & ModifierKeys.Shift) != 0 ? -1 : 1;
-                _tabs.SelectedIndex = (_tabs.SelectedIndex + _tabs.Items.Count + step) %
-                    _tabs.Items.Count;
+                if (_tabs.Items.Count > 1)
+                    _tabs.SelectedIndex = PdfTabNavigation.Cycle(
+                        _tabs.SelectedIndex, _tabs.Items.Count, shift ? -1 : 1);
+                e.Handled = true;
+            }
+            else if (!shift && e.Key == Key.T)
+            {
+                if (_registry.Items.Count < 16) AddWorkspace(null);
+                e.Handled = true;
+            }
+            else if (!shift && e.Key == Key.W)
+            {
+                if (_tabs.SelectedItem is TabItem tab && tab.Tag is Guid id)
+                    await CloseTabAsync(id);
                 e.Handled = true;
             }
         };
