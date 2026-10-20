@@ -50,7 +50,7 @@ internal static class PdfTextFormService
             if (string.IsNullOrWhiteSpace(name) || name.Length > 120 ||
                 name.Any(char.IsControl) || value is null ||
                 value.Length > PdfFormFillLabPolicy.MaxValueLength ||
-                value.Any(c => char.IsControl(c) || char.IsSurrogate(c)))
+                PdfFormFillLabPolicy.HasUnsafeText(value))
                 throw new ArgumentException("Некорректное имя или значение поля.");
         }
     }
