@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using PdfSharp.Pdf;
@@ -12,6 +13,12 @@ namespace GetPdf;
 /// </summary>
 internal static class PdfFormFillLabPolicy
 {
+    // Unicode formatting controls can reverse or hide visible field values.
+    // Keep the supported text-only forms predictable in all PDF viewers.
+    internal static bool HasUnsafeText(string text) => text.Any(c =>
+        char.IsControl(c) || char.IsSurrogate(c) ||
+        char.GetUnicodeCategory(c) == UnicodeCategory.Format);
+
     internal const int MaxFields = 32;
     internal const int MaxRequestBytes = 65536;
     internal const int MaxValueLength = 512;
@@ -47,7 +54,7 @@ internal static class PdfFormFillLabPolicy
                 if (result.Count > MaxFields || property.Value.ValueKind != JsonValueKind.String)
                     throw new InvalidDataException("Недопустимое число или тип значений.");
                 string value = property.Value.GetString()!;
-                if (value.Length > MaxValueLength || value.Any(c => char.IsControl(c) || char.IsSurrogate(c)))
+                if (value.Length > MaxValueLength || HasUnsafeText(value))
                     throw new InvalidDataException("Недопустимое содержимое текстового поля.");
                 // Preserve Unicode, including Cyrillic; do not transliterate or normalize silently.
                 result[name] = value;
