@@ -31,7 +31,7 @@ internal static class PdfTextFormService
             if (dict is null) throw new InvalidDataException("Повреждён объект поля.");
             string name = dict.Elements.GetString("/T");
             if (string.IsNullOrWhiteSpace(name) || name.Length > 120 ||
-                name.Any(char.IsControl) || names.Contains(name, StringComparer.Ordinal))
+                PdfFormFillLabPolicy.HasUnsafeText(name) || names.Contains(name, StringComparer.Ordinal))
                 throw new InvalidDataException("Некорректные либо повторные имена полей.");
             names.Add(name);
         }
@@ -48,7 +48,7 @@ internal static class PdfTextFormService
         foreach (var (name, value) in values)
         {
             if (string.IsNullOrWhiteSpace(name) || name.Length > 120 ||
-                name.Any(char.IsControl) || value is null ||
+                PdfFormFillLabPolicy.HasUnsafeText(name) || value is null ||
                 value.Length > PdfFormFillLabPolicy.MaxValueLength ||
                 PdfFormFillLabPolicy.HasUnsafeText(value))
                 throw new ArgumentException("Некорректное имя или значение поля.");
