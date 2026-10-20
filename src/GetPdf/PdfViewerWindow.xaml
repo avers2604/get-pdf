@@ -314,6 +314,10 @@
                   IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
                   Click="FillTextForm_Click" Margin="0,0,5,10"
                   ToolTip="Только простые неподписанные текстовые AcroForm. Сохранение в новый PDF."/>
+          <Button x:Name="Gup2VerifyShaButton" Content="Сверить SHA-256 с GUP-2…"
+                  Visibility="Collapsed" IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
+                  Click="Gup2VerifySha_Click" Margin="0,0,5,10"
+                  ToolTip="Сверить неизменённый скачанный PDF с хешем WORM-оригинала из карточки GUP-2"/>
           <Button x:Name="PdfStructureButton" Content="Состав PDF…" Click="PdfStructure_Click"
                   IsEnabled="False" Margin="0,0,10,0"
                   ToolTip="Только сведения о полях и аннотациях без их содержимого; не проверка цифровой подписи"

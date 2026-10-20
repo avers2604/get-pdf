@@ -111,6 +111,8 @@ public partial class PdfViewerWindow : UserControl
             ? Visibility.Visible : Visibility.Collapsed;
         Gup2PortalButton.Visibility = WorkstationPolicy.Current.AllowGup2Portal
             ? Visibility.Visible : Visibility.Collapsed;
+        Gup2VerifyShaButton.Visibility = WorkstationPolicy.Current.AllowGup2Portal
+            ? Visibility.Visible : Visibility.Collapsed;
         PdfJobProgressBar.DataContext = _jobProgress;
         var preferences = PdfWorkspacePreferencesStore.Load();
         ActiveToolIndex = PdfWorkspaceToolGroups.ToIndex(preferences.ActiveTool);
