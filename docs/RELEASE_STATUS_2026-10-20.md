@@ -10,6 +10,7 @@
 | Производительность | 2 одновременных native импортера, 32 МиБ bitmap кэша на вкладку; отмена передаётся в импорт | Native peak/CPU на PDF до 1000 стр. и закрытие вкладки во время импорта |
 | MSI | Source WiX5 и offline PowerShell gate | Windows build, MSTest, install/upgrade/remove, Authenticode |
 | Обновления | Read-only offline MSI preflight с SHA-256 и Authenticode; установка не производится | Проверить PowerShell/WindowsInstaller COM, PKI, реальный rollback |
+| GUP-2 | Карточка документа → защищённый PDF-download → открыть в GET PDF; обратная кнопка портала по opt-in HTTPS | Проверить браузер/ассоциации Windows, Django ACL/ДСП, дальнейший secure native handoff |
 | GET-system | Опциональный локальный JSON v1, отключён по умолчанию; при запрете очищается прежний файл статуса | Согласовать reader/ACL и будущий API интеграции на стенде |
 | GUP-Scan | Отдельный репозиторий без изменений | Сохранить экспорт сканов в PDF при будущей миграции |
 
