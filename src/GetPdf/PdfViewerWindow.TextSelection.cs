@@ -15,6 +15,7 @@ public partial class PdfViewerWindow
     private int _selectionAnchor = -1;
     private int _selectionEnd = -1;
     private long _selectionRequest;
+    private CancellationTokenSource? _selectionCancel;
 
     private string? CurrentSelectionKey()
     {
@@ -44,6 +45,9 @@ public partial class PdfViewerWindow
     private void ClearTextSelection(bool resetMode)
     {
         ++_selectionRequest;
+        _selectionCancel?.Cancel();
+        _selectionCancel?.Dispose();
+        _selectionCancel = null;
         _selectedWords = null;
         _selectionPageKey = null;
         _selectionAnchor = -1;
@@ -61,6 +65,10 @@ public partial class PdfViewerWindow
         string? key = CurrentSelectionKey();
         if (key is null || key == _selectionPageKey) return;
         ++_selectionRequest;
+        _selectionCancel?.Cancel();
+        _selectionCancel?.Dispose();
+        using var cancel = new CancellationTokenSource();
+        _selectionCancel = cancel;
         long request = _selectionRequest;
         _selectionPageKey = key;
         _selectionAnchor = _selectionEnd = -1;
@@ -72,7 +80,8 @@ public partial class PdfViewerWindow
         try
         {
             var selection = await Task.Run(() =>
-                PdfTextSelectionReader.Read(source, page.SourcePage, page.Rotation));
+                PdfTextSelectionReader.Read(source, page.SourcePage,
+                    page.Rotation, cancel.Token), cancel.Token);
             if (request != _selectionRequest || !_textSelectionMode || _closing ||
                 CurrentSelectionKey() != key) return;
             _selectedWords = selection;
@@ -80,11 +89,20 @@ public partial class PdfViewerWindow
                 ? "Текстовый слой недоступен для точного выделения. Для скана используйте OCR."
                 : "Проведите мышью по словам PDF, затем нажмите Ctrl+C.";
         }
+        catch (OperationCanceledException)
+        {
+            // Page, PDF or tool changed. The pending result is intentionally dropped.
+        }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             DiagnosticLog.Failure("pdf-text-selection", ex);
             if (request == _selectionRequest)
                 StatusText.Text = "Не удалось прочитать расположение текста этой страницы.";
+        }
+        finally
+        {
+            if (ReferenceEquals(_selectionCancel, cancel))
+                _selectionCancel = null;
         }
     }
 

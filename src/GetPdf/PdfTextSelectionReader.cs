@@ -1,3 +1,5 @@
+using UglyToad.PdfPig;
+
 namespace GetPdf;
 
 /// <summary>Read-only normalized word geometry, with no simulated character positions.</summary>
@@ -77,9 +79,9 @@ internal static class PdfTextSelectionReader
     internal static PdfWordSelection Read(string source, int sourcePage, int rotation,
         CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         if (rotation is not (0 or 90 or 180 or 270))
             return new PdfWordSelection([]);
-        cancellation.ThrowIfCancellationRequested();
         using var pdf = UglyToad.PdfPig.PdfDocument.Open(source);
         if (sourcePage < 0 || sourcePage >= pdf.NumberOfPages)
             return new PdfWordSelection([]);

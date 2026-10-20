@@ -27,6 +27,8 @@ public partial class PdfViewerWindow
         DocumentView.CurrentPageChanged += index =>
         {
             if (_plan is null || index >= _plan.Pages.Count || _closing) return;
+            if (_textSelectionMode)
+                ClearTextSelection(resetMode: false);
             _pageIndex = index;
             _refreshingList = true;
             try { PageList.SelectedIndex = index; }

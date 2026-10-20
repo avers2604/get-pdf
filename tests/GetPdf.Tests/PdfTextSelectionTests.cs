@@ -37,6 +37,17 @@ public sealed class PdfTextSelectionTests
     }
 
     [TestMethod]
+    public void CancelledWordExtractionDoesNotOpenOrParseAnyPdf()
+    {
+        using var cancel = new CancellationTokenSource();
+        cancel.Cancel();
+        Assert.ThrowsExactly<OperationCanceledException>(() =>
+            PdfTextSelectionReader.Read(
+                Path.Combine(Path.GetTempPath(), "not-real.pdf"),
+                0, 0, cancel.Token));
+    }
+
+    [TestMethod]
     public void SingleWordAndEmptyDocumentAreSafe()
     {
         Assert.AreEqual("", new PdfWordSelection([]).Extract(0, 0));
