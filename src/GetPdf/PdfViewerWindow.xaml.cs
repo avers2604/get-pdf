@@ -479,8 +479,21 @@ public partial class PdfViewerWindow : Window
                 {
                     using var pdf = PdfSharp.Pdf.IO.PdfReader.Open(outlineSource,
                         PdfSharp.Pdf.IO.PdfDocumentOpenMode.Import);
-                    return (Outline: PdfOutlineReader.Read(pdf),
-                            Links: PdfInternalLinkReader.Read(pdf));
+                    IReadOnlyList<PdfOutlineReader.Node> outline;
+                    try { outline = PdfOutlineReader.Read(pdf); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        DiagnosticLog.Failure("pdf-outline-read", ex);
+                        outline = Array.Empty<PdfOutlineReader.Node>();
+                    }
+                    IReadOnlyDictionary<int, IReadOnlyList<PdfInternalLinkReader.Link>> links;
+                    try { links = PdfInternalLinkReader.Read(pdf); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        DiagnosticLog.Failure("pdf-internal-link-read", ex);
+                        links = new Dictionary<int, IReadOnlyList<PdfInternalLinkReader.Link>>();
+                    }
+                    return (Outline: outline, Links: links);
                 });
                 _pdfOutline = navigation.Outline;
                 _pdfInternalLinks = navigation.Links;
@@ -642,6 +655,11 @@ public partial class PdfViewerWindow : Window
             UntrackThumbnail(entry);
         _thumbnailItems = [];
         PageList.ItemsSource = null;
+        _pdfOutline = Array.Empty<PdfOutlineReader.Node>();
+        _pdfInternalLinks = new Dictionary<int, IReadOnlyList<PdfInternalLinkReader.Link>>();
+        PdfOutlineTree.ItemsSource = null;
+        _showOutline = false;
+        UpdateOutlinePane();
         _thumbnailCache?.Dispose();
         _thumbnailCache = null;
         _dragStart = null;

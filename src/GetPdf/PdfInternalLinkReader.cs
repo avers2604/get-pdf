@@ -9,7 +9,7 @@ namespace GetPdf;
 /// </summary>
 internal static class PdfInternalLinkReader
 {
-    private const int MaxLinksPerPage = 128;
+    private const int MaxAnnotationsPerPage = 4096;
     private const int MaxTotalLinks = 4096;
     internal sealed record Link(int SourcePage, int SourceTargetPage, int Ordinal)
     {
@@ -26,7 +26,7 @@ internal static class PdfInternalLinkReader
             var page = document.Pages[i];
             var annotations = page.Elements.GetArray("/Annots");
             if (annotations is null) continue;
-            if (annotations.Elements.Count > MaxLinksPerPage)
+            if (annotations.Elements.Count > MaxAnnotationsPerPage)
                 throw new InvalidDataException("Слишком много аннотаций на странице PDF для быстрого чтения ссылок.");
             var links = new List<Link>();
             int ordinal = 0;
