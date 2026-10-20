@@ -8,12 +8,13 @@ public sealed class PdfWorkspacePreferencesTests
     [TestMethod]
     public void ToolGroupIdsAreStableAndUnknownSelectionFallsBackToSearch()
     {
-        CollectionAssert.AreEqual(new[] { "search", "markup", "pages", "document" },
-            Enumerable.Range(0, 4).Select(PdfWorkspaceToolGroups.FromIndex).ToArray());
+        CollectionAssert.AreEqual(new[] { "search", "markup", "pages", "document", "text" },
+            Enumerable.Range(0, 5).Select(PdfWorkspaceToolGroups.FromIndex).ToArray());
         Assert.AreEqual(0, PdfWorkspaceToolGroups.ToIndex("other"));
         Assert.AreEqual(0, PdfWorkspaceToolGroups.ToIndex(null));
         Assert.AreEqual("search", PdfWorkspaceToolGroups.FromIndex(99));
         Assert.AreEqual(2, PdfWorkspaceToolGroups.ToIndex("pages"));
+        Assert.AreEqual(4, PdfWorkspaceToolGroups.ToIndex("text"));
     }
 
     [TestMethod]
@@ -43,6 +44,8 @@ public sealed class PdfWorkspacePreferencesTests
         {
             PdfWorkspacePreferencesStore.SaveTo(path, new PdfWorkspacePreferences(1, "pages"));
             Assert.AreEqual("pages", PdfWorkspacePreferencesStore.LoadFrom(path).ActiveTool);
+            PdfWorkspacePreferencesStore.SaveTo(path, new PdfWorkspacePreferences(1, "text"));
+            Assert.AreEqual("text", PdfWorkspacePreferencesStore.LoadFrom(path).ActiveTool);
             PdfWorkspacePreferencesStore.SaveTo(path, new PdfWorkspacePreferences(1, "evil-unsupported"));
             Assert.AreEqual("search", PdfWorkspacePreferencesStore.LoadFrom(path).ActiveTool);
             Assert.AreEqual(1, Directory.GetFiles(folder).Length);
