@@ -59,8 +59,13 @@ internal sealed class PdfWordSelection
                 return "";
             if (previous is not null)
             {
+                // Compare the top of adjacent glyph rows relative to their
+                // actual heights. A fixed 3.5% page offset misses ordinary
+                // 11–14 pt lines on an A4 page and merges separate lines.
+                double rowHeight = Math.Max(previous.Bounds.Height,
+                    current.Bounds.Height);
                 bool nextLine = Math.Abs(current.Bounds.Y - previous.Bounds.Y) >
-                    Math.Max(.035, previous.Bounds.Height * 1.5);
+                    Math.Max(.004, rowHeight * .75);
                 result.Append(nextLine ? '\n' : ' ');
             }
             result.Append(current.Text);

@@ -21,6 +21,19 @@ public sealed class PdfTextSelectionTests
     }
 
     [TestMethod]
+    public void OrdinaryTightA4LineSpacingMustCopyAsSeparateLines()
+    {
+        var model = new PdfWordSelection([
+            new PdfSelectableWord("Управление", new(.10, .110, .19, .012)),
+            new PdfSelectableWord("ГЭТ", new(.31, .111, .06, .012)),
+            new PdfSelectableWord("Документ", new(.10, .130, .19, .012)),
+            new PdfSelectableWord("номер", new(.31, .131, .10, .012))
+        ]);
+        Assert.AreEqual("Управление ГЭТ\\nДокумент номер".Replace("\\n", "\n"),
+            model.Extract(0, 3));
+    }
+
+    [TestMethod]
     public void RejectsInvalidWordsAndOversizedSelection()
     {
         Assert.ThrowsExactly<ArgumentException>(() => new PdfWordSelection([
