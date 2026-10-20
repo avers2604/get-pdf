@@ -96,8 +96,14 @@
           <Button x:Name="FindButton" IsEnabled="{Binding CanSearch, Mode=OneWay}" Content="Найти" Click="Find_Click" Margin="0,0,5,0"/>
           <Button x:Name="FindNextButton" IsEnabled="{Binding CanFindNext, Mode=OneWay}" Content="Следующее" Click="FindNext_Click" Margin="0,0,5,0"/>
           <Button x:Name="FindPreviousButton" IsEnabled="{Binding CanFindNext, Mode=OneWay}"
-                  Content="Предыдущее" Click="FindPrevious_Click" Margin="0,0,12,0"
+                  Content="Предыдущее" Click="FindPrevious_Click" Margin="0,0,6,0"
                   ToolTip="Предыдущее совпадение (Shift+F3)"/>
+          <Button x:Name="SelectTextButton" Content="Выделить текст" Click="ToggleTextSelection_Click"
+                  IsEnabled="{Binding CanSelectPage, Mode=OneWay}" Margin="0,0,5,0"
+                  ToolTip="Выбрать слова текстового слоя мышью; PDF не меняется"/>
+          <Button x:Name="CopySelectedTextButton" Content="Копировать" Click="CopySelectedText_Click"
+                  IsEnabled="False" Margin="0,0,12,0"
+                  ToolTip="Копировать выбранный текст (Ctrl+C)"/>
             </StackPanel>
         <Button x:Name="EditModeButton" Content="Редактирование" Click="ToggleEditor_Click" Margin="0,0,8,0" DockPanel.Dock="Right" ToolTip="Показать или скрыть дополнительные инструменты"/><TabControl x:Name="PdfToolModeBox" Visibility="Collapsed" Style="{StaticResource DocumentToolTabs}" Width="650" Height="40" Margin="0,0,10,0"
                   DockPanel.Dock="Left" VerticalAlignment="Center"
@@ -201,7 +207,10 @@
               <Canvas x:Name="PdfSearchHighlightCanvas" IsHitTestVisible="False"
                       Panel.ZIndex="1" ClipToBounds="True"
                       AutomationProperties.Name="Подсветка совпадения поиска PDF"/>
-              <Canvas x:Name="PdfMarkupCanvas" Background="Transparent" Panel.ZIndex="2"
+              <Canvas x:Name="PdfTextSelectionCanvas" IsHitTestVisible="False"
+                      Panel.ZIndex="2" ClipToBounds="True"
+                      AutomationProperties.Name="Выделенный текст PDF"/>
+              <Canvas x:Name="PdfMarkupCanvas" Background="Transparent" Panel.ZIndex="3"
                       MouseLeftButtonDown="PdfMarkupCanvas_MouseLeftButtonDown"
                       MouseMove="PdfMarkupCanvas_MouseMove"
                       MouseLeftButtonUp="PdfMarkupCanvas_MouseLeftButtonUp"

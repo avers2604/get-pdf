@@ -47,7 +47,9 @@ public partial class PdfViewerWindow
             PageVisual.Width = bitmap.Width; PageVisual.Height = bitmap.Height;
             PageVisual.LayoutTransform = Transform.Identity;
             PdfSearchHighlightCanvas.Width = bitmap.Width; PdfSearchHighlightCanvas.Height = bitmap.Height;
+            PdfTextSelectionCanvas.Width = bitmap.Width; PdfTextSelectionCanvas.Height = bitmap.Height;
             ShowRectangles(reference);
+            if (_textSelectionMode) await EnsureSelectionWordsAsync();
             StampPreview.Text = reference.Stamp;
             StampPreview.Visibility = string.IsNullOrWhiteSpace(reference.Stamp) ? Visibility.Collapsed : Visibility.Visible;
             EmptyMessage.Visibility = Visibility.Collapsed;

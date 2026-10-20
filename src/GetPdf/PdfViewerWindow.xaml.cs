@@ -653,6 +653,7 @@ public partial class PdfViewerWindow : UserControl
             UntrackThumbnail(entry);
         _thumbnailItems = [];
         PageList.ItemsSource = null;
+        ClearTextSelection(resetMode: true);
         _pdfOutline = Array.Empty<PdfOutlineReader.Node>();
         _pdfInternalLinks = new Dictionary<int, IReadOnlyList<PdfInternalLinkReader.Link>>();
         PdfOutlineTree.ItemsSource = null;
@@ -743,6 +744,7 @@ public partial class PdfViewerWindow : UserControl
         DocumentView.Zoom = _zoom;
         DocumentView.ScrollToPage(_pageIndex);
         PagePosition.Text = $"{_pageIndex + 1} / {_plan.Pages.Count}";
+        if (_textSelectionMode) _ = EnsureSelectionWordsAsync();
         if (!PageNumberBox.IsKeyboardFocusWithin)
             PageNumberBox.Text = (_pageIndex + 1).ToString();
         UpdateBookmarkButton();
@@ -1056,6 +1058,7 @@ public partial class PdfViewerWindow : UserControl
 
     private void PdfMarkupCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_textSelectionMode) { BeginTextSelection(e); return; }
         if (ActiveToolIndex == 4) { SelectTextAtPointer(e); return; }
         if (!CanDrawOnCurrentPage || _rendering || _loading || !_canModify ||
             PdfMarkupCanvas.ActualWidth < 1 || PdfMarkupCanvas.ActualHeight < 1)
@@ -1140,6 +1143,7 @@ public partial class PdfViewerWindow : UserControl
 
     private void PdfMarkupCanvas_MouseMove(object sender, MouseEventArgs e)
     {
+        if (_textSelectionDragging) { UpdateTextSelection(e); return; }
         if (_dragStart is not Point start || _dragPreview is null) return;
         var point = e.GetPosition(PdfMarkupCanvas);
         double x = Math.Clamp(point.X, 0, PdfMarkupCanvas.ActualWidth);
@@ -1153,6 +1157,7 @@ public partial class PdfViewerWindow : UserControl
 
     private void PdfMarkupCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (_textSelectionDragging) { FinishTextSelection(e); return; }
         if (_dragStart is not Point start) return;
         var finish = e.GetPosition(PdfMarkupCanvas);
         double width = PdfMarkupCanvas.ActualWidth;
@@ -1207,6 +1212,7 @@ public partial class PdfViewerWindow : UserControl
 
     private void PdfMarkupCanvas_LostMouseCapture(object sender, MouseEventArgs e)
     {
+        _textSelectionDragging = false;
         _dragStart = null;
         _dragPreview = null;
         if (_plan is not null && _pageIndex < _plan.Pages.Count)
@@ -1437,6 +1443,14 @@ public partial class PdfViewerWindow : UserControl
             if (e.Key == Key.PageUp) { PdfPreviewScroll.PageUp(); e.Handled = true; return; }
         }
         bool control = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        if (control && e.Key == Key.C &&
+            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase &&
+            _textSelectionMode && CopySelectedTextButton.IsEnabled)
+        {
+            CopySelectedText_Click(sender, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
         bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
         if (e.Key == Key.F6)
         {
