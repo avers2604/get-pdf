@@ -120,6 +120,48 @@ public sealed class PdfTextFormServiceTests
     }
 
     [TestMethod]
+    public void CyrillicTextFormRequestRoundTripsWithoutTransliteration()
+    {
+        var values = new Dictionary<string, string>
+        {
+            ["Фамилия"] = "Иванов",
+            ["Должность"] = "Водитель троллейбуса № 15",
+            ["Подразделение"] = "Санкт-Петербург"
+        };
+        PdfTextFormService.ValidateValues(values);
+        byte[] input = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+            new { version = 1, fields = values });
+        var parsed = PdfFormFillLabPolicy.ReadRequest(input);
+        CollectionAssert.AreEquivalent(values.Keys.ToArray(), parsed.Keys.ToArray());
+        foreach (var pair in values)
+            Assert.AreEqual(pair.Value, parsed[pair.Key]);
+    }
+
+    [TestMethod]
+    public void JsonRequestRejectsDuplicateFieldsAndUnboundedInput()
+    {
+        byte[] duplicate = System.Text.Encoding.UTF8.GetBytes(
+            "{\"version\":1,\"fields\":{\"ФИО\":\"А\",\"ФИО\":\"Б\"}}");
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            PdfFormFillLabPolicy.ReadRequest(duplicate));
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            PdfFormFillLabPolicy.ReadRequest(new byte[PdfFormFillLabPolicy.MaxRequestBytes + 1]));
+    }
+
+    [TestMethod]
+    public void FormValidationRejectsSurrogateAndNewlineButAllowsCyrillic()
+    {
+        PdfTextFormService.ValidateValues(
+            new Dictionary<string, string> { ["Имя"] = "Мария Иванова" });
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            PdfTextFormService.ValidateValues(
+                new Dictionary<string, string> { ["Имя"] = "Тест" + '\uD800' }));
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            PdfTextFormService.ValidateValues(
+                new Dictionary<string, string> { ["Имя"] = "Тест\nследующая строка" }));
+    }
+
+    [TestMethod]
     public void RequiresFreshOutputName()
     {
         string path = Path.Combine(Path.GetTempPath(), "sample.pdf");
