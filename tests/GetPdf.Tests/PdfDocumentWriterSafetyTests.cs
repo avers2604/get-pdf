@@ -59,7 +59,7 @@ public sealed class PdfDocumentWriterSafetyTests
             }
             byte[] before = SHA256.HashData(File.ReadAllBytes(source));
             Assert.ThrowsExactly<InvalidOperationException>(() =>
-                PdfDocumentWriter.SaveAs(source, output, [new PdfPageReference(0)]));
+                PdfDocumentWriter.SaveAs(source, output, [new PdfPageReference(0, 0)]));
             CollectionAssert.AreEqual(before, SHA256.HashData(File.ReadAllBytes(source)));
             Assert.IsFalse(File.Exists(output));
             Assert.AreEqual(1, Directory.GetFiles(folder).Length);
@@ -86,7 +86,7 @@ public sealed class PdfDocumentWriterSafetyTests
             }
             byte[] before = SHA256.HashData(File.ReadAllBytes(source));
             Assert.ThrowsExactly<InvalidOperationException>(() =>
-                PdfDocumentWriter.SaveAs(source, output, [new PdfPageReference(0)]));
+                PdfDocumentWriter.SaveAs(source, output, [new PdfPageReference(0, 0)]));
             CollectionAssert.AreEqual(before, SHA256.HashData(File.ReadAllBytes(source)));
             Assert.IsFalse(File.Exists(output));
         }
