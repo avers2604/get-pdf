@@ -56,8 +56,7 @@ internal sealed class PdfWordSelection
         for (int i = start; i <= stop; i++)
         {
             var current = Words[i];
-            if (result.Length + current.Text.Length + 1 > MaxCopiedChars)
-                return "";
+            char separator = '\0';
             if (previous is not null)
             {
                 // Compare the top of adjacent glyph rows relative to their
@@ -67,9 +66,14 @@ internal sealed class PdfWordSelection
                     current.Bounds.Height);
                 bool nextLine = Math.Abs(current.Bounds.Y - previous.Bounds.Y) >
                     Math.Max(.004, rowHeight * .75);
-                if (nextLine) result.Append('\n');
-                else if (!current.JoinWithPrevious) result.Append(' ');
+                separator = nextLine ? '\n' : current.JoinWithPrevious ? '\0' : ' ';
             }
+            int extra = separator == '\0' ? 0 : 1;
+            // Count only characters that will actually be copied: joined
+            // glyphs have no separator, including at the exact 50k limit.
+            if (current.Text.Length > MaxCopiedChars - result.Length - extra)
+                return "";
+            if (separator != '\0') result.Append(separator);
             result.Append(current.Text);
             previous = current;
         }
