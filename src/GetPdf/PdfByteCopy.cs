@@ -21,6 +21,8 @@ internal static class PdfByteCopy
             !string.Equals(Path.GetExtension(destination), ".pdf", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Оба файла должны иметь расширение PDF.");
 
+        // Cancelled export must not allocate a temporary PDF or touch the source.
+        cancellation.ThrowIfCancellationRequested();
         var folder = Path.GetDirectoryName(destination)!;
         Directory.CreateDirectory(folder);
         var temp = Path.Combine(folder, ".getpdf-copy-" + Guid.NewGuid().ToString("N") + ".pdf");
