@@ -10,6 +10,7 @@ internal static class PdfInputCopy
         CancellationToken cancellationToken = default)
     {
         if (maxBytes < 1) throw new ArgumentOutOfRangeException(nameof(maxBytes));
+        cancellationToken.ThrowIfCancellationRequested();
         var sourceInfo = new FileInfo(source);
         if (!sourceInfo.Exists || sourceInfo.Length == 0 || sourceInfo.Length > maxBytes)
             throw new InvalidDataException("PDF отсутствует, пуст или превышает корпоративный лимит.");
