@@ -178,7 +178,7 @@ internal sealed partial class PdfTabbedWindow : Window
         var viewer = existing ?? new PdfViewerWindow(path);
         var title = new TextBlock
         {
-            Text = path is null ? "Новая вкладка" : System.IO.Path.GetFileName(path),
+            Text = path is null ? "Новая вкладка" : PdfSafeDisplayName.Normalize(System.IO.Path.GetFileName(path)),
             MaxWidth = 220,
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center
