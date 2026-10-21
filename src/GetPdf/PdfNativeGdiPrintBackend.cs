@@ -155,8 +155,10 @@ internal static class PdfNativeGdiPrintBackend
                 {
                     float pageWidth = FPDF_GetPageWidthF(page);
                     float pageHeight = FPDF_GetPageHeightF(page);
+                    // 1/12 inch safety margin in BOTH physical axes.
+                    // Non-square printer resolutions are supported by drivers.
                     var rectangle = PdfNativeGdiPrintLayout.Fit(pageWidth, pageHeight,
-                        w, h, Math.Max(0, dpiX / 12), dpiX);
+                        w, h, Math.Max(0, dpiX / 12), Math.Max(0, dpiY / 12));
                     if (StartPage(dc) <= 0)
                         throw new Win32Exception(Marshal.GetLastWin32Error(), "Драйвер не смог начать страницу.");
                     FPDF_RenderPage(dc, page, rectangle.X, rectangle.Y,
@@ -189,21 +191,24 @@ internal static class PdfNativeGdiPrintLayout
 {
     internal static PdfNativeGdiRect Fit(
         double pageWidth, double pageHeight, int printableWidth,
-        int printableHeight, int marginPixels, int dpiX)
+        int printableHeight, int marginXPixels, int marginYPixels)
     {
         if (!double.IsFinite(pageWidth) || !double.IsFinite(pageHeight) ||
             pageWidth <= 0 || pageHeight <= 0 || printableWidth < 1 ||
-            printableHeight < 1 || marginPixels < 0 || dpiX < 1)
+            printableHeight < 1 || marginXPixels < 0 || marginYPixels < 0)
             throw new ArgumentOutOfRangeException(nameof(pageWidth));
         // Fail closed instead of silently discarding user-requested margins
         // when the chosen paper/driver reports a very small printable area.
-        if (marginPixels * 2L >= printableWidth ||
-            marginPixels * 2L >= printableHeight)
-            throw new ArgumentOutOfRangeException(nameof(marginPixels),
+        if (marginXPixels * 2L >= printableWidth ||
+            marginYPixels * 2L >= printableHeight)
+            throw new ArgumentOutOfRangeException(nameof(marginXPixels),
                 "Поля больше доступной области печати.");
-        double usableW = printableWidth - marginPixels * 2.0;
-        double usableH = printableHeight - marginPixels * 2.0;
+        double usableW = printableWidth - marginXPixels * 2.0;
+        double usableH = printableHeight - marginYPixels * 2.0;
         double aspect = pageWidth / pageHeight;
+        if (!double.IsFinite(aspect) || aspect <= 0)
+            throw new ArgumentOutOfRangeException(nameof(pageWidth),
+                "Невозможно определить пропорции PDF-страницы.");
         double w = Math.Min(usableW, usableH * aspect);
         double h = w / aspect;
         int width = Math.Clamp((int)Math.Round(w), 1, printableWidth);
