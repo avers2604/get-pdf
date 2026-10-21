@@ -6,6 +6,14 @@ namespace GetPdf;
 /// </summary>
 internal static class PdfInputCopy
 {
+    internal static void EnsureCompleteLength(long expected, long actual)
+    {
+        if (expected <= 0 || actual != expected)
+            throw new InvalidDataException(
+                "Исходный PDF изменил длину при открытии или копировании. " +
+                "Повторите загрузку исходного документа.");
+    }
+
     internal static async Task<string> CopySafelyAsync(string source, string destination, long maxBytes,
         CancellationToken cancellationToken = default)
     {
@@ -18,6 +26,9 @@ internal static class PdfInputCopy
         try
         {
             await using var from = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
+            // Between metadata lookup and opening the handle the source can
+            // change. Never publish a partial or different-sized snapshot.
+            EnsureCompleteLength(sourceInfo.Length, from.Length);
             await using var to = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             created = true;
             byte[] buffer = new byte[81920];
@@ -30,6 +41,7 @@ internal static class PdfInputCopy
                     throw new InvalidDataException("Превышен корпоративный лимит PDF во время копирования.");
                 await to.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
             }
+            EnsureCompleteLength(sourceInfo.Length, totalCopied);
             await to.FlushAsync(cancellationToken);
             return destination;
         }
