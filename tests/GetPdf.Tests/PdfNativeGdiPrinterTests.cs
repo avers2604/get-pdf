@@ -8,7 +8,7 @@ public sealed class PdfNativeGdiPrinterTests
     [TestMethod]
     public void AspectRatioPreservedWithinPrinterArea()
     {
-        var rect = PdfNativeGdiPrintLayout.Fit(595, 842, 4960, 7016, 100, 300);
+        var rect = PdfNativeGdiPrintLayout.Fit(595, 842, 4960, 7016, 100, 300, 300, 300);
         Assert.IsTrue(rect.Width > 0 && rect.Height > 0);
         Assert.IsTrue(rect.X >= 0 && rect.Y >= 0);
         Assert.IsTrue(rect.X + rect.Width <= 4960);
@@ -20,26 +20,26 @@ public sealed class PdfNativeGdiPrinterTests
     public void InvalidPageGeometryRefusedBeforeSpooling()
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
-            PdfNativeGdiPrintLayout.Fit(0, 842, 2000, 3000, 0, 300));
+            PdfNativeGdiPrintLayout.Fit(0, 842, 2000, 3000, 0, 300, 300, 300));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
-            PdfNativeGdiPrintLayout.Fit(595, 842, 2000, 3000, -1, 300));
+            PdfNativeGdiPrintLayout.Fit(595, 842, 2000, 3000, -1, 300, 300, 300));
     }
 
     [TestMethod]
     public void NativeLayoutRefusesMarginsLargerThanDriverArea()
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
-            PdfNativeGdiPrintLayout.Fit(595, 842, 200, 300, 100, 300));
+            PdfNativeGdiPrintLayout.Fit(595, 842, 200, 300, 100, 300, 300, 300));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
-            PdfNativeGdiPrintLayout.Fit(595, 842, 200, 300, 150, 300));
+            PdfNativeGdiPrintLayout.Fit(595, 842, 200, 300, 150, 300, 300, 300));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
-            PdfNativeGdiPrintLayout.Fit(595, 842, 200, 300, int.MaxValue, 300));
+            PdfNativeGdiPrintLayout.Fit(595, 842, 200, 300, int.MaxValue, 300, 300, 300));
     }
 
     [TestMethod]
     public void NativeLayoutNeverViolatesRequestedMargins()
     {
-        var box = PdfNativeGdiPrintLayout.Fit(842, 595, 4000, 3000, 150, 300);
+        var box = PdfNativeGdiPrintLayout.Fit(842, 595, 4000, 3000, 150, 300, 300, 300);
         Assert.IsTrue(box.X >= 150 && box.Y >= 150);
         Assert.IsTrue(box.X + box.Width <= 4000 - 150);
         Assert.IsTrue(box.Y + box.Height <= 3000 - 150);
@@ -51,14 +51,16 @@ public sealed class PdfNativeGdiPrinterTests
         // Simulates 600 DPI horizontally and 300 DPI vertically:
         // 1/12 inch is 50 and 25 pixels, respectively.
         var box = PdfNativeGdiPrintLayout.Fit(
-            842, 595, 4300, 2100, marginXPixels: 50, marginYPixels: 25);
+            842, 595, 4300, 2100, marginXPixels: 50, marginYPixels: 25,
+            dpiX: 600, dpiY: 300);
         Assert.IsTrue(box.X >= 50);
         Assert.IsTrue(box.Y >= 25);
         Assert.IsTrue(box.X + box.Width <= 4300 - 50);
         Assert.IsTrue(box.Y + box.Height <= 2100 - 25);
-        Assert.IsTrue(Math.Abs((double)box.Width / box.Height - 842.0 / 595) < .003);
+        Assert.IsTrue(Math.Abs(((double)box.Width / 600) / ((double)box.Height / 300)
+            - 842.0 / 595) < .003);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
-            PdfNativeGdiPrintLayout.Fit(595, 842, 800, 40, 2, 20));
+            PdfNativeGdiPrintLayout.Fit(595, 842, 800, 40, 2, 20, 600, 300));
     }
 
     [TestMethod]
@@ -66,7 +68,32 @@ public sealed class PdfNativeGdiPrinterTests
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
             PdfNativeGdiPrintLayout.Fit(double.MaxValue, double.Epsilon,
-                2000, 3000, 10, 10));
+                2000, 3000, 10, 10, 300, 300));
+    }
+
+    [TestMethod]
+    public void AnisotropicDpiChangesPixelRatioNotPhysicalPageRatio()
+    {
+        var square = PdfNativeGdiPrintLayout.Fit(
+            595, 842, 4600, 6500, 0, 0, 300, 300);
+        var anisotropic = PdfNativeGdiPrintLayout.Fit(
+            595, 842, 9200, 6500, 0, 0, 600, 300);
+        Assert.IsTrue(Math.Abs((double)square.Width / square.Height -
+            595.0 / 842) < .003);
+        Assert.IsTrue(Math.Abs((double)anisotropic.Width / anisotropic.Height -
+            (595.0 * 600) / (842 * 300)) < .003);
+        Assert.IsTrue(Math.Abs(
+            ((double)anisotropic.Width / 600) / ((double)anisotropic.Height / 300) -
+            595.0 / 842) < .003);
+    }
+
+    [TestMethod]
+    public void InvalidPrinterDpiRejectedBeforeRendering()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            PdfNativeGdiPrintLayout.Fit(595, 842, 2000, 3000, 10, 10, 0, 300));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            PdfNativeGdiPrintLayout.Fit(595, 842, 2000, 3000, 10, 10, 300, 0));
     }
 
     [TestMethod]
