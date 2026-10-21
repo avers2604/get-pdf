@@ -9,9 +9,10 @@ internal sealed record WorkstationPolicy
     public bool AllowPrinting { get; init; } = true;
     // Experimental native GDI print spool path. Default raster print remains.
     public bool AllowNativeGdiPrinting { get; init; } = false;
-    // Corporate privacy controls: paths may disclose internal document names.
-    public bool RememberRecentDocuments { get; init; } = true;
-    public bool RestoreTabs { get; init; } = true;
+    // Internal document paths reveal titles/locations. Persist neither by default;
+    // administrators may explicitly enable each option in the managed policy.
+    public bool RememberRecentDocuments { get; init; } = false;
+    public bool RestoreTabs { get; init; } = false;
     // Independent, opt-in local JSON contract; NEVER includes PDF paths or contents.
     public bool ExportGetSystemStatus { get; init; } = false;
     // Separate GUP-2 browser integration, not GET-system.
