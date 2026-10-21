@@ -41,6 +41,59 @@ public sealed class PdfDocumentWriterSafetyTests
     }
 
     [TestMethod]
+    public void InteractiveAcroFormNeverReachesPageRewrite()
+    {
+        string folder = Path.Combine(Path.GetTempPath(),
+            "getpdf-form-guard-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string source = Path.Combine(folder, "protected.pdf");
+            string output = Path.Combine(folder, "changed.pdf");
+            using (var pdf = new PdfDocument())
+            {
+                pdf.AddPage();
+                var form = new PdfSharp.Pdf.Advanced.PdfDictionary(pdf);
+                pdf.Internals.Catalog.Elements.SetObject("/AcroForm", form);
+                pdf.Save(source);
+            }
+            byte[] before = SHA256.HashData(File.ReadAllBytes(source));
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+                PdfDocumentWriter.SaveAs(source, output, [new PdfPageReference(0)]));
+            CollectionAssert.AreEqual(before, SHA256.HashData(File.ReadAllBytes(source)));
+            Assert.IsFalse(File.Exists(output));
+            Assert.AreEqual(1, Directory.GetFiles(folder).Length);
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    [TestMethod]
+    public void AnnotationBearingPdfIsNeverSilentlyFlattenedByPageRewrite()
+    {
+        string folder = Path.Combine(Path.GetTempPath(),
+            "getpdf-annot-guard-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string source = Path.Combine(folder, "annotated.pdf");
+            string output = Path.Combine(folder, "changed.pdf");
+            using (var pdf = new PdfDocument())
+            {
+                var page = pdf.AddPage();
+                page.Elements.SetObject("/Annots",
+                    new PdfSharp.Pdf.Advanced.PdfArray(pdf));
+                pdf.Save(source);
+            }
+            byte[] before = SHA256.HashData(File.ReadAllBytes(source));
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+                PdfDocumentWriter.SaveAs(source, output, [new PdfPageReference(0)]));
+            CollectionAssert.AreEqual(before, SHA256.HashData(File.ReadAllBytes(source)));
+            Assert.IsFalse(File.Exists(output));
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    [TestMethod]
     public void ExistingOutputIsNeverReplacedByPdfPageWriter()
     {
         string folder = Path.Combine(Path.GetTempPath(),
