@@ -75,6 +75,33 @@ public sealed class PdfTextSelectionTests
     }
 
     [TestMethod]
+    public void ExactCopyLimitDoesNotRejectJoinedGlyphs()
+    {
+        var words = Enumerable.Range(0, 100).Select(_ =>
+            new PdfSelectableWord(new string('Ж', 500),
+                new(.1, .1, .01, .01), JoinWithPrevious: true)).ToArray();
+        var selection = new PdfWordSelection(words);
+        string copy = selection.Extract(0, 99);
+        Assert.AreEqual(PdfWordSelection.MaxCopiedChars, copy.Length);
+        Assert.IsTrue(copy.All(ch => ch == 'Ж'));
+        // A real separator counts towards the same bound.
+        words[99] = words[99] with { JoinWithPrevious = false };
+        Assert.AreEqual("", new PdfWordSelection(words).Extract(0, 99));
+    }
+
+    [TestMethod]
+    public void ExactCopyLimitAllowsSingleWordAndRejectsOneMore()
+    {
+        var words = Enumerable.Range(0, 100).Select(_ =>
+            new PdfSelectableWord(new string('x', 500),
+                new(.1, .1, .01, .01), JoinWithPrevious: true)).ToList();
+        Assert.AreEqual(50000, new PdfWordSelection(words).Extract(0, 99).Length);
+        words.Add(new PdfSelectableWord("x", new(.1, .1, .01, .01),
+            JoinWithPrevious: true));
+        Assert.AreEqual("", new PdfWordSelection(words).Extract(0, 100));
+    }
+
+    [TestMethod]
     public void CancelledWordExtractionDoesNotOpenOrParseAnyPdf()
     {
         using var cancel = new CancellationTokenSource();
