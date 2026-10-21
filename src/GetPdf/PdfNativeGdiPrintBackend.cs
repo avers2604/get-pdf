@@ -158,7 +158,8 @@ internal static class PdfNativeGdiPrintBackend
                     // 1/12 inch safety margin in BOTH physical axes.
                     // Non-square printer resolutions are supported by drivers.
                     var rectangle = PdfNativeGdiPrintLayout.Fit(pageWidth, pageHeight,
-                        w, h, Math.Max(0, dpiX / 12), Math.Max(0, dpiY / 12));
+                        w, h, Math.Max(0, dpiX / 12), Math.Max(0, dpiY / 12),
+                        dpiX, dpiY);
                     if (StartPage(dc) <= 0)
                         throw new Win32Exception(Marshal.GetLastWin32Error(), "Драйвер не смог начать страницу.");
                     FPDF_RenderPage(dc, page, rectangle.X, rectangle.Y,
@@ -191,11 +192,13 @@ internal static class PdfNativeGdiPrintLayout
 {
     internal static PdfNativeGdiRect Fit(
         double pageWidth, double pageHeight, int printableWidth,
-        int printableHeight, int marginXPixels, int marginYPixels)
+        int printableHeight, int marginXPixels, int marginYPixels,
+        int dpiX, int dpiY)
     {
         if (!double.IsFinite(pageWidth) || !double.IsFinite(pageHeight) ||
             pageWidth <= 0 || pageHeight <= 0 || printableWidth < 1 ||
-            printableHeight < 1 || marginXPixels < 0 || marginYPixels < 0)
+            printableHeight < 1 || marginXPixels < 0 || marginYPixels < 0 ||
+            dpiX < 1 || dpiY < 1)
             throw new ArgumentOutOfRangeException(nameof(pageWidth));
         // Fail closed instead of silently discarding user-requested margins
         // when the chosen paper/driver reports a very small printable area.
@@ -205,7 +208,11 @@ internal static class PdfNativeGdiPrintLayout
                 "Поля больше доступной области печати.");
         double usableW = printableWidth - marginXPixels * 2.0;
         double usableH = printableHeight - marginYPixels * 2.0;
-        double aspect = pageWidth / pageHeight;
+        // FPDF_RenderPage takes device PIXELS, not physical dimensions.
+        // Non-square device resolutions require width/height in pixels to be
+        // proportional to (PDF width * dpiX) / (PDF height * dpiY).
+        // Otherwise A4 is stretched on e.g. 600x300 DPI print devices.
+        double aspect = (pageWidth / pageHeight) * ((double)dpiX / dpiY);
         if (!double.IsFinite(aspect) || aspect <= 0)
             throw new ArgumentOutOfRangeException(nameof(pageWidth),
                 "Невозможно определить пропорции PDF-страницы.");
