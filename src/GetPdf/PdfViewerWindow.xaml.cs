@@ -418,7 +418,7 @@ public partial class PdfViewerWindow : UserControl
         var menu = new ContextMenu();
         foreach (string path in PdfRecentDocuments.Read())
         {
-            var item = new MenuItem { Header = Path.GetFileName(path), ToolTip = path };
+            var item = new MenuItem { Header = PdfSafeDisplayName.Normalize(Path.GetFileName(path)), ToolTip = path };
             item.Click += async (_, _) =>
             {
                 if (_closing || _loading) return;
@@ -529,7 +529,7 @@ public partial class PdfViewerWindow : UserControl
                 _draftSourceHash = await Task.Run(() => PdfDraftStore.HashSource(_sourcePath));
                 draftStatus = RestorePdfDraftIfAvailable();
             }
-            DocumentTitle.Text = _displayName ?? Path.GetFileName(path);
+            DocumentTitle.Text = PdfSafeDisplayName.Normalize(_displayName ?? Path.GetFileName(path));
             RefreshList();
             DocumentView.RestoreViewport(_pageIndex, viewState.RelativeOffset, _zoom);
             DocumentReady?.Invoke();
