@@ -212,6 +212,9 @@ internal static class PdfDocumentWriter
     private static void WriteAtomically(string destination, Action<string> write,
         Func<int> expectedPageCount, CancellationToken cancellation)
     {
+        // The low-level writer also serves tests and relative CLI paths.
+        // Normalize once before creating the stage and performing no-overwrite Move.
+        destination = Path.GetFullPath(destination);
         var folder = Path.GetDirectoryName(destination)!;
         Directory.CreateDirectory(folder);
         var temp = Path.Combine(folder, ".getpdf-" + Guid.NewGuid().ToString("N") + ".pdf");
