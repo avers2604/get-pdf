@@ -46,6 +46,30 @@ public sealed class PdfNativeGdiPrinterTests
     }
 
     [TestMethod]
+    public void AnisotropicPrinterDpiPreservesIndependentMargins()
+    {
+        // Simulates 600 DPI horizontally and 300 DPI vertically:
+        // 1/12 inch is 50 and 25 pixels, respectively.
+        var box = PdfNativeGdiPrintLayout.Fit(
+            842, 595, 4300, 2100, marginXPixels: 50, marginYPixels: 25);
+        Assert.IsTrue(box.X >= 50);
+        Assert.IsTrue(box.Y >= 25);
+        Assert.IsTrue(box.X + box.Width <= 4300 - 50);
+        Assert.IsTrue(box.Y + box.Height <= 2100 - 25);
+        Assert.IsTrue(Math.Abs((double)box.Width / box.Height - 842.0 / 595) < .003);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            PdfNativeGdiPrintLayout.Fit(595, 842, 800, 40, 2, 20));
+    }
+
+    [TestMethod]
+    public void ExtremePageAspectRatioIsRejectedRatherThanSilentlyPrintingBlank()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            PdfNativeGdiPrintLayout.Fit(double.MaxValue, double.Epsilon,
+                2000, 3000, 10, 10));
+    }
+
+    [TestMethod]
     public void NativeGdiDisabledUnlessItPolicyAllows()
     {
         var no = WorkstationPolicy.Parse("{\"Version\":1}");
