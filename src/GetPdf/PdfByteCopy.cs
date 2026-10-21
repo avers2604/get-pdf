@@ -23,7 +23,7 @@ internal static class PdfByteCopy
 
         var folder = Path.GetDirectoryName(destination)!;
         Directory.CreateDirectory(folder);
-        var temp = Path.Combine(folder, ".gupscan-copy-" + Guid.NewGuid().ToString("N") + ".pdf");
+        var temp = Path.Combine(folder, ".getpdf-copy-" + Guid.NewGuid().ToString("N") + ".pdf");
         try
         {
             PdfInputCopy.CopySafelyAsync(source, temp,
