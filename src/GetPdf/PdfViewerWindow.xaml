@@ -291,6 +291,11 @@
                 <MenuItem x:Name="NativeDraftUndoItem" Header="Отменить эскиз" Click="NativeDraftUndo_Click"/>
                 <MenuItem x:Name="NativeDraftRedoItem" Header="Повторить эскиз" Click="NativeDraftRedo_Click"/>
                 <MenuItem x:Name="NativeDraftClearItem" Header="Очистить все эскизы" Click="NativeDraftClear_Click"/>
+                <Separator/>
+                <MenuItem x:Name="NativeDraftSaveItem"
+                          Header="Сохранить текстовые комментарии в новый PDF…"
+                          Click="NativeDraftSave_Click"
+                          ToolTip="Только /Text, новая копия; прямоугольники и выделение остаются эскизами"/>
               </ContextMenu>
             </Button.ContextMenu>
           </Button>
