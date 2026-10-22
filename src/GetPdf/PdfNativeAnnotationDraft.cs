@@ -18,7 +18,7 @@ internal sealed record PdfNativeAnnotationDraft(
         Right > Left && Bottom > Top &&
         (Kind == "text"
             ? !string.IsNullOrWhiteSpace(Text) && Text.Length <= 500 &&
-              !Text.Any(c => char.IsControl(c) || char.IsSurrogate(c))
+              !PdfFormFillLabPolicy.HasUnsafeText(Text)
             : Text.Length == 0);
 
     /// <summary>Drag WPF pixels (top-left origin) to a bounded preview rectangle.</summary>
