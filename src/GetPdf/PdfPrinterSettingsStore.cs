@@ -133,7 +133,7 @@ internal static class PdfPrinterSettingsStore
         // and the explicit choices shown to the employee.
         PrintTicket baseTicket = dialog.PrintQueue.DefaultPrintTicket
             ?? throw new NotSupportedException("Драйвер не предоставляет базовый профиль печати.");
-        ValidationResult result = dialog.PrintQueue.MergeAndValidatePrintTicket(
+        System.Printing.ValidationResult result = dialog.PrintQueue.MergeAndValidatePrintTicket(
             baseTicket, ticket, PrintTicketScope.JobScope);
         RejectDriverOverrides(result.ConflictStatus);
         dialog.PrintTicket = result.ValidatedPrintTicket

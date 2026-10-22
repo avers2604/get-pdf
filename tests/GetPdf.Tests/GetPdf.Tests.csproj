@@ -7,5 +7,6 @@
 <ImplicitUsings>enable</ImplicitUsings>
 <IsTestApplication>true</IsTestApplication>
 </PropertyGroup>
+<ItemGroup><Using Include="System.IO"/></ItemGroup>
 <ItemGroup><ProjectReference Include="../../src/GetPdf/GetPdf.csproj"/></ItemGroup>
 </Project>

@@ -45,7 +45,7 @@ try {
     Invoke-Checked $restoreArguments
     Invoke-Checked @('build', $solution, '-c', $Configuration, '--no-restore')
     Invoke-Checked @('test', $testProject, '-c', $Configuration, '--no-restore',
-        '--minimum-expected-tests', '180')
+        '--minimum-expected-tests', '181')
 }
 finally { Pop-Location }
 Write-Host 'Local WPF build and MSTest execution succeeded.'

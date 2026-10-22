@@ -160,6 +160,26 @@ public sealed class PdfNativeTextAnnotationWriterTests
     }
 
     [TestMethod]
+    public void AcceptsPlainXmpButRefusesPdfAConformanceClaim()
+    {
+        static PdfDocument WithXmp(string xmp)
+        {
+            var pdf = new PdfDocument();
+            pdf.AddPage();
+            var metadata = new PdfDictionary(pdf);
+            metadata.CreateStream(System.Text.Encoding.UTF8.GetBytes(xmp));
+            pdf.Internals.AddObject(metadata);
+            pdf.Internals.Catalog.Elements["/Metadata"] = metadata.Reference;
+            return pdf;
+        }
+        using (var plain = WithXmp("<x:xmpmeta><dc:title>ГЭТ</dc:title></x:xmpmeta>"))
+            PdfNativeAnnotationPolicy.EnsureSafeCatalog(plain);
+        using var pdfA = WithXmp("<x:xmpmeta><pdfaid:part>2</pdfaid:part></x:xmpmeta>");
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            PdfNativeAnnotationPolicy.EnsureSafeCatalog(pdfA));
+    }
+
+    [TestMethod]
     public void RefusesUnsignedStructuralEditOnSignedOrInteractiveSource()
     {
         string folder = Path.Combine(Path.GetTempPath(), "getpdf-annotations-" + Guid.NewGuid().ToString("N"));

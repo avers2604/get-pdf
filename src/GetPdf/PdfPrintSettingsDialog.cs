@@ -12,10 +12,15 @@ internal sealed class PdfPrintSettingsDialog : Window
         PdfPrinterSettingsStore.Validate(initial);
         Settings = initial;
         Title = "ГЭТ PDF — параметры печати";
-        Width = 425; Height = 410; MinWidth = 390; MinHeight = 365;
+        // Fixed height clipped the commands under default DPI/fonts; fit content instead.
+        Width = 425; MinWidth = 390; SizeToContent = SizeToContent.Height;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Margin = new Thickness(20) };
         Content = root;
+        var commands = new StackPanel { Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
+        DockPanel.SetDock(commands, Dock.Bottom);
+        root.Children.Add(commands);
         var panel = new StackPanel();
         root.Children.Add(panel);
         panel.Children.Add(new TextBlock
@@ -43,13 +48,10 @@ internal sealed class PdfPrintSettingsDialog : Window
             ToolTip = "Только PDF без правок и наложений; драйверы и векторность требуют проверки"
         };
         panel.Children.Add(nativeGdi);
-        var commands = new StackPanel { Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
         var ok = new Button { Content = "Предпросмотр", MinWidth = 125,
             Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(8) };
         var cancel = new Button { Content = "Отмена", IsCancel = true, Padding = new Thickness(8) };
         commands.Children.Add(ok); commands.Children.Add(cancel);
-        panel.Children.Add(commands);
         ok.Click += (_, _) =>
         {
             if (!int.TryParse(copies.Text, out int n))

@@ -20,7 +20,7 @@ internal static class PdfNativeAnnotationPolicy
     [
         "/AcroForm", "/Perms", "/DSS", "/Names", "/StructTreeRoot",
         "/Collection", "/AF", "/OpenAction", "/AA", "/Outlines",
-        "/OCProperties", "/OutputIntents", "/Metadata", "/PageLabels",
+        "/OCProperties", "/OutputIntents", "/PageLabels",
         "/Encrypt", "/EmbeddedFiles"
     ];
 
@@ -126,8 +126,18 @@ internal static class PdfNativeAnnotationPolicy
     {
         ArgumentNullException.ThrowIfNull(pdf);
         var catalog = pdf.Internals.Catalog;
-        if (UnsafeCatalogKeys.Any(catalog.Elements.ContainsKey))
+        if (UnsafeCatalogKeys.Any(catalog.Elements.ContainsKey) || ClaimsPdfAConformance(catalog))
             throw new InvalidDataException("Неподдерживаемые структуры каталога PDF.");
+    }
+
+    // Plain XMP (PDFsharp writes it into every PDF) is preserved as-is, but a
+    // PDF/A claim must not survive unverified annotation changes.
+    private static bool ClaimsPdfAConformance(PdfDictionary catalog)
+    {
+        if (!catalog.Elements.ContainsKey("/Metadata")) return false;
+        var xmp = catalog.Elements.GetDictionary("/Metadata")?.Stream?.UnfilteredValue;
+        if (xmp is null) return true;
+        return xmp.AsSpan().IndexOf("pdfaid"u8) >= 0;
     }
 
     internal static void ValidateDocument(

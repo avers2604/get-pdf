@@ -43,7 +43,8 @@ public sealed class PdfRenderConcurrencyTests
         using var two = await PdfRenderConcurrency.EnterAsync();
         using var canceled = new CancellationTokenSource();
         canceled.Cancel();
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        // SemaphoreSlim reports cancellation as TaskCanceledException (a subtype).
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
             using var _ = await PdfRenderConcurrency.EnterAsync(canceled.Token);
         });

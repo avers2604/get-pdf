@@ -53,7 +53,7 @@ public sealed class PdfDocumentWriterSafetyTests
             using (var pdf = new PdfDocument())
             {
                 pdf.AddPage();
-                var form = new PdfSharp.Pdf.Advanced.PdfDictionary(pdf);
+                var form = new PdfSharp.Pdf.PdfDictionary(pdf);
                 pdf.Internals.Catalog.Elements.SetObject("/AcroForm", form);
                 pdf.Save(source);
             }
@@ -81,7 +81,7 @@ public sealed class PdfDocumentWriterSafetyTests
             {
                 var page = pdf.AddPage();
                 page.Elements.SetObject("/Annots",
-                    new PdfSharp.Pdf.Advanced.PdfArray(pdf));
+                    new PdfSharp.Pdf.PdfArray(pdf));
                 pdf.Save(source);
             }
             byte[] before = SHA256.HashData(File.ReadAllBytes(source));

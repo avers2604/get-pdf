@@ -39,8 +39,8 @@ public sealed class PdfGetSystemStatusTests
             .Select(property => property.Name).ToHashSet(StringComparer.Ordinal);
         Assert.IsTrue(allowed.SetEquals(actual));
         Assert.IsFalse(json.Contains("C:\\", StringComparison.OrdinalIgnoreCase));
-        Assert.IsFalse(json.Contains("\\"SourcePath\\"", StringComparison.Ordinal));
-        Assert.IsFalse(json.Contains("\\"FileName\\"", StringComparison.Ordinal));
+        Assert.IsFalse(json.Contains("\"SourcePath\"", StringComparison.Ordinal));
+        Assert.IsFalse(json.Contains("\"FileName\"", StringComparison.Ordinal));
     }
 
     [TestMethod]

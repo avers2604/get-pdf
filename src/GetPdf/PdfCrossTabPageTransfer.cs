@@ -34,7 +34,7 @@ internal static class PdfCrossTabPageTransfer
         ArgumentException.ThrowIfNullOrWhiteSpace(copiedFromSource);
         ArgumentNullException.ThrowIfNull(destinationPages);
         ArgumentNullException.ThrowIfNull(copiedPage);
-        if (maxPages < 2)
+        if (maxPages < 1)
             throw new ArgumentOutOfRangeException(nameof(maxPages));
         if (destinationSourcePageCount < 1 || copiedSourcePageCount < 1)
             throw new ArgumentOutOfRangeException(nameof(destinationSourcePageCount));
