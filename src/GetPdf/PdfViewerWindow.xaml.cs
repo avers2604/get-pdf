@@ -998,8 +998,8 @@ public partial class PdfViewerWindow : UserControl
         RectangleModeCheckBox.IsChecked = false;
         NoteModeCheckBox.IsChecked = false;
         StatusText.Text = kind == "text"
-            ? "Щёлкните по странице для комментария. Его можно сохранить отдельной PDF-копией через меню аннотаций."
-            : "Эскиз /Annots: выделите область мышью. НЕ сохраняется в PDF.";
+            ? "Щёлкните по странице для комментария. Сохраните новый PDF через меню аннотаций."
+            : "Выделите область рамки или подсветки. Сохраните новый PDF через меню аннотаций.";
         SetControls();
     }
 
@@ -1007,7 +1007,7 @@ public partial class PdfViewerWindow : UserControl
     {
         _nativeDraftMode = null;
         StatusText.Text = _nativeDrafts.Count > 0
-            ? "Текстовые комментарии можно сохранить через меню аннотаций; рамки и выделения пока только эскизы."
+            ? "Эскизы /Text, /Square и /Highlight можно сохранить как новый PDF через меню аннотаций."
             : "Предпросмотр аннотаций завершён; PDF не изменён.";
         SetControls();
     }
@@ -1190,7 +1190,7 @@ public partial class PdfViewerWindow : UserControl
                         x1, y1, x2, y2, width, height);
                     if (draft is not null) _nativeDrafts.Add(draft);
                     ShowRectangles(_plan.Pages[_pageIndex]);
-                    StatusText.Text = "Эскиз /Annots обновлён. PDF НЕ изменяется и не сохраняет эти эскизы.";
+                    StatusText.Text = "Аннотация добавлена. Для записи выберите «Сохранить аннотации PDF» в меню.";;
                     SetControls();
                 }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -2299,9 +2299,9 @@ public partial class PdfViewerWindow : UserControl
         if (_nativeDrafts.Count > 0)
         {
             MessageBox.Show(HostWindow,
-                "Обычное «Сохранить как» не включает эскизы аннотаций. " +
-                "Текстовые комментарии можно записать отдельно в меню «Аннотации». " +
-                "Рамки и выделения пока нужно убрать. Исходный документ не изменён.",
+                "Обычное «Сохранить как» не включает эскизы интерактивных аннотаций. " +
+                "Сначала сохраните их отдельно через меню «Аннотации», либо очистите. " +
+                "Исходный документ не изменён.",
                 "Аннотации — только эскиз",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
