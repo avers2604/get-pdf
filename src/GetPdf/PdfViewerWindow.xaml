@@ -277,10 +277,10 @@
                     ToolTip="Поставить заметку щелчком на странице; не интерактивная PDF-аннотация"/>
           <Button x:Name="ClearNotesButton" IsEnabled="{Binding CanClearNotes, Mode=OneWay}" Content="Убрать заметки" Click="ClearNotes_Click"
                   Margin="0,0,12,0" ToolTip="Очистить заметки текущей страницы (можно отменить)"/>
-          <Button x:Name="NativeDraftButton" Content="Аннотации · эскиз ▾"
+          <Button x:Name="NativeDraftButton" Content="Аннотации ▾"
                   Click="NativeDraftMenu_Click" Margin="0,0,12,0" IsEnabled="False"
-                  AutomationProperties.Name="Аннотации — только предпросмотр"
-                  ToolTip="Черновик настоящих PDF-аннотаций: в PDF не сохраняется">
+                  AutomationProperties.Name="Аннотации PDF: текстовые комментарии можно сохранить отдельно"
+                  ToolTip="Текстовые комментарии /Text сохраняются в новую копию; рамки и выделения пока только эскизы">
             <Button.ContextMenu>
               <ContextMenu>
                 <MenuItem Header="Комментарий (текст из поля заметки)" Click="NativeDraftText_Click"/>
