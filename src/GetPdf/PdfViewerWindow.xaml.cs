@@ -113,6 +113,8 @@ public partial class PdfViewerWindow : UserControl
             ? Visibility.Visible : Visibility.Collapsed;
         Gup2VerifyShaButton.Visibility = WorkstationPolicy.Current.AllowGup2Portal
             ? Visibility.Visible : Visibility.Collapsed;
+        Gup2DirectReturnButton.Visibility = WorkstationPolicy.Current.AllowGup2DirectReturn
+            ? Visibility.Visible : Visibility.Collapsed;
         PdfJobProgressBar.DataContext = _jobProgress;
         var preferences = PdfWorkspacePreferencesStore.Load();
         ActiveToolIndex = PdfWorkspaceToolGroups.ToIndex(preferences.ActiveTool);
@@ -854,6 +856,8 @@ public partial class PdfViewerWindow : UserControl
         PdfJobProgressBar.Visibility = _workspace.IsJobActive
             ? Visibility.Visible : Visibility.Collapsed;
         var ready = _workspace.IsReady;
+        Gup2DirectReturnButton.IsEnabled = ready && !IsBusy &&
+            WorkstationPolicy.Current.AllowGup2DirectReturn;
         bool hasNativeDrafts = _nativeDrafts.Count > 0;
         NativeDraftButton.IsEnabled = ready &&
             (hasNativeDrafts || (_canModify && CanDrawOnCurrentPage &&
