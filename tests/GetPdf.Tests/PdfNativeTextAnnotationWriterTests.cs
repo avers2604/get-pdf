@@ -107,6 +107,59 @@ public sealed class PdfNativeTextAnnotationWriterTests
     }
 
     [TestMethod]
+    public void RefusesOffsetMediaBoxBeforePublishingNativeShapes()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "getpdf-annot-mediabox-" +
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string original = Path.Combine(folder, "offset.pdf");
+            string output = Path.Combine(folder, "copy.pdf");
+            using (var pdf = new PdfDocument())
+            {
+                var page = pdf.AddPage();
+                page.MediaBox = new PdfRectangle(
+                    new PdfSharp.Drawing.XRect(15, 25, 595, 842));
+                pdf.Save(original);
+            }
+            byte[] hash = SHA256.HashData(File.ReadAllBytes(original));
+            Assert.ThrowsExactly<InvalidDataException>(() =>
+                PdfNativeTextAnnotationWriter.SaveNewCopy(original, output, [
+                    new("square", 0, .1, .1, .4, .4)
+                ]));
+            Assert.IsFalse(File.Exists(output));
+            CollectionAssert.AreEqual(hash, SHA256.HashData(File.ReadAllBytes(original)));
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [TestMethod]
+    public void RefusesNonstandardUserUnitBeforeExport()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "getpdf-annot-units-" +
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string original = Path.Combine(folder, "units.pdf");
+            string output = Path.Combine(folder, "copy.pdf");
+            using (var pdf = new PdfDocument())
+            {
+                var page = pdf.AddPage();
+                page.Elements["/UserUnit"] = new PdfReal(2);
+                pdf.Save(original);
+            }
+            Assert.ThrowsExactly<InvalidDataException>(() =>
+                PdfNativeTextAnnotationWriter.SaveNewCopy(original, output, [
+                    new("highlight", 0, .1, .2, .4, .25)
+                ]));
+            Assert.IsFalse(File.Exists(output));
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [TestMethod]
     public void RefusesUnsignedStructuralEditOnSignedOrInteractiveSource()
     {
         string folder = Path.Combine(Path.GetTempPath(), "getpdf-annotations-" + Guid.NewGuid().ToString("N"));
