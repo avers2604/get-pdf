@@ -160,7 +160,10 @@ internal static class PdfNativeAnnotationPolicy
 
         foreach (var page in pdf.Pages)
         {
-            if (page.Rotate != 0 || page.Elements.ContainsKey("/CropBox") ||
+            // Normalized WPF screen coordinates only map to simple origin-zero
+            // PDFs; offset MediaBox/UserUnit would silently misplace /Rect and
+            // /QuadPoints even though the PDF itself parses successfully.
+            if (!PdfMarkupPolicy.CanPlace(page) ||
                 page.Elements.ContainsKey("/Annots") ||
                 page.Elements.ContainsKey("/AA") ||
                 page.Elements.ContainsKey("/Metadata") ||
