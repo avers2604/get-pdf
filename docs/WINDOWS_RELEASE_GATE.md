@@ -1,6 +1,6 @@
 # ГЭТ PDF — Windows offline build and MSI gate
 
-`scripts/windows-build-msi.ps1` выполняется **только на Windows** в подготовленном стенде. Требуются .NET SDK 10, WiX Toolset 5 и доступ к проверенным локальным NuGet-пакетам. Автоматические GitHub Actions не используются.
+`scripts/windows-build-msi.ps1` выполняется **только на Windows** в подготовленном стенде. Требуются .NET SDK 10, WiX Toolset 5 с расширениями `WixToolset.UI.wixext` и `WixToolset.Util.wixext` (5.0.2) и доступ к проверенным локальным NuGet-пакетам. Подробно: `docs/INSTALLER.md`. Автоматические GitHub Actions не используются.
 
 ```powershell
 pwsh -File .\scripts\windows-build-msi.ps1 -OfflineNuGetFeed 'D:\ApprovedNuGet'
@@ -13,7 +13,7 @@ pwsh -File .\scripts\windows-build-msi.ps1 -OfflineNuGetFeed 'D:\ApprovedNuGet'
 pwsh -File .\scripts\windows-build-msi.ps1 -OfflineNuGetFeed 'D:\ApprovedNuGet' -SignToolPath 'C:\SDK\signtool.exe' -SigningThumbprint 'CERTIFICATE_SHA1_THUMBPRINT'
 ```
 
-**Статус:** сценарий и WiX-описание добавлены в исходники, но в текущем окружении НЕ исполнялись. Факт успешной Windows-сборки, MSBuild/WiX совместимость, установка/обновление/удаление MSI, запуск PDF, подписи и печать ещё не подтверждены. `release-manifest.json` формируется только после успешного локального gate и не является актом аппаратной приёмки.
+**Статус на 22.10.2026:** сценарий выполнен на Windows 11 целиком (181/181 тестов, MSI собран), установка `/passive` и регистрация «Приложения по умолчанию» проверены — см. `docs/INSTALLER.md`. Ниже — исходная оговорка, актуальная для обновления/удаления и оборудования: Факт успешной Windows-сборки, MSBuild/WiX совместимость, установка/обновление/удаление MSI, запуск PDF, подписи и печать ещё не подтверждены. `release-manifest.json` формируется только после успешного локального gate и не является актом аппаратной приёмки.
 
 Проверить дополнительно: EXE/desktop runtime и целостность всего payload, создание ярлыка, ассоциацию «Открыть с помощью», сохранение выбора пользователя, установку и удаление рядом с GUP-Scan, x64 и фактическое время печати. Сервисов и доступа к интернету приложение не требует.
 

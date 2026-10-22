@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Corporate default for .pdf → ГЭТ PDF (Windows 10/11 Enterprise/Pro in a domain).
+  Apply AFTER the MSI is installed, by IT, with one of:
+    • GPO: Computer Configuration › Administrative Templates › Windows Components ›
+      File Explorer › "Set a default associations configuration file" = path to this file;
+    • image servicing: Dism /Online /Import-DefaultAppAssociations:DefaultAppAssociations.xml
+      (affects user profiles created afterwards).
+  ProgId and ApplicationName must match packaging/GetPdf.wxs.
+-->
+<DefaultAssociations>
+  <Association Identifier=".pdf" ProgId="GetPdf.PDF" ApplicationName="ГЭТ PDF" />
+</DefaultAssociations>

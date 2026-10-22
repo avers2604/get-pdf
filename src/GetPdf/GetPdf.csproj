@@ -10,6 +10,8 @@
     <RootNamespace>GetPdf</RootNamespace>
     <Version>0.1.0</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- Exe, window and PDF-file icon: official GET mark (GET Design System 4.1). -->
+    <ApplicationIcon>Assets\get-pdf.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <!-- Official GET mark from GET Design System 4.1 (brandbook p.11, QA-verified). -->

@@ -1,10 +1,16 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <!-- Separate product identity from GUP Scan: installations can coexist. -->
-  <Package Name="ГЭТ PDF" Language="1049" Version="0.1.0.0"
+  <Package Name="ГЭТ PDF" Language="1049" Codepage="1251" Version="0.1.0.0"
            Manufacturer="SPb GUP Gorelektrotrans"
            UpgradeCode="BE5C1496-701B-4ED4-937E-DA3B41C2A770" Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия ГЭТ PDF." />
     <MediaTemplate EmbedCab="yes" />
+
+    <!-- Official GET mark (GET Design System 4.1) for Apps & Features. -->
+    <Icon Id="GetPdfIcon" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="GetPdfIcon" />
+
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="GET PDF" />
     </StandardDirectory>
@@ -15,6 +21,27 @@
     <Files Directory="INSTALLFOLDER" Include="$(var.PublishDir)\**" />
     <ComponentRef Id="GetPdfAssociations" />
     <ComponentRef Id="GetPdfStartMenuShortcut" />
+
+    <!--
+      Interactive install: Welcome → folder → install → finish. No licence page: none is
+      supplied for this internal application. The finish page offers to open Windows
+      "Default apps" directly on GET PDF, because Windows 10/11 only lets the user — never
+      an installer — change the protected default (UserChoice).
+    -->
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <UI>
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2" />
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="OpenDefaultAppsSettings"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT"
+              Value="Открыть «Приложения по умолчанию», чтобы назначить ГЭТ PDF для PDF-файлов" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <!-- Windows 11 22H2+ opens the GET PDF page; older builds open the general Default apps page. -->
+    <Property Id="WixShellExecTarget" Value="ms-settings:defaultapps?registeredAppMachine=GetPdf" />
+    <CustomAction Id="OpenDefaultAppsSettings" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+                  DllEntry="WixShellExec" Impersonate="yes" Return="ignore" />
   </Package>
 
   <Fragment>
@@ -23,23 +50,43 @@
         <!-- Windows 10/11 registers availability, never changes UserChoice. -->
         <RegistryValue Root="HKLM" Key="Software\Classes\GetPdf.PDF"
                        Type="string" Value="PDF-документ ГЭТ" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetPdf.PDF"
+                       Name="FriendlyTypeName" Type="string" Value="PDF-документ ГЭТ" />
         <RegistryValue Root="HKLM" Key="Software\Classes\GetPdf.PDF\DefaultIcon"
                        Type="string" Value="[INSTALLFOLDER]GetPdf.exe,0" />
         <RegistryValue Root="HKLM" Key="Software\Classes\GetPdf.PDF\shell\open\command"
                        Type="string" Value="&quot;[INSTALLFOLDER]GetPdf.exe&quot; &quot;%1&quot;" />
+        <!-- "Open with" list and the "How do you want to open this file?" prompt. -->
+        <RegistryValue Root="HKLM" Key="Software\Classes\.pdf\OpenWithProgids"
+                       Name="GetPdf.PDF" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetPdf.exe"
+                       Name="FriendlyAppName" Type="string" Value="ГЭТ PDF" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetPdf.exe\SupportedTypes"
+                       Name=".pdf" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetPdf.exe\DefaultIcon"
+                       Type="string" Value="[INSTALLFOLDER]GetPdf.exe,0" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetPdf.exe\shell\open\command"
+                       Type="string" Value="&quot;[INSTALLFOLDER]GetPdf.exe&quot; &quot;%1&quot;" />
+        <!-- Settings › Apps › Default apps entry. -->
         <RegistryValue Root="HKLM" Key="Software\GetPdf\Capabilities"
                        Name="ApplicationName" Type="string" Value="ГЭТ PDF" />
         <RegistryValue Root="HKLM" Key="Software\GetPdf\Capabilities"
-                       Name="ApplicationDescription" Type="string" Value="Локальный просмотр и печать PDF" />
+                       Name="ApplicationDescription" Type="string" Value="Локальный просмотр, поиск и печать PDF" />
+        <RegistryValue Root="HKLM" Key="Software\GetPdf\Capabilities"
+                       Name="ApplicationIcon" Type="string" Value="[INSTALLFOLDER]GetPdf.exe,0" />
         <RegistryValue Root="HKLM" Key="Software\GetPdf\Capabilities\FileAssociations"
                        Name=".pdf" Type="string" Value="GetPdf.PDF" />
         <RegistryValue Root="HKLM" Key="Software\RegisteredApplications"
-                       Name="ГЭТ PDF" Type="string" Value="Software\GetPdf\Capabilities" />
+                       Name="GetPdf" Type="string" Value="Software\GetPdf\Capabilities" />
+        <!-- Win+R "GetPdf" and ShellExecute by name. -->
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\GetPdf.exe"
+                       Type="string" Value="[INSTALLFOLDER]GetPdf.exe" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="GetPdfStartMenuFolder">
       <Component Id="GetPdfStartMenuShortcut" Guid="*">
         <Shortcut Id="GetPdfStartMenuEntry" Name="ГЭТ PDF"
+                  Description="Просмотр и печать PDF-документов"
                   Target="[INSTALLFOLDER]GetPdf.exe"
                   WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="GetPdfRemoveStartMenuFolder" On="uninstall" />

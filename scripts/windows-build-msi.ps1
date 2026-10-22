@@ -62,7 +62,12 @@ if ($forbidden) {
     throw 'A scanner/driver worker is included in the PDF publish payload.'
 }
 if (Test-Path -LiteralPath $msi) { Remove-Item -LiteralPath $msi -Force }
-Invoke-Checked 'wix' @('build', '-arch', 'x64', '-d', "PublishDir=$publish",
+# Russian WixUI dialogs (UI ext) and the finish-page "Default apps" launcher (Util ext).
+# Once per machine: wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
+$icon = Join-Path $root 'src\GetPdf\Assets\get-pdf.ico'
+Invoke-Checked 'wix' @('build', '-arch', 'x64', '-culture', 'ru-RU',
+    '-ext', 'WixToolset.UI.wixext', '-ext', 'WixToolset.Util.wixext',
+    '-d', "PublishDir=$publish", '-d', "IconFile=$icon",
     '-o', $msi, $wxs)
 if (-not (Test-Path -LiteralPath $msi -PathType Leaf)) {
     throw 'WiX did not produce an MSI.'
