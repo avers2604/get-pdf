@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.Advanced;
@@ -175,8 +174,7 @@ internal static class PdfNativeTextAnnotationWriter
         {
             double inset = Math.Min(1.5, Math.Min(w, h) / 6);
             commands = FormattableString.Invariant(
-                $"q 0.78 0.063 0.18 RG 1.5 w {inset:0.###} {inset:0.###} " +
-                $"{Math.Max(0, w - 2 * inset):0.###} {Math.Max(0, h - 2 * inset):0.###} re S Q");
+                $"q 0.78 0.063 0.18 RG 1.5 w {inset:0.###} {inset:0.###} {Math.Max(0, w - 2 * inset):0.###} {Math.Max(0, h - 2 * inset):0.###} re S Q");
         }
         appearance.Elements.SetObject("/Resources", resources);
         appearance.CreateStream(Encoding.ASCII.GetBytes(commands));
