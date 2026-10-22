@@ -6,6 +6,33 @@ namespace GetPdf.Tests;
 public sealed class PdfGup2IntegrationTests
 {
     [TestMethod]
+    public void DirectReturnRequiresExplicitITPolicyAndApprovedPortal()
+    {
+        Assert.IsFalse(WorkstationPolicy.Parse("{\"Version\":1}").AllowGup2DirectReturn);
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            WorkstationPolicy.Parse(
+                "{\"Version\":1,\"AllowGup2DirectReturn\":true}"));
+        var policy = WorkstationPolicy.Parse(
+            "{\"Version\":1,\"AllowGup2Portal\":true,\"AllowGup2DirectReturn\":true," +
+            "\"Gup2PortalUrl\":\"https://gup2.internal/documents/\"}");
+        Assert.IsTrue(policy.AllowGup2DirectReturn);
+        Assert.AreEqual("https://gup2.internal/documents/getpdf/direct-return/",
+            Gup2DesktopReturnClient.Destination(policy).AbsoluteUri);
+    }
+
+    [TestMethod]
+    public void UploadCodeSyntaxAndPdfSizeAreStrictlyBounded()
+    {
+        Assert.IsTrue(Gup2DesktopReturnClient.IsValidCode(new string('A', 43)));
+        Assert.IsFalse(Gup2DesktopReturnClient.IsValidCode(new string('A', 42)));
+        Assert.IsFalse(Gup2DesktopReturnClient.IsValidCode(new string('A', 42) + "/"));
+        Assert.IsFalse(Gup2DesktopReturnClient.IsValidCode("русский код"));
+        Assert.IsTrue(Gup2DesktopReturnClient.IsAllowedPdfSize(1024, 256L * 1024 * 1024));
+        Assert.IsFalse(Gup2DesktopReturnClient.IsAllowedPdfSize(0, 256L * 1024 * 1024));
+        Assert.IsFalse(Gup2DesktopReturnClient.IsAllowedPdfSize(256L * 1024 * 1024 + 1, 256L * 1024 * 1024));
+    }
+
+    [TestMethod]
     public void PortalIsDisabledUntilItPolicyExplicitlyOptsIn()
     {
         var policy = WorkstationPolicy.Parse("{\"Version\":1}");
