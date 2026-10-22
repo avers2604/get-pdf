@@ -45,6 +45,68 @@ public sealed class PdfNativeTextAnnotationWriterTests
     }
 
     [TestMethod]
+    public void ExportsSquareAndHighlightWithNormalAppearancesAndQuadPoints()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "getpdf-shapes-" +
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string source = Path.Combine(folder, "source.pdf");
+            string output = Path.Combine(folder, "shapes.pdf");
+            using (var pdf = new PdfDocument()) { pdf.AddPage(); pdf.Save(source); }
+            byte[] digest = SHA256.HashData(File.ReadAllBytes(source));
+            PdfNativeTextAnnotationWriter.SaveNewCopy(source, output, [
+                new("square", 0, .1, .1, .5, .4),
+                new("highlight", 0, .15, .5, .7, .55)
+            ]);
+            CollectionAssert.AreEqual(digest, SHA256.HashData(File.ReadAllBytes(source)));
+            using var checkedPdf = PdfReader.Open(output, PdfDocumentOpenMode.Import);
+            var annots = checkedPdf.Pages[0].Elements.GetObject("/Annots") as PdfArray;
+            Assert.IsNotNull(annots);
+            Assert.AreEqual(2, annots.Elements.Count);
+            var square = annots.Elements[0] as PdfReference;
+            var highlight = annots.Elements[1] as PdfReference;
+            Assert.IsNotNull(square);
+            Assert.IsNotNull(highlight);
+            var sq = (PdfDictionary)square.Value;
+            var hl = (PdfDictionary)highlight.Value;
+            Assert.AreEqual("/Square", sq.Elements.GetName("/Subtype"));
+            Assert.AreEqual("/Highlight", hl.Elements.GetName("/Subtype"));
+            Assert.IsNotNull(sq.Elements.GetDictionary("/AP")?.Elements.GetObject("/N"));
+            Assert.IsNotNull(hl.Elements.GetDictionary("/AP")?.Elements.GetObject("/N"));
+            var quads = hl.Elements.GetObject("/QuadPoints") as PdfArray;
+            Assert.IsNotNull(quads);
+            Assert.AreEqual(8, quads.Elements.Count);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [TestMethod]
+    public void SupportsMixedTextAndSquareHighlightOnSeparatePages()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "getpdf-mixed-" +
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string source = Path.Combine(folder, "source.pdf");
+            string output = Path.Combine(folder, "all.pdf");
+            using (var pdf = new PdfDocument()) { pdf.AddPage(); pdf.AddPage(); pdf.Save(source); }
+            PdfNativeTextAnnotationWriter.SaveNewCopy(source, output, [
+                new("text", 0, .1, .1, .15, .15, "Заметка"),
+                new("square", 0, .25, .25, .45, .5),
+                new("highlight", 1, .2, .2, .75, .25)
+            ]);
+            using var revised = PdfReader.Open(output, PdfDocumentOpenMode.Import);
+            Assert.AreEqual(2, revised.PageCount);
+            Assert.AreEqual(2, ((PdfArray)revised.Pages[0].Elements.GetObject("/Annots")!).Elements.Count);
+            Assert.AreEqual(1, ((PdfArray)revised.Pages[1].Elements.GetObject("/Annots")!).Elements.Count);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [TestMethod]
     public void RefusesUnsignedStructuralEditOnSignedOrInteractiveSource()
     {
         string folder = Path.Combine(Path.GetTempPath(), "getpdf-annotations-" + Guid.NewGuid().ToString("N"));
@@ -71,7 +133,7 @@ public sealed class PdfNativeTextAnnotationWriterTests
     }
 
     [TestMethod]
-    public void NeverOverwriteSourceOrExistingOutputAndRejectsVisualOnlyDraftKinds()
+    public void NeverOverwriteSourceOrExistingOutputAndRejectsInvalidDraftKinds()
     {
         string folder = Path.Combine(Path.GetTempPath(), "getpdf-annotations-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
@@ -88,8 +150,8 @@ public sealed class PdfNativeTextAnnotationWriterTests
                 PdfNativeTextAnnotationWriter.SaveNewCopy(source, output, text));
             Assert.ThrowsExactly<NotSupportedException>(() =>
                 PdfNativeTextAnnotationWriter.SaveNewCopy(source,
-                    Path.Combine(folder, "square.pdf"), [
-                        new("square", 0, .1, .1, .2, .2)
+                    Path.Combine(folder, "unknown.pdf"), [
+                        new("other", 0, .1, .1, .2, .2)
                     ]));
             Assert.AreEqual("Existing work must survive", File.ReadAllText(output));
             Assert.AreEqual(2, Directory.GetFiles(folder).Length);
