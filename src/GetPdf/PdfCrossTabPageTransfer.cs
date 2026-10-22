@@ -52,7 +52,7 @@ internal static class PdfCrossTabPageTransfer
         {
             if (page.SourcePage < 0 || page.SourcePage >= sourceCount)
                 throw new ArgumentOutOfRangeException(nameof(page), "Некорректная исходная страница PDF.");
-            if (page.Rotation != 0 || !string.IsNullOrEmpty(page.Stamp) ||
+            if (page.Rotation != 0 || !string.IsNullOrEmpty(page.Stamp) || page.PageNumber.Length > 0 ||
                 page.Rectangles is { Count: > 0 } || page.Notes is { Count: > 0 })
                 throw new InvalidOperationException(
                     "Сначала сохраните редакторские изменения в отдельный PDF и откройте его снова.");

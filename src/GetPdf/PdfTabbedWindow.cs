@@ -69,7 +69,7 @@ internal sealed partial class PdfTabbedWindow : Window
         var newTab = IconAction("IconPlus", "Новая вкладка", "Новая вкладка (Ctrl+T)", () =>
         {
             if (_registry.Items.Count >= 16)
-                MessageBox.Show(this, "Допускается до 16 вкладок в одном окне.",
+                GetMessageBox.Show(this, "Допускается до 16 вкладок в одном окне.",
                     "ГЭТ PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
             else AddWorkspace(null);
         });
@@ -148,7 +148,7 @@ internal sealed partial class PdfTabbedWindow : Window
     }
 
     private void ShowKeyboardHelp() =>
-        MessageBox.Show(this, PdfKeyboardHelp.Text, "ГЭТ PDF — справка",
+        GetMessageBox.Show(this, PdfKeyboardHelp.Text, "ГЭТ PDF — справка",
             MessageBoxButton.OK, MessageBoxImage.Information);
 
     private static Button IconAction(string icon, string name, string tip, Action action)
@@ -201,7 +201,7 @@ internal sealed partial class PdfTabbedWindow : Window
     {
         if (_registry.Items.Count >= 16)
         {
-            MessageBox.Show(this, "Допускается до 16 вкладок в одном окне.",
+            GetMessageBox.Show(this, "Допускается до 16 вкладок в одном окне.",
                 "ГЭТ PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
             throw new InvalidOperationException("Превышен лимит вкладок PDF.");
         }
@@ -289,7 +289,7 @@ internal sealed partial class PdfTabbedWindow : Window
         {
             if (!PdfOpenRequest.TryParse([path], out var valid) || valid is null)
             {
-                MessageBox.Show(this, "Выберите существующий PDF-файл.",
+                GetMessageBox.Show(this, "Выберите существующий PDF-файл.",
                     "ГЭТ PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
                 continue;
             }
@@ -308,7 +308,7 @@ internal sealed partial class PdfTabbedWindow : Window
             }
             if (_registry.Items.Count >= 16)
             {
-                MessageBox.Show(this, "Достигнут лимит: 16 открытых PDF в окне.",
+                GetMessageBox.Show(this, "Достигнут лимит: 16 открытых PDF в окне.",
                     "ГЭТ PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
                 break;
             }
@@ -368,7 +368,7 @@ internal sealed partial class PdfTabbedWindow : Window
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-tab-close", ex);
-            MessageBox.Show(this, "Не удалось корректно закрыть вкладку.",
+            GetMessageBox.Show(this, "Не удалось корректно закрыть вкладку.",
                 "ГЭТ PDF", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -430,7 +430,7 @@ internal sealed partial class PdfTabbedWindow : Window
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-tab-shutdown", ex);
-            MessageBox.Show(this, "Не удалось закрыть все PDF. Проверьте выполняемые операции.",
+            GetMessageBox.Show(this, "Не удалось закрыть все PDF. Проверьте выполняемые операции.",
                 "ГЭТ PDF", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { _shutdownPending = false; }

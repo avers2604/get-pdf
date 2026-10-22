@@ -30,7 +30,7 @@
     <SolidColorBrush x:Key="AccentSoft" Color="#E6F5F9"/>
 
     <!-- Official GET mark (brandbook p.11, DS QA-verified asset); never redrawn or recoloured. -->
-    <BitmapImage x:Key="GetMark" UriSource="/Assets/get-mark.png"/>
+    <BitmapImage x:Key="GetMark" UriSource="pack://application:,,,/GetPdf;component/Assets/get-mark.png"/>
     <!-- Muted repeated underlay built from the same mark, only behind the document (GET PDF final layout). -->
     <ImageBrush x:Key="WorkspaceUnderlay" ImageSource="{StaticResource GetMark}" Opacity="0.06"
                 TileMode="Tile" Stretch="Uniform" Viewport="0,0,520,400" ViewportUnits="Absolute"
@@ -54,6 +54,10 @@
     <Geometry x:Key="IconArrowUpRight">M7,17 L17,7 M8,7 H17 V16</Geometry>
     <Geometry x:Key="IconArrowLeft">M20,12 H4 M10,6 L4,12 L10,18</Geometry>
     <Geometry x:Key="IconArrowRight">M4,12 H20 M14,6 L20,12 L14,18</Geometry>
+    <!-- Status icons for dialogs: alert-circle and its info/error variants (same circle, same stroke). -->
+    <Geometry x:Key="IconAlert">M3,12 a9,9 0 1 0 18,0 a9,9 0 1 0 -18,0 M12,7 V13 M12,17 H12.01</Geometry>
+    <Geometry x:Key="IconInfo">M3,12 a9,9 0 1 0 18,0 a9,9 0 1 0 -18,0 M12,11 V17 M12,7 H12.01</Geometry>
+    <Geometry x:Key="IconError">M3,12 a9,9 0 1 0 18,0 a9,9 0 1 0 -18,0 M9,9 L15,15 M15,9 L9,15</Geometry>
     <Geometry x:Key="IconHelp">M3,12 a9,9 0 1 0 18,0 a9,9 0 1 0 -18,0 M9.5,9 A2.8,2.8 0 1 1 13.9,11.3 C13,12 12,12.5 12,14 M12,17 H12.01</Geometry>
     <Geometry x:Key="IconColumns">M5,4 H19 A2,2 0 0 1 21,6 V18 A2,2 0 0 1 19,20 H5 A2,2 0 0 1 3,18 V6 A2,2 0 0 1 5,4 Z M10,4 V20</Geometry>
     <Geometry x:Key="IconMonitor">M5,4 H19 A2,2 0 0 1 21,6 V15 A2,2 0 0 1 19,17 H5 A2,2 0 0 1 3,15 V6 A2,2 0 0 1 5,4 Z M8,21 H16 M12,17 V21</Geometry>
@@ -491,6 +495,84 @@
       </Setter>
     </Style>
 
+    <!-- Dropdown menus (Вид страницы, Закладки, Переходы, Недавние, Комментарии PDF): DS card + 36 px rows. -->
+    <Style TargetType="ContextMenu">
+      <Setter Property="FontFamily" Value="Segoe UI"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="HasDropShadow" Value="True"/>
+      <Setter Property="MinWidth" Value="220"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ContextMenu">
+            <!-- Margin leaves room for the soft shadow inside the transparent popup. -->
+            <Border Margin="6,4,6,8" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
+                    BorderThickness="1" CornerRadius="10" Padding="4" SnapsToDevicePixels="True">
+              <Border.Effect>
+                <DropShadowEffect Color="#24305E" BlurRadius="16" ShadowDepth="3" Direction="270" Opacity="0.16"/>
+              </Border.Effect>
+              <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+              </ScrollViewer>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="MenuItem">
+      <Setter Property="FontFamily" Value="Segoe UI"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="MinHeight" Value="36"/>
+      <Setter Property="Padding" Value="10,0,14,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="MenuItem">
+            <Border x:Name="Row" Background="Transparent" CornerRadius="8" Padding="{TemplateBinding Padding}"
+                    MinHeight="{TemplateBinding MinHeight}" SnapsToDevicePixels="True">
+              <Grid VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="24"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Viewbox x:Name="Check" Width="16" Height="16" Visibility="Hidden" HorizontalAlignment="Left">
+                  <Canvas Width="24" Height="24">
+                    <Path Data="{StaticResource IconCheck}" Stroke="{StaticResource Teal}" StrokeThickness="2.25"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                  </Canvas>
+                </Viewbox>
+                <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+              </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Foreground" Value="{StaticResource Navy}"/>
+              </Trigger>
+              <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Row" Property="Background" Value="{StaticResource Subtle}"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource Faint}"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Separator">
+            <Border Height="1" Margin="8,4" Background="{StaticResource Border}"/>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <!-- Thin scrollbars: neutral thumb on a transparent track, no arrow buttons. -->
     <Style x:Key="ScrollThumb" TargetType="Thumb">
       <Setter Property="Background" Value="{StaticResource StrongBorder}"/>
@@ -587,7 +669,7 @@
     <Style x:Key="DocumentToolTabs" TargetType="TabControl">
       <Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="Transparent"/>
       <Setter Property="ItemContainerStyle" Value="{StaticResource DocumentToolTab}"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabControl"><TabPanel IsItemsHost="True" HorizontalAlignment="Left"/></ControlTemplate></Setter.Value></Setter>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabControl"><!-- WrapPanel keeps the group order; TabPanel would move the selected row. --><WrapPanel IsItemsHost="True" HorizontalAlignment="Left"/></ControlTemplate></Setter.Value></Setter>
     </Style>
 
     <!-- Window shell: GET mark + product name, document tabs and "+" in one header row. -->

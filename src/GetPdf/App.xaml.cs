@@ -11,14 +11,14 @@ public partial class App : Application
         catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
         {
             DiagnosticLog.Failure("pdf-policy", ex);
-            MessageBox.Show("Ошибка корпоративной политики ГЭТ PDF. Обратитесь в ИТ-службу.",
+            GetMessageBox.Show("Ошибка корпоративной политики ГЭТ PDF. Обратитесь в ИТ-службу.",
                 "ГЭТ PDF", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(3);
             return;
         }
         if (!WorkstationPolicy.Current.AllowPdfViewer)
         {
-            MessageBox.Show("Просмотр PDF запрещён политикой ИТ-службы.", "ГЭТ PDF");
+            GetMessageBox.Show("Просмотр PDF запрещён политикой ИТ-службы.", "ГЭТ PDF");
             Shutdown(3);
             return;
         }
@@ -38,7 +38,7 @@ public partial class App : Application
             if (e.Args.Length > 16 || e.Args.Any(path =>
                 !PdfOpenRequest.TryParse([path], out _)))
             {
-                MessageBox.Show("Укажите от 1 до 16 существующих PDF-файлов.", "ГЭТ PDF");
+                GetMessageBox.Show("Укажите от 1 до 16 существующих PDF-файлов.", "ГЭТ PDF");
                 Shutdown(2);
                 return;
             }

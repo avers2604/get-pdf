@@ -16,7 +16,7 @@ $tests = Join-Path $root 'tests\GetPdf.Tests\GetPdf.Tests.csproj'
 $publish = Join-Path $root 'dist\win-x64'
 $release = Join-Path $root 'dist\release'
 $wxs = Join-Path $root 'packaging\GetPdf.wxs'
-$msi = Join-Path $release 'GetPdf-0.1.0-win-x64.msi'
+$msi = Join-Path $release 'GetPdf-0.1.1-win-x64.msi'
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'dotnet SDK not found.' }
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) { throw 'WiX Toolset 5 CLI not found.' }
 if ($OfflineNuGetFeed -and -not (Test-Path -LiteralPath $OfflineNuGetFeed -PathType Container)) {
@@ -41,7 +41,7 @@ Invoke-Checked 'dotnet' (@('restore', $tests) + $restores)
 Invoke-Checked 'dotnet' @('build', $project, '-c', 'Release', '-r', 'win-x64', '--no-restore')
 # MSTest.Sdk uses MTP via root global.json. Reject zero/partial discovery.
 Invoke-Checked 'dotnet' @('test', $tests, '-c', 'Release', '--no-restore',
-    '--minimum-expected-tests', '181')
+    '--minimum-expected-tests', '185')
 
 # A dirty publish dir could carry old TWAIN/scan binaries into a new MSI.
 if (Test-Path -LiteralPath $publish) {
@@ -84,7 +84,7 @@ $exeSha = (Get-FileHash -LiteralPath (Join-Path $publish 'GetPdf.exe') -Algorith
 $msiSha = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
 $manifest = [ordered]@{
     product = 'GET-PDF'
-    version = '0.1.0'
+    version = '0.1.1'
     rid = 'win-x64'
     checkedUtc = [DateTime]::UtcNow.ToString('o')
     testedLocally = $true

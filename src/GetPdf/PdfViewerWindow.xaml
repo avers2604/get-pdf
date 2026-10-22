@@ -14,6 +14,18 @@
         <Trigger Property="IsEnabled" Value="False"><Setter Property="Visibility" Value="Collapsed"/></Trigger>
       </Style.Triggers>
     </Style>
+    <!-- Editor inspector: section title + one-line explanation before each command group. -->
+    <Style x:Key="ToolSectionTitle" TargetType="TextBlock" BasedOn="{StaticResource SectionHeading}">
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Margin" Value="0,16,0,2"/>
+    </Style>
+    <Style x:Key="ToolHint" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="TextTrimming" Value="None"/>
+      <Setter Property="Margin" Value="0,0,0,8"/>
+    </Style>
     <Style x:Key="ContextualGhostButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
       <Style.Triggers>
         <Trigger Property="IsEnabled" Value="False"><Setter Property="Visibility" Value="Collapsed"/></Trigger>
@@ -301,82 +313,108 @@
           <StackPanel Orientation="Vertical" VerticalAlignment="Top">
 
             <StackPanel x:Name="MarkupTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed">
-          <TextBlock Text="Текст штампа" Style="{StaticResource FieldLabel}"/>
-          <TextBox x:Name="StampTextBox" IsEnabled="{Binding CanStamp, Mode=OneWay}" Text="КОПИЯ" MaxLength="80" Margin="0,0,0,8"
-                   AutomationProperties.Name="Текст видимого штампа"/>
-          <Button x:Name="StampButton" IsEnabled="{Binding CanStamp, Mode=OneWay}" Content="Штамп" Click="Stamp_Click" Margin="0,0,0,12"
-                  ToolTip="Добавить видимую надпись на текущую страницу; не электронная подпись"/>
-          <CheckBox x:Name="RectangleModeCheckBox" IsEnabled="{Binding CanDrawMarkup, Mode=OneWay}" Content="Красная рамка мышью"
-                    Click="RectangleMode_Click" VerticalAlignment="Center"
-                    ToolTip="Нарисовать векторную рамку. Не PDF-комментарий и не удаление содержимого."/>
-          <Button x:Name="ClearRectanglesButton" IsEnabled="{Binding CanClearRectangles, Mode=OneWay}" Content="Убрать рамки" Click="ClearRectangles_Click"
-                  Margin="0,0,0,12" ToolTip="Удалить рамки с текущей страницы (можно отменить)"/>
-          <TextBlock Text="Текст заметки" Style="{StaticResource FieldLabel}"/>
-          <TextBox x:Name="NoteTextBox" IsEnabled="{Binding CanWriteNotes, Mode=OneWay}" MaxLength="120" Margin="0,0,0,4"
-                   Text="Проверить документ" AutomationProperties.Name="Текст заметки"
-                   ToolTip="Однострочный комментарий до 120 символов"/>
-          <CheckBox x:Name="NoteModeCheckBox" IsEnabled="{Binding CanDrawMarkup, Mode=OneWay}" Content="Заметка мышью" Click="NoteMode_Click"
-                    VerticalAlignment="Center"
-                    ToolTip="Поставить заметку щелчком на странице; не интерактивная PDF-аннотация"/>
-          <Button x:Name="ClearNotesButton" IsEnabled="{Binding CanClearNotes, Mode=OneWay}" Content="Убрать заметки" Click="ClearNotes_Click"
-                  Margin="0,0,0,12" ToolTip="Очистить заметки текущей страницы (можно отменить)"/>
-          <Button x:Name="NativeDraftButton" Content="Аннотации ▾"
-                  Click="NativeDraftMenu_Click" Margin="0,0,0,12" IsEnabled="False"
-                  AutomationProperties.Name="Аннотации PDF: комментарии, рамки и выделения сохраняются в отдельную копию"
-                  ToolTip="Сохранение /Text, /Square и /Highlight в новый PDF после проверки структуры документа">
-            <Button.ContextMenu>
-              <ContextMenu>
-                <MenuItem Header="Комментарий (текст из поля заметки)" Click="NativeDraftText_Click"/>
-                <MenuItem Header="Рамка мышью" Click="NativeDraftSquare_Click"/>
-                <MenuItem Header="Выделение мышью" Click="NativeDraftHighlight_Click"/>
-                <MenuItem Header="Завершить рисование" Click="NativeDraftStop_Click"/>
-                <Separator/>
-                <MenuItem x:Name="NativeDraftUndoItem" Header="Отменить эскиз" Click="NativeDraftUndo_Click"/>
-                <MenuItem x:Name="NativeDraftRedoItem" Header="Повторить эскиз" Click="NativeDraftRedo_Click"/>
-                <MenuItem x:Name="NativeDraftClearItem" Header="Очистить все эскизы" Click="NativeDraftClear_Click"/>
-                <Separator/>
-                <MenuItem x:Name="NativeDraftSaveItem"
-                          Header="Сохранить аннотации PDF в новый файл…"
-                          Click="NativeDraftSave_Click"
-                          ToolTip="Новый PDF с настоящими /Text, /Square и /Highlight; оригинал остаётся неизменным"/>
-              </ContextMenu>
-            </Button.ContextMenu>
-          </Button>
+              <TextBlock Style="{StaticResource ToolHint}" Margin="0,0,0,4"
+                         Text="Пометки видны сразу и впечатываются в новый файл при «Сохранить изменения…». Исходный файл не меняется."/>
+              <TextBlock Text="Штамп" Style="{StaticResource ToolSectionTitle}"/>
+              <TextBlock Style="{StaticResource ToolHint}" Text="Надпись в левом верхнем углу текущей страницы, например «КОПИЯ»."/>
+              <TextBox x:Name="StampTextBox" IsEnabled="{Binding CanStamp, Mode=OneWay}" Text="КОПИЯ" MaxLength="80" Margin="0,0,0,8"
+                       AutomationProperties.Name="Текст видимого штампа"/>
+              <WrapPanel>
+                <Button x:Name="StampButton" IsEnabled="{Binding CanStamp, Mode=OneWay}" Content="Поставить штамп" Click="Stamp_Click"
+                        Margin="0,0,8,0" ToolTip="Добавить надпись на текущую страницу; это не электронная подпись"/>
+                <Button Content="Убрать" Style="{StaticResource GhostButton}" IsEnabled="{Binding CanStamp, Mode=OneWay}"
+                        Click="ClearStamp_Click" ToolTip="Убрать штамп с текущей страницы"/>
+              </WrapPanel>
+              <TextBlock Text="Красная рамка" Style="{StaticResource ToolSectionTitle}"/>
+              <TextBlock Style="{StaticResource ToolHint}" Text="Включите и обведите нужную область на странице мышью."/>
+              <CheckBox x:Name="RectangleModeCheckBox" IsEnabled="{Binding CanDrawMarkup, Mode=OneWay}" Content="Рисовать рамку"
+                        Checked="RectangleMode_Click" Unchecked="RectangleMode_Click" VerticalAlignment="Center"
+                        ToolTip="Векторная рамка. Не PDF-комментарий и не удаление содержимого."/>
+              <Button x:Name="ClearRectanglesButton" Style="{StaticResource GhostButton}" HorizontalAlignment="Left"
+                      IsEnabled="{Binding CanClearRectangles, Mode=OneWay}" Content="Убрать рамки на странице" Click="ClearRectangles_Click"
+                      ToolTip="Удалить рамки с текущей страницы (можно отменить)"/>
+              <TextBlock Text="Заметка" Style="{StaticResource ToolSectionTitle}"/>
+              <TextBlock Style="{StaticResource ToolHint}" Text="Напишите текст, включите режим и щёлкните на странице, где поставить заметку."/>
+              <TextBox x:Name="NoteTextBox" IsEnabled="{Binding CanWriteNotes, Mode=OneWay}" MaxLength="120" Margin="0,0,0,4"
+                       Text="Проверить документ" AutomationProperties.Name="Текст заметки"
+                       ToolTip="Одна строка до 120 символов"/>
+              <CheckBox x:Name="NoteModeCheckBox" IsEnabled="{Binding CanDrawMarkup, Mode=OneWay}" Content="Ставить заметку щелчком" Checked="NoteMode_Click" Unchecked="NoteMode_Click"
+                        VerticalAlignment="Center"
+                        ToolTip="Жёлтая заметка поверх страницы; не интерактивный PDF-комментарий"/>
+              <Button x:Name="ClearNotesButton" Style="{StaticResource GhostButton}" HorizontalAlignment="Left"
+                      IsEnabled="{Binding CanClearNotes, Mode=OneWay}" Content="Убрать заметки на странице" Click="ClearNotes_Click"
+                      ToolTip="Очистить заметки текущей страницы (можно отменить)"/>
+              <TextBlock Text="Комментарии PDF" Style="{StaticResource ToolSectionTitle}"/>
+              <TextBlock Style="{StaticResource ToolHint}"
+                         Text="Настоящие комментарии, которые видны в Acrobat и других программах. Сохраняются только в новый файл."/>
+              <Button x:Name="NativeDraftButton" Content="Комментарии PDF ▾" HorizontalAlignment="Left"
+                      Click="NativeDraftMenu_Click" IsEnabled="False"
+                      AutomationProperties.Name="Комментарии PDF: текст, рамки и выделения сохраняются в отдельную копию"
+                      ToolTip="Сохранение /Text, /Square и /Highlight в новый PDF после проверки структуры документа">
+                <Button.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Комментарий (текст из поля «Заметка»)" Click="NativeDraftText_Click"/>
+                    <MenuItem Header="Рамка мышью" Click="NativeDraftSquare_Click"/>
+                    <MenuItem Header="Выделение мышью" Click="NativeDraftHighlight_Click"/>
+                    <MenuItem Header="Завершить рисование" Click="NativeDraftStop_Click"/>
+                    <Separator/>
+                    <MenuItem x:Name="NativeDraftUndoItem" Header="Отменить эскиз" Click="NativeDraftUndo_Click"/>
+                    <MenuItem x:Name="NativeDraftRedoItem" Header="Повторить эскиз" Click="NativeDraftRedo_Click"/>
+                    <MenuItem x:Name="NativeDraftClearItem" Header="Очистить все эскизы" Click="NativeDraftClear_Click"/>
+                    <Separator/>
+                    <MenuItem x:Name="NativeDraftSaveItem"
+                              Header="Сохранить комментарии в новый PDF…"
+                              Click="NativeDraftSave_Click"
+                              ToolTip="Новый PDF с настоящими /Text, /Square и /Highlight; оригинал остаётся неизменным"/>
+                  </ContextMenu>
+                </Button.ContextMenu>
+              </Button>
             </StackPanel>
             <StackPanel x:Name="PageTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed">
-          <Button Content="Пронумеровать страницы…" Click="NumberAllPages_Click" Margin="0,0,0,8"/>
-          <Button Content="Разделить по страницам…" Click="SplitIntoPages_Click" Margin="0,0,0,8"/>
-          <Button x:Name="CrossTabPageCopyButton" Content="Копировать страницу в другой PDF…"
-                  Click="CopyPageToTab_Click" Margin="0,0,0,8"
-                  ToolTip="Создать новый PDF из страниц другой вкладки и этой страницы; оригиналы не меняются"/>
-          <WrapPanel Margin="0,0,0,8">
-            <WrapPanel.Resources>
-              <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                <Setter Property="Margin" Value="0,0,6,6"/>
-              </Style>
-            </WrapPanel.Resources>
-            <Button Content="↶ 90°" Click="RotateLeft_Click" ToolTip="Повернуть страницу влево"/>
-            <Button Content="↷ 90°" Click="RotateRight_Click" ToolTip="Повернуть страницу вправо"/>
-            <Button Content="↑" Click="MoveUp_Click" ToolTip="Передвинуть страницу выше" AutomationProperties.Name="Переместить страницу выше"/>
-            <Button Content="↓" Click="MoveDown_Click" ToolTip="Передвинуть страницу ниже" AutomationProperties.Name="Переместить страницу ниже"/>
-            <Button Content="Дублировать" Click="Duplicate_Click"/>
-            <Button Content="Удалить" Style="{StaticResource DangerButton}" Click="Delete_Click" ToolTip="Удалить текущую страницу из черновика (можно отменить)"/>
-          </WrapPanel>
-          <Button x:Name="ExtractButton" IsEnabled="{Binding CanExtract, Mode=OneWay}" Content="Извлечь страницу" Click="Extract_Click" Margin="0,0,0,12"
-                  ToolTip="Сохранить текущую страницу в отдельный PDF"/>
-          <TextBlock Text="Диапазон страниц" Style="{StaticResource FieldLabel}"/>
-          <TextBox x:Name="PageRangeBox" IsEnabled="{Binding CanSetPageRange, Mode=OneWay}" Text="1" Margin="0,0,0,8"
-                   ToolTip="Номера страниц для извлечения, например: 1-3, 5, 10-12"
-                   AutomationProperties.Name="Диапазон страниц"/>
-          <Button x:Name="ExtractRangeButton" IsEnabled="{Binding CanExtract, Mode=OneWay}" Content="Извлечь диапазон…" Click="ExtractRange_Click"
-                  ToolTip="Извлечь указанные страницы в отдельный PDF"/>
-          <!-- Legacy page commands kept for existing bindings/automation; the WrapPanel above is the visible set. -->
-          <Button x:Name="RotateLeftButton" IsEnabled="{Binding CanRotate, Mode=OneWay}" Content="↶ 90°" Click="RotateLeft_Click" Visibility="Collapsed"/>
-          <Button x:Name="RotateRightButton" IsEnabled="{Binding CanRotate, Mode=OneWay}" Content="↷ 90°" Click="RotateRight_Click" Visibility="Collapsed"/>
-          <Button x:Name="MoveUpButton" IsEnabled="{Binding CanMoveUp, Mode=OneWay}" Content="↑" Click="MoveUp_Click" Visibility="Collapsed"/>
-          <Button x:Name="MoveDownButton" IsEnabled="{Binding CanMoveDown, Mode=OneWay}" Content="↓" Click="MoveDown_Click" Visibility="Collapsed"/>
-          <Button x:Name="DuplicateButton" IsEnabled="{Binding CanDuplicate, Mode=OneWay}" Content="Дублировать" Click="Duplicate_Click" Visibility="Collapsed"/>
-          <Button x:Name="DeleteButton" IsEnabled="{Binding CanDelete, Mode=OneWay}" Content="Удалить страницу" Click="Delete_Click" Visibility="Collapsed"/>
+              <StackPanel.Resources>
+                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                  <Setter Property="Margin" Value="0,0,0,8"/>
+                  <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                </Style>
+              </StackPanel.Resources>
+              <TextBlock Text="Текущая страница" Style="{StaticResource ToolSectionTitle}" Margin="0,0,0,6"/>
+              <WrapPanel Margin="0,0,0,4">
+                <WrapPanel.Resources>
+                  <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                    <Setter Property="Margin" Value="0,0,6,6"/>
+                  </Style>
+                </WrapPanel.Resources>
+                <Button Content="↶ 90°" Click="RotateLeft_Click" ToolTip="Повернуть страницу влево" AutomationProperties.Name="Повернуть влево"/>
+                <Button Content="↷ 90°" Click="RotateRight_Click" ToolTip="Повернуть страницу вправо" AutomationProperties.Name="Повернуть вправо"/>
+                <Button Content="↑" Click="MoveUp_Click" ToolTip="Передвинуть страницу выше" AutomationProperties.Name="Переместить страницу выше"/>
+                <Button Content="↓" Click="MoveDown_Click" ToolTip="Передвинуть страницу ниже" AutomationProperties.Name="Переместить страницу ниже"/>
+                <Button Content="Дублировать" Click="Duplicate_Click" ToolTip="Вставить копию страницы следом"/>
+                <Button Content="Удалить" Style="{StaticResource DangerButton}" Click="Delete_Click" ToolTip="Удалить текущую страницу из черновика (можно отменить)"/>
+              </WrapPanel>
+              <Button x:Name="ExtractButton" IsEnabled="{Binding CanExtract, Mode=OneWay}" Content="Извлечь страницу в PDF…" Click="Extract_Click"
+                      ToolTip="Сохранить текущую страницу в отдельный PDF"/>
+              <Button x:Name="CrossTabPageCopyButton" Content="Копировать в другой PDF…"
+                      Click="CopyPageToTab_Click"
+                      ToolTip="Собрать новый PDF из страниц другой вкладки и этой страницы; оригиналы не меняются"/>
+              <TextBlock Text="Весь документ" Style="{StaticResource ToolSectionTitle}" Margin="0,8,0,6"/>
+              <Button Content="Пронумеровать страницы…" Click="NumberAllPages_Click"
+                      ToolTip="Номера внизу или вверху страниц: 1, «1 из N» или «Страница 1 из N»"/>
+              <Button Content="Разделить на отдельные PDF…" Click="SplitIntoPages_Click"
+                      ToolTip="Каждая страница — отдельный файл в выбранной папке"/>
+              <TextBlock Text="Извлечь диапазон" Style="{StaticResource ToolSectionTitle}" Margin="0,8,0,2"/>
+              <TextBlock Style="{StaticResource ToolHint}" Text="Номера через запятую и дефис, например: 1-3, 5, 10-12"/>
+              <TextBox x:Name="PageRangeBox" IsEnabled="{Binding CanSetPageRange, Mode=OneWay}" Text="1" Margin="0,0,0,8"
+                       ToolTip="Номера страниц для извлечения, например: 1-3, 5, 10-12"
+                       AutomationProperties.Name="Диапазон страниц"/>
+              <Button x:Name="ExtractRangeButton" IsEnabled="{Binding CanExtract, Mode=OneWay}" Content="Сохранить диапазон в PDF…" Click="ExtractRange_Click"
+                      ToolTip="Извлечь указанные страницы в отдельный PDF"/>
+              <!-- Legacy page commands kept for existing bindings/automation; the WrapPanel above is the visible set. -->
+              <Button x:Name="RotateLeftButton" IsEnabled="{Binding CanRotate, Mode=OneWay}" Content="↶ 90°" Click="RotateLeft_Click" Visibility="Collapsed"/>
+              <Button x:Name="RotateRightButton" IsEnabled="{Binding CanRotate, Mode=OneWay}" Content="↷ 90°" Click="RotateRight_Click" Visibility="Collapsed"/>
+              <Button x:Name="MoveUpButton" IsEnabled="{Binding CanMoveUp, Mode=OneWay}" Content="↑" Click="MoveUp_Click" Visibility="Collapsed"/>
+              <Button x:Name="MoveDownButton" IsEnabled="{Binding CanMoveDown, Mode=OneWay}" Content="↓" Click="MoveDown_Click" Visibility="Collapsed"/>
+              <Button x:Name="DuplicateButton" IsEnabled="{Binding CanDuplicate, Mode=OneWay}" Content="Дублировать" Click="Duplicate_Click" Visibility="Collapsed"/>
+              <Button x:Name="DeleteButton" IsEnabled="{Binding CanDelete, Mode=OneWay}" Content="Удалить страницу" Click="Delete_Click" Visibility="Collapsed"/>
             </StackPanel>
             <StackPanel x:Name="DocumentTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed">
               <StackPanel.Resources>
@@ -385,46 +423,43 @@
                   <Setter Property="HorizontalContentAlignment" Value="Left"/>
                 </Style>
               </StackPanel.Resources>
-          <Button Content="Копировать текст текущей страницы" Click="CopyPageText_Click"
-                  ToolTip="Копирует распознанный текст страницы в буфер обмена; только по вашему запросу"/>
-          <Button Content="Оптимизировать PDF (qpdf)…" Click="OptimizePdf_Click"
-                  ToolTip="Создать отдельную оптимизированную копию без обработки изображений с потерями"/>
-          <Button Content="Сравнить с другим PDF…" Click="ComparePdf_Click"
-                  ToolTip="Сравнение по извлечённому тексту; изображения и графика не анализируются"/>
-          <Button x:Name="VerifyPdfSignaturesButton" Content="Проверить электронные подписи…"
-                  IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
-                  Click="VerifyPdfSignatures_Click"
-                  ToolTip="Автономная криптографическая проверка и локальная цепочка Windows, без внешних запросов"/>
-          <Button x:Name="FillTextFormButton" Content="Заполнить текстовую форму…"
-                  IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
-                  Click="FillTextForm_Click"
-                  ToolTip="Только простые неподписанные текстовые AcroForm. Сохранение в новый PDF."/>
-          <Button x:Name="Gup2VerifyShaButton" Content="Сверить SHA-256 с GUP-2…"
-                  Visibility="Collapsed" IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
-                  Click="Gup2VerifySha_Click"
-                  ToolTip="Сверить неизменённый скачанный PDF с хешем WORM-оригинала из карточки GUP-2"/>
-          <Button x:Name="Gup2DirectReturnButton"
-                  Content="Отправить PDF-копию в GUP-2…"
-                  Visibility="Collapsed" IsEnabled="False"
-                  Click="Gup2DirectReturn_Click"
-                  AutomationProperties.Name="Загрузить подготовленную PDF-копию по одноразовому коду GUP-2"
-                  ToolTip="Только с разрешения ИТ. Использует пяти-минутный код из GUP-2 и HTTPS без cookies браузера"/>
-          <Button x:Name="PdfStructureButton" Content="Состав PDF…" Click="PdfStructure_Click"
-                  IsEnabled="False"
-                  ToolTip="Только сведения о полях и аннотациях без их содержимого; не проверка цифровой подписи"
-                  AutomationProperties.Name="Состав PDF и интерактивные элементы"/>
-          <Button x:Name="MergeButton" IsEnabled="{Binding CanMerge, Mode=OneWay}" Content="Объединить…" Click="Merge_Click"
-                  ToolTip="Сохранить объединённый документ как новый PDF"/>
-          <Button x:Name="OcrButton" IsEnabled="{Binding CanOcr, Mode=OneWay}" Content="Распознать текст (OCR)…" Click="Ocr_Click" ToolTip="Создать PDF с текстовым слоем: локальное распознавание rus+eng"/>
-          <TextBlock Text="Страницы для печати" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
-          <TextBox x:Name="PrintPageRangeBox" IsEnabled="{Binding CanPrint, Mode=OneWay}" Text="1" Margin="0,0,0,8"
-                   ToolTip="Страницы для печати: например, 1-3, 5"
-                   AutomationProperties.Name="Номера страниц для печати"/>
-          <Button x:Name="PrintRangeButton" IsEnabled="{Binding CanPrint, Mode=OneWay}" Content="Печать диапазона…" Click="PrintRange_Click"
-                  controls:Ui.Icon="{StaticResource IconPrinter}"
-                  ToolTip="Печатать только номера страниц из поля «Страницы для печати»"/>
-          <Button x:Name="PrintButton" IsEnabled="{Binding CanPrint, Mode=OneWay}" Content="Печать документа…" Click="Print_Click"
-                  controls:Ui.Icon="{StaticResource IconPrinter}" ToolTip="Печать всего видимого PDF"/>
+              <TextBlock Style="{StaticResource ToolHint}" Margin="0,0,0,4"
+                         Text="Результат каждой команды — новый файл. Открытый документ не меняется."/>
+              <TextBlock Text="Собрать и преобразовать" Style="{StaticResource ToolSectionTitle}" Margin="0,8,0,6"/>
+              <Button x:Name="MergeButton" IsEnabled="{Binding CanMerge, Mode=OneWay}" Content="Объединить с другими PDF…" Click="Merge_Click"
+                      ToolTip="Добавить в конец страницы других PDF и сохранить общий файл"/>
+              <Button x:Name="OcrButton" IsEnabled="{Binding CanOcr, Mode=OneWay}" Content="Распознать текст (OCR)…" Click="Ocr_Click"
+                      ToolTip="Для сканов: создать PDF, в котором можно искать и копировать текст (русский и английский)"/>
+              <Button x:Name="OptimizePdfButton" Content="Сжать PDF без потери качества…" Click="OptimizePdf_Click"
+                      ToolTip="Пережать структуру PDF утилитой qpdf (если установлена ИТ-службой); изображения не ухудшаются"/>
+              <TextBlock Text="Проверить" Style="{StaticResource ToolSectionTitle}" Margin="0,8,0,6"/>
+              <Button Content="Сравнить с другим PDF…" Click="ComparePdf_Click"
+                      ToolTip="Сравнение по тексту страниц; изображения и графика не сравниваются"/>
+              <Button x:Name="VerifyPdfSignaturesButton" Content="Проверить подписи…"
+                      IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
+                      Click="VerifyPdfSignatures_Click"
+                      ToolTip="Проверка подписей и цепочки сертификатов Windows без обращения в интернет"/>
+              <Button x:Name="PdfStructureButton" Content="Состав PDF…" Click="PdfStructure_Click"
+                      IsEnabled="False"
+                      ToolTip="Какие поля, комментарии и подписи есть в файле (без их содержимого)"
+                      AutomationProperties.Name="Состав PDF и интерактивные элементы"/>
+              <TextBlock Text="Текст и формы" Style="{StaticResource ToolSectionTitle}" Margin="0,8,0,6"/>
+              <Button Content="Копировать текст страницы" Click="CopyPageText_Click"
+                      ToolTip="Скопировать текст текущей страницы в буфер обмена"/>
+              <Button x:Name="FillTextFormButton" Content="Заполнить поля формы…"
+                      IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
+                      Click="FillTextForm_Click"
+                      ToolTip="Только для PDF-бланков с полями ввода (AcroForm). Заполненная форма сохраняется в новый PDF."/>
+              <Button x:Name="Gup2VerifyShaButton" Content="Сверить SHA-256 с GUP-2…"
+                      Visibility="Collapsed" IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
+                      Click="Gup2VerifySha_Click"
+                      ToolTip="Сверить неизменённый скачанный PDF с хешем WORM-оригинала из карточки GUP-2"/>
+              <Button x:Name="Gup2DirectReturnButton"
+                      Content="Отправить PDF-копию в GUP-2…"
+                      Visibility="Collapsed" IsEnabled="False"
+                      Click="Gup2DirectReturn_Click"
+                      AutomationProperties.Name="Загрузить подготовленную PDF-копию по одноразовому коду GUP-2"
+                      ToolTip="Только с разрешения ИТ. Использует пяти-минутный код из GUP-2 и HTTPS без cookies браузера"/>
             </StackPanel>
           </StackPanel>
         </ScrollViewer>

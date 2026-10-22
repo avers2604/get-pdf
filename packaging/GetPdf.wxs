@@ -1,7 +1,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <!-- Separate product identity from GUP Scan: installations can coexist. -->
-  <Package Name="ГЭТ PDF" Language="1049" Codepage="1251" Version="0.1.0.0"
+  <Package Name="ГЭТ PDF" Language="1049" Codepage="1251" Version="0.1.1.0"
            Manufacturer="SPb GUP Gorelektrotrans"
            UpgradeCode="BE5C1496-701B-4ED4-937E-DA3B41C2A770" Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия ГЭТ PDF." />
@@ -52,8 +52,9 @@
                        Type="string" Value="PDF-документ ГЭТ" KeyPath="yes" />
         <RegistryValue Root="HKLM" Key="Software\Classes\GetPdf.PDF"
                        Name="FriendlyTypeName" Type="string" Value="PDF-документ ГЭТ" />
+        <!-- Document icon (sheet + red "PDF" band), distinct from the application icon. -->
         <RegistryValue Root="HKLM" Key="Software\Classes\GetPdf.PDF\DefaultIcon"
-                       Type="string" Value="[INSTALLFOLDER]GetPdf.exe,0" />
+                       Type="string" Value="[INSTALLFOLDER]pdf-document.ico" />
         <RegistryValue Root="HKLM" Key="Software\Classes\GetPdf.PDF\shell\open\command"
                        Type="string" Value="&quot;[INSTALLFOLDER]GetPdf.exe&quot; &quot;%1&quot;" />
         <!-- "Open with" list and the "How do you want to open this file?" prompt. -->

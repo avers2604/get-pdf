@@ -14,7 +14,7 @@ internal sealed class PdfThumbnailItem(int index, PdfPageReference reference) : 
     public int SourcePage { get; } = reference.SourcePage;
     public int Rotation { get; } = reference.Rotation;
     public string Label => $"Страница {Index + 1}";
-    public bool HasMarkup { get; } = reference.Stamp.Length > 0 ||
+    public bool HasMarkup { get; } = reference.Stamp.Length > 0 || reference.PageNumber.Length > 0 ||
         reference.Rectangles is { Count: > 0 } || reference.Notes is { Count: > 0 };
     public string AnnotationLabel => HasMarkup ? "Есть разметка" : string.Empty;
     public (int SourcePage, int Rotation) CacheKey => (SourcePage, Rotation);

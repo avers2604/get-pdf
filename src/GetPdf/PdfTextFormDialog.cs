@@ -62,7 +62,7 @@ internal sealed class PdfTextFormDialog : Window
             try { PdfTextFormService.ValidateValues(filled); }
             catch (ArgumentException)
             {
-                MessageBox.Show(this, "Заполните хотя бы одно поле одной строкой " +
+                GetMessageBox.Show(this, "Заполните хотя бы одно поле одной строкой " +
                     "длиной не более 512 символов.", "Проверка AcroForm",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;

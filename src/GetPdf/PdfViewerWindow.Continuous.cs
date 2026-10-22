@@ -7,11 +7,13 @@ namespace GetPdf;
 
 public partial class PdfViewerWindow
 {
-    // Keep stored legacy tool preferences stable while presenting the agreed tab order.
+    // Tab order (Просмотр, Разметка, Страницы, Документ, Текст) equals the stored tool IDs
+    // (search, markup, pages, document, text). A former remapping showed the wrong panel
+    // under "Разметка", "Документ" and "Текст".
     private int ActiveToolIndex
     {
-        get => PdfToolModeBox.SelectedIndex switch { 1 => 4, 3 => 1, 4 => 3, var value => value };
-        set => PdfToolModeBox.SelectedIndex = value switch { 4 => 1, 1 => 3, 3 => 4, _ => value };
+        get => PdfToolModeBox.SelectedIndex;
+        set => PdfToolModeBox.SelectedIndex = value;
     }
     private ScrollViewer PdfPreviewScroll => DocumentView.Scroll;
     private Size[] _sourcePageSizes = [];
@@ -19,9 +21,12 @@ public partial class PdfViewerWindow
     private long _continuousRevision;
     private int _displayedPageIndex = -1;
     private string? _displayedFingerprint;
+    private readonly PdfPageNumberOverlay _activePageNumber = new();
     private void InitializeContinuousView()
     {
         ActivePageParking.Children.Remove(PageVisual);
+        Panel.SetZIndex(_activePageNumber, 3);
+        PageVisual.Children.Add(_activePageNumber);
         DocumentView.ActivePageContent = PageVisual;
         DocumentView.DecoratePage = DecorateContinuousPage;
         DocumentView.CurrentPageChanged += index =>
@@ -54,6 +59,7 @@ public partial class PdfViewerWindow
             if (_textSelectionMode) await EnsureSelectionWordsAsync();
             StampPreview.Text = reference.Stamp;
             StampPreview.Visibility = string.IsNullOrWhiteSpace(reference.Stamp) ? Visibility.Collapsed : Visibility.Visible;
+            _activePageNumber.Set(reference.PageNumber, reference.NumberPosition);
             EmptyMessage.Visibility = Visibility.Collapsed;
             await RefreshPageSearchHighlightAsync(index, reference, bitmap.Width, bitmap.Height);
         };
@@ -86,6 +92,12 @@ public partial class PdfViewerWindow
             Canvas.SetLeft(shape, draft.Left * bitmap.Width); Canvas.SetTop(shape, draft.Top * bitmap.Height); canvas.Children.Add(shape);
         }
         grid.Children.Add(canvas);
+        if (page.PageNumber.Length > 0)
+        {
+            var number = new PdfPageNumberOverlay();
+            number.Set(page.PageNumber, page.NumberPosition);
+            grid.Children.Add(number);
+        }
         if (page.Stamp.Length > 0) grid.Children.Add(new TextBlock { Text = page.Stamp, Margin = new(27), FontSize = 18,
             FontWeight = FontWeights.Bold, Foreground = Brushes.DarkRed, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false });
         return grid;
@@ -121,10 +133,15 @@ public partial class PdfViewerWindow
             var reference = references[index];
             var image = await store.GetPageAsync(reference.SourcePage, cancellation);
             cancellation.ThrowIfCancellationRequested();
-            BitmapSource bitmap = PdfPreviewRenderer.RenderBounded(image);
-            if (reference.Rotation != 0) bitmap = new TransformedBitmap(bitmap, new RotateTransform(reference.Rotation));
-            bitmap.Freeze();
-            return bitmap;
+            // Decode/scale the multi-megapixel raster off the UI thread; only the frozen
+            // result crosses back, so fast scrolling never waits on it.
+            return await Task.Run(() =>
+            {
+                BitmapSource bitmap = PdfPreviewRenderer.RenderBounded(image);
+                if (reference.Rotation != 0) bitmap = new TransformedBitmap(bitmap, new RotateTransform(reference.Rotation));
+                bitmap.Freeze();
+                return bitmap;
+            }, cancellation);
         }, ++_continuousRevision);
     }
 }

@@ -10,8 +10,8 @@ wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
 .\scripts\windows-build-msi.ps1
 ```
 
-Скрипт выполняет restore → build → MSTest (порог 181) → чистый self-contained publish →
-`wix build` (`-culture ru-RU`) и пишет `dist\release\GetPdf-0.1.0-win-x64.msi` и `release-manifest.json`.
+Скрипт выполняет restore → build → MSTest (порог 185) → чистый self-contained publish →
+`wix build` (`-culture ru-RU`) и пишет `dist\release\GetPdf-0.1.1-win-x64.msi` и `release-manifest.json`.
 
 ## Что делает установщик
 
@@ -27,7 +27,11 @@ wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
 - На последней странице включён флажок «Открыть „Приложения по умолчанию“…». На Windows 11 22H2+
   он открывает страницу ГЭТ PDF (`ms-settings:defaultapps?registeredAppMachine=GetPdf`), на более
   старых версиях — общую страницу «Приложения по умолчанию».
-- Иконка exe, окон и PDF-файлов — официальный знак ГЭТ (`src/GetPdf/Assets/get-pdf.ico`, собран из `get-mark.png`).
+- Иконка программы — инверсный знак ГЭТ из брендбука на корпоративном тёмно-синем
+  (`src/GetPdf/Assets/get-pdf.ico`, из `get-mark-inverse.png`): читается и на светлой, и на тёмной панели задач.
+- Иконка PDF-файлов отдельная: лист с загнутым углом, красная плашка «PDF» и маленький знак ГЭТ
+  (`pdf-document.ico` рядом с exe, на неё ссылается ProgID).
+- Версия 0.1.1 ставится поверх 0.1.0 (MajorUpgrade).
 
 ## Как сделать ГЭТ PDF приложением по умолчанию
 
@@ -44,10 +48,10 @@ Windows 10/11 защищает выбор приложения по умолча
 Тихая установка для развёртывания (без мастера и без открытия параметров):
 
 ```bat
-msiexec /i GetPdf-0.1.0-win-x64.msi /qn /l*v getpdf-install.log
+msiexec /i GetPdf-0.1.1-win-x64.msi /qn /l*v getpdf-install.log
 ```
 
-Удаление: «Параметры › Приложения» или `msiexec /x GetPdf-0.1.0-win-x64.msi /qn`.
+Удаление: «Параметры › Приложения» или `msiexec /x GetPdf-0.1.1-win-x64.msi /qn`.
 Регистрация удаляется вместе с программой.
 
 ## Проверено (22.10.2026, Windows 11, 125 % DPI)
@@ -62,3 +66,10 @@ msiexec /i GetPdf-0.1.0-win-x64.msi /qn /l*v getpdf-install.log
 Не проверено: интерактивный мастер с кликами по страницам, обновление поверх предыдущей версии
 (MajorUpgrade), удаление, применение `DefaultAppAssociations.xml` через GPO/DISM,
 Authenticode-подпись MSI.
+
+## Необязательные компоненты, которые ставит ИТ-служба
+
+- **Сжатие PDF (qpdf):** `tools\qpdf\qpdf.exe` и утверждённый `qpdf.sha256` рядом с GetPdf.exe.
+  Без них команда «Сжать PDF без потери качества…» скрыта.
+- **OCR:** `tessdata\rus.traineddata` и `tessdata\eng.traineddata` рядом с GetPdf.exe.
+  Без них команда «Распознать текст (OCR)…» скрыта.

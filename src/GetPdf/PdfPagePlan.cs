@@ -30,7 +30,12 @@ public sealed record PdfPageReference(
     IReadOnlyList<PdfTextNote>? Notes = null)
 {
     public Guid Id { get; init; } = Guid.NewGuid();
+    /// <summary>Visible page-number label ("" = none). Independent of <see cref="Stamp"/>.</summary>
+    public string PageNumber { get; init; } = "";
+    public PdfPageNumberPosition NumberPosition { get; init; }
 }
+
+public enum PdfPageNumberPosition { BottomCenter, BottomRight, TopRight }
 
 public sealed class PdfPagePlan
 {
@@ -89,7 +94,7 @@ public sealed class PdfPagePlan
         {
             if (_pages.Count != _originalPageCount) return true;
             for (int i = 0; i < _pages.Count; i++)
-                if (_pages[i].SourcePage != i || _pages[i].Rotation != 0 || _pages[i].Stamp.Length != 0 || _pages[i].Rectangles is { Count: > 0 } ||
+                if (_pages[i].SourcePage != i || _pages[i].Rotation != 0 || _pages[i].Stamp.Length != 0 || _pages[i].PageNumber.Length != 0 || _pages[i].Rectangles is { Count: > 0 } ||
                     _pages[i].Notes is { Count: > 0 })
                     return true;
             return false;
@@ -124,6 +129,21 @@ public sealed class PdfPagePlan
             throw new ArgumentException("Штамп допускает до 80 печатных символов в одной строке.", nameof(text));
         _pages[index] = _pages[index] with { Stamp = stamp };
     }
+
+    /// <summary>Set (non-empty label) or clear (null/"") the visible page number of every page.</summary>
+    public void SetPageNumbers(Func<int, string?> labelForIndex, PdfPageNumberPosition position)
+    {
+        ArgumentNullException.ThrowIfNull(labelForIndex);
+        if (!Enum.IsDefined(position)) throw new ArgumentOutOfRangeException(nameof(position));
+        var labels = Enumerable.Range(0, _pages.Count).Select(i => (labelForIndex(i) ?? "").Trim()).ToArray();
+        if (labels.Any(label => !IsValidPageNumber(label)))
+            throw new ArgumentException("Номер страницы допускает до 40 печатных символов.", nameof(labelForIndex));
+        for (int i = 0; i < _pages.Count; i++)
+            _pages[i] = _pages[i] with { PageNumber = labels[i], NumberPosition = position };
+    }
+
+    internal static bool IsValidPageNumber(string? label) =>
+        label is not null && label.Length <= 40 && !label.Any(char.IsControl);
 
     /// <summary>Add a visible rectangle to the selected source-page reference.</summary>
     public void AddRectangle(int index, PdfRectangleMarkup rectangle)
@@ -203,6 +223,8 @@ public sealed class PdfPagePlan
                 throw new ArgumentException("Недопустимый поворот страницы.", nameof(snapshot));
             if (item.Stamp is null || item.Stamp.Length > 80 || item.Stamp.Any(char.IsControl))
                 throw new ArgumentException("Недопустимый текст штампа.", nameof(snapshot));
+            if (!IsValidPageNumber(item.PageNumber) || !Enum.IsDefined(item.NumberPosition))
+                throw new ArgumentException("Недопустимый номер страницы.", nameof(snapshot));
             if (item.Rectangles is { Count: > 128 } || item.Rectangles?.Any(r => r is null || !r.IsValid) == true)
                 throw new ArgumentException("Недопустимая векторная разметка страницы.", nameof(snapshot));
             if (item.Notes is { Count: > 32 } || item.Notes?.Any(n => n is null || !n.IsValid) == true)

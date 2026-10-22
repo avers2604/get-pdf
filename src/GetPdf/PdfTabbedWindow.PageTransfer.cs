@@ -17,7 +17,7 @@ internal sealed partial class PdfTabbedWindow
     {
         if (_shutdownPending || source.GetCleanTransferSnapshot() is null)
         {
-            MessageBox.Show(this, "Для переноса нужны открытые PDF без несохранённых изменений. " +
+            GetMessageBox.Show(this, "Для переноса нужны открытые PDF без несохранённых изменений. " +
                 "Сначала сохраните копию и заново откройте её.",
                 "Копирование страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -65,7 +65,7 @@ internal sealed partial class PdfTabbedWindow
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-cross-insert-target-load", ex);
-            MessageBox.Show(this, "Не удалось открыть PDF назначения.",
+            GetMessageBox.Show(this, "Не удалось открыть PDF назначения.",
                 "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -74,7 +74,7 @@ internal sealed partial class PdfTabbedWindow
         var into = destination.GetWritableTransferSnapshot();
         if (from is null || into is null)
         {
-            MessageBox.Show(this, "Исходный PDF должен быть без несохранённых правок, " +
+            GetMessageBox.Show(this, "Исходный PDF должен быть без несохранённых правок, " +
                 "а документ назначения — доступен для редактирования.",
                 "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -83,11 +83,11 @@ internal sealed partial class PdfTabbedWindow
             PdfCrossTabPageTransfer.FindPageById(from.Pages, id) : from.SelectedPageIndex;
         if (at < 0 || at >= from.Pages.Length)
         {
-            MessageBox.Show(this, "Исходная страница была удалена или изменена.",
+            GetMessageBox.Show(this, "Исходная страница была удалена или изменена.",
                 "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (MessageBox.Show(this,
+        if (GetMessageBox.Show(this,
             $"Вставить страницу {at + 1} из «{System.IO.Path.GetFileName(from.OriginalPath)}» " +
             $"после страницы {into.SelectedPageIndex + 1} «{System.IO.Path.GetFileName(into.OriginalPath)}»? " +
             "Это изменит только черновик вкладки назначения. Ctrl+Z отменит вставку, " +
@@ -108,7 +108,7 @@ internal sealed partial class PdfTabbedWindow
             latestFrom.SelectedPageIndex < 0 ||
             latestInto.SelectedPageIndex != into.SelectedPageIndex)
         {
-            MessageBox.Show(this, "Один из документов изменился. Повторите перенос.",
+            GetMessageBox.Show(this, "Один из документов изменился. Повторите перенос.",
                 "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -130,13 +130,13 @@ internal sealed partial class PdfTabbedWindow
         }
         catch (OperationCanceledException)
         {
-            MessageBox.Show(this, "Вставка отменена. Оригиналы не изменены.",
+            GetMessageBox.Show(this, "Вставка отменена. Оригиналы не изменены.",
                 "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-cross-insert", ex);
-            MessageBox.Show(this, "Не удалось вставить страницу. Черновик сохранён " +
+            GetMessageBox.Show(this, "Не удалось вставить страницу. Черновик сохранён " +
                 "без изменений, если подготовка была прервана.",
                 "Вставка страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -156,7 +156,7 @@ internal sealed partial class PdfTabbedWindow
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-cross-tab-target-open", ex);
-            MessageBox.Show(this, "Не удалось открыть PDF назначения.",
+            GetMessageBox.Show(this, "Не удалось открыть PDF назначения.",
                 "Копирование страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -166,7 +166,7 @@ internal sealed partial class PdfTabbedWindow
         var targetState = destination.GetCleanTransferSnapshot();
         if (sourceState is null || targetState is null)
         {
-            MessageBox.Show(this, "Оба PDF должны быть открыты без несохранённых изменений. " +
+            GetMessageBox.Show(this, "Оба PDF должны быть открыты без несохранённых изменений. " +
                 "Сохраните копии документов и откройте их повторно.",
                 "Копирование страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -177,7 +177,7 @@ internal sealed partial class PdfTabbedWindow
             : sourceState.SelectedPageIndex;
         if (sourcePageIndex < 0 || sourcePageIndex >= sourceState.Pages.Length)
         {
-            MessageBox.Show(this, "Выбранная страница больше не существует.",
+            GetMessageBox.Show(this, "Выбранная страница больше не существует.",
                 "Копирование страницы", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -191,7 +191,7 @@ internal sealed partial class PdfTabbedWindow
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            MessageBox.Show(this, ex.Message, "Копирование страницы",
+            GetMessageBox.Show(this, ex.Message, "Копирование страницы",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -210,11 +210,11 @@ internal sealed partial class PdfTabbedWindow
             [sourceState.OriginalPath, targetState.OriginalPath,
              sourceState.WorkingPath, targetState.WorkingPath], out string warning))
         {
-            MessageBox.Show(this, warning, "Копирование страницы",
+            GetMessageBox.Show(this, warning, "Копирование страницы",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (MessageBox.Show(this,
+        if (GetMessageBox.Show(this,
             $"Вставить страницу {sourcePageIndex + 1} из «{System.IO.Path.GetFileName(sourceState.OriginalPath)}» " +
             $"после страницы {targetState.SelectedPageIndex + 1} документа «{System.IO.Path.GetFileName(targetState.OriginalPath)}»? " +
             "Будет создан отдельный PDF. Подписи, формы и интерактивные элементы " +
@@ -243,13 +243,13 @@ internal sealed partial class PdfTabbedWindow
         }
         catch (OperationCanceledException)
         {
-            MessageBox.Show(this, "Копирование страницы отменено. Оригиналы не изменены.",
+            GetMessageBox.Show(this, "Копирование страницы отменено. Оригиналы не изменены.",
                 "Копирование страницы", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-cross-tab-page-copy", ex);
-            MessageBox.Show(this, "Не удалось создать PDF. Возможны ограничения структуры " +
+            GetMessageBox.Show(this, "Не удалось создать PDF. Возможны ограничения структуры " +
                 "документа, нехватка места или отсутствие доступа к файлу. " +
                 "Оригиналы не изменены.", "Копирование страницы",
                 MessageBoxButton.OK, MessageBoxImage.Warning);

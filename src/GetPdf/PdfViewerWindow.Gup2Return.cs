@@ -18,7 +18,7 @@ public partial class PdfViewerWindow
             string.Equals(target, _originalSourceCopyPath, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(target, _sourcePath, StringComparison.OrdinalIgnoreCase))
         {
-            MessageBox.Show(HostWindow,
+            GetMessageBox.Show(HostWindow,
                 "Выберите отдельную сохранённую PDF-копию, а не исходный документ.",
                 "Возврат в GUP-2", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -39,7 +39,7 @@ public partial class PdfViewerWindow
             }, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
             StatusText.Text = "GUP-2 принял копию на обработку. Проверьте WORM-статус в карточке.";
-            MessageBox.Show(HostWindow,
+            GetMessageBox.Show(HostWindow,
                 "PDF-копия принята сервером GUP-2 на обработку. " +
                 "Это НЕ подтверждение переноса в WORM или юридической новой редакции. " +
                 "Откройте карточку документа в браузере и проверьте результат.",
@@ -54,7 +54,7 @@ public partial class PdfViewerWindow
         {
             DiagnosticLog.Failure("gup2-direct-return", ex);
             StatusText.Text = "Возврат копии не подтверждён сервером GUP-2.";
-            MessageBox.Show(HostWindow,
+            GetMessageBox.Show(HostWindow,
                 "GUP-2 не подтвердил приём PDF. Код мог истечь или быть использован, " +
                 "либо изменились права, WORM-оригинал или версия карточки. " +
                 "Проверьте документ и получите новый одноразовый код.",

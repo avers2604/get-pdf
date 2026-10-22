@@ -48,7 +48,7 @@ public partial class PdfViewerWindow
                                    or System.IO.IOException)
         {
             DiagnosticLog.Failure("gup2-browser-handoff", ex);
-            MessageBox.Show(HostWindow,
+            GetMessageBox.Show(HostWindow,
                 "Не удалось открыть GUP-2. Проверьте HTTPS-адрес корпоративного " +
                 "портала и доступность браузера.",
                 "GUP-2", MessageBoxButton.OK, MessageBoxImage.Warning);

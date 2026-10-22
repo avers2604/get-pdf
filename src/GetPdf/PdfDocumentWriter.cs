@@ -150,7 +150,8 @@ internal static class PdfDocumentWriter
             bool hasStamp = !string.IsNullOrEmpty(planned.Stamp);
             bool hasRectangles = planned.Rectangles is { Count: > 0 };
             bool hasNotes = planned.Notes is { Count: > 0 };
-            if (hasStamp || hasRectangles || hasNotes)
+            bool hasNumber = planned.PageNumber.Length > 0;
+            if (hasStamp || hasRectangles || hasNotes || hasNumber)
             {
                 // PDFsharp may reject opening a second XGraphics context for the
                 // same output page. Paint every visible overlay in one pass.
@@ -161,6 +162,8 @@ internal static class PdfDocumentWriter
                     DrawVectorRectangles(graphics, page, planned.Rectangles!);
                 if (hasNotes)
                     DrawTextNotes(graphics, page, planned.Notes!);
+                if (hasNumber)
+                    DrawPageNumber(graphics, page, planned.PageNumber, planned.NumberPosition);
             }
         }
     }
@@ -173,6 +176,22 @@ internal static class PdfDocumentWriter
         graphics.DrawString(stamp, font, XBrushes.DarkRed,
             new XRect(20, 20, Math.Max(30, page.Width.Point - 40), 38),
             XStringFormats.TopLeft);
+    }
+
+    /// <summary>Plain page number (Arial 10, dark grey) — not a stamp, never red.</summary>
+    private static void DrawPageNumber(XGraphics graphics, PdfPage page, string label,
+        PdfPageNumberPosition position)
+    {
+        if (!PdfPagePlan.IsValidPageNumber(label))
+            throw new ArgumentException("Недопустимый номер страницы.", nameof(label));
+        double width = page.Width.Point, height = page.Height.Point, margin = 28;
+        var box = position == PdfPageNumberPosition.TopRight
+            ? new XRect(margin, margin - 12, Math.Max(30, width - margin * 2), 16)
+            : new XRect(margin, height - margin - 4, Math.Max(30, width - margin * 2), 16);
+        var format = position == PdfPageNumberPosition.BottomCenter
+            ? XStringFormats.TopCenter : XStringFormats.TopRight;
+        graphics.DrawString(label, new XFont("Arial", 10, XFontStyleEx.Regular),
+            new XSolidBrush(XColor.FromArgb(0x33, 0x33, 0x33)), box, format);
     }
 
     private static void DrawVectorRectangles(XGraphics graphics, PdfPage page, IReadOnlyList<PdfRectangleMarkup> rectangles)

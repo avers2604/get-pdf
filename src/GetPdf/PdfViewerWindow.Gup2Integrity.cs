@@ -25,7 +25,7 @@ public partial class PdfViewerWindow
             if (equal)
             {
                 StatusText.Text = "SHA-256 совпал с указанным хешем GUP-2.";
-                MessageBox.Show(HostWindow,
+                GetMessageBox.Show(HostWindow,
                     "SHA-256 загруженного оригинала совпадает с указанным хешем GUP-2. " +
                     "Это проверка байтовой целостности, а не прав доступа, подписи или юридической силы.",
                     "ГЭТ PDF ↔ GUP-2", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -33,7 +33,7 @@ public partial class PdfViewerWindow
             else
             {
                 StatusText.Text = "SHA-256 НЕ совпал. Возможен другой файл или другая редакция.";
-                MessageBox.Show(HostWindow,
+                GetMessageBox.Show(HostWindow,
                     "SHA-256 НЕ СОВПАЛ. Не загружайте этот файл обратно в GUP-2 и " +
                     "сверьте оригинал с карточкой документа.",
                     "ГЭТ PDF ↔ GUP-2", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -46,7 +46,7 @@ public partial class PdfViewerWindow
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             DiagnosticLog.Failure("gup2-pdf-hash-check", ex);
-            MessageBox.Show(HostWindow,
+            GetMessageBox.Show(HostWindow,
                 "Невозможно проверить локальный PDF: файл недоступен либо размер превышает лимит.",
                 "ГЭТ PDF ↔ GUP-2", MessageBoxButton.OK, MessageBoxImage.Warning);
         }

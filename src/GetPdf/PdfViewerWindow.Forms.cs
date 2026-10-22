@@ -10,7 +10,7 @@ public partial class PdfViewerWindow
         if (_sourcePath is null || _loading || _closing || _rendering) return;
         if (HasPendingChanges)
         {
-            MessageBox.Show(HostWindow, "Сначала сохраните текущие правки отдельно " +
+            GetMessageBox.Show(HostWindow, "Сначала сохраните текущие правки отдельно " +
                 "или отмените изменения: заполнение формы работает только с неизменённым PDF.",
                 "Заполнение формы", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -63,10 +63,20 @@ public partial class PdfViewerWindow
         {
             StatusText.Text = "Заполнение формы отменено. Исходный PDF не изменён.";
         }
+        catch (NotSupportedException ex)
+        {
+            // Not a failure: the document simply is not a fillable form (or uses unsupported fields).
+            StatusText.Text = "В этом PDF нет поддерживаемых полей формы.";
+            GetMessageBox.Show(HostWindow, ex.Message + "\n\n" +
+                "Команда работает с PDF-бланками, в которых есть поля ввода (AcroForm) — например, " +
+                "формы из Acrobat или Word с полями. Для обычного документа используйте «Заметку» " +
+                "или «Штамп» на вкладке «Разметка».",
+                "Заполнение формы", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             DiagnosticLog.Failure("pdf-fill-form", ex);
-            MessageBox.Show(HostWindow, "Не удалось безопасно сохранить форму. " +
+            GetMessageBox.Show(HostWindow, "Не удалось безопасно сохранить форму. " +
                 "Возможно, у неё неподдерживаемая структура либо не удалось " +
                 "пересоздать визуальное представление текста. Исходный PDF не изменён.",
                 "Заполнение формы", MessageBoxButton.OK, MessageBoxImage.Warning);

@@ -16,7 +16,7 @@ public partial class PdfViewerWindow
         if (_plan.HasChanges || !string.Equals(_sourcePath, _originalSourceCopyPath,
                 StringComparison.OrdinalIgnoreCase))
         {
-            MessageBox.Show(HostWindow,
+            GetMessageBox.Show(HostWindow,
                 "Сначала сохраните или отмените изменения страниц. " +
                 "Интерактивные комментарии можно добавить только к неизменённому составу PDF.",
                 "Сохранение PDF-аннотаций", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -52,7 +52,7 @@ public partial class PdfViewerWindow
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             DiagnosticLog.Failure("pdf-native-comment-export", ex);
-            MessageBox.Show(HostWindow,
+            GetMessageBox.Show(HostWindow,
                 "Не удалось проверить или сохранить интерактивные аннотации PDF. " +
                 "Оригинал не изменён. Выберите другой простой PDF без форм, " +
                 "подписей, действий и существующих аннотаций.",

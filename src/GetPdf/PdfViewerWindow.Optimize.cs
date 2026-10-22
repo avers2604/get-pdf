@@ -10,7 +10,7 @@ public partial class PdfViewerWindow
         if (_loading || _closing || !_canModify || _sourcePath is null || _plan is null) return;
         if (_plan.HasChanges)
         {
-            MessageBox.Show(HostWindow,
+            GetMessageBox.Show(HostWindow,
                 "Сначала сохраните изменения в отдельный файл и откройте его. " +
                 "Оптимизация не должна терять несохранённые операции.",
                 "Оптимизация PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -38,7 +38,7 @@ public partial class PdfViewerWindow
         {
             DiagnosticLog.Failure("pdf-optimize", ex);
             StatusText.Text = "Оптимизация не завершена. Исходный PDF не изменён.";
-            MessageBox.Show(HostWindow, ex.Message, "Оптимизация PDF",
+            GetMessageBox.Show(HostWindow, ex.Message, "Оптимизация PDF",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally { _batchCancel = null; _loading = false; SetControls(); }

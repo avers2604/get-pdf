@@ -84,7 +84,7 @@ internal static class PdfNativeGdiPrintBackend
     {
         if (pages.Count is < 1 or > 1000) return false;
         return pages.All(p => p is not null && p.Rotation == 0 &&
-            string.IsNullOrEmpty(p.Stamp) &&
+            string.IsNullOrEmpty(p.Stamp) && p.PageNumber.Length == 0 &&
             p.Rectangles is not { Count: > 0 } &&
             p.Notes is not { Count: > 0 });
     }

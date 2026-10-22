@@ -90,18 +90,19 @@ public partial class PdfViewerWindow
     {
         if (!_workspace.CanEdit || _plan is null) return;
         int count = _plan.Pages.Count;
-        bool existing = _plan.Pages.Any(p => p.Stamp.Length > 0);
-        string question = existing
-            ? "На некоторых страницах уже есть штампы. Заменить их нумерацией всех страниц?"
-            : "Добавить номера на все страницы? Их можно отменить (Ctrl+Z).";
-        if (MessageBox.Show(HostWindow, question, "Нумерация PDF",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        ApplyEdit(p =>
+        bool existing = _plan.Pages.Any(p => p.PageNumber.Length > 0);
+        var dialog = new PdfPageNumberingDialog(count, existing) { Owner = HostWindow };
+        if (dialog.ShowDialog() != true) return;
+        if (dialog.RemoveRequested)
         {
-            for (int i = 0; i < count; i++)
-                p.SetStamp(i, PdfBatchPageLabels.Number(i + 1, count));
-        });
-        StatusText.Text = "Номера добавлены к черновику; сохраните отдельную копию PDF.";
+            ApplyEdit(p => p.SetPageNumbers(_ => null, PdfPageNumberPosition.BottomCenter));
+            StatusText.Text = "Нумерация убрана из черновика.";
+            return;
+        }
+        var options = dialog.Options!;
+        // Numbers are separate from stamps: existing stamps stay untouched.
+        ApplyEdit(p => p.SetPageNumbers(i => PdfPageNumbering.Label(i, count, options), options.Position));
+        StatusText.Text = "Страницы пронумерованы. Нажмите «Сохранить изменения…», чтобы записать PDF.";
     }
 
     private async void CopyPageText_Click(object sender, RoutedEventArgs e)
@@ -139,7 +140,7 @@ public partial class PdfViewerWindow
         var pages = _plan.Pages.ToArray();
         if (pages.Length > PdfSplitPageNaming.MaxPerOperation)
         {
-            MessageBox.Show(HostWindow, $"За один раз можно разделить не более {PdfSplitPageNaming.MaxPerOperation} страниц.",
+            GetMessageBox.Show(HostWindow, $"За один раз можно разделить не более {PdfSplitPageNaming.MaxPerOperation} страниц.",
                 "Разделение PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -150,11 +151,11 @@ public partial class PdfViewerWindow
         var outputs = PdfSplitPageNaming.Plan(dialog.FileName, pages.Length);
         if (outputs.Any(File.Exists))
         {
-            MessageBox.Show(HostWindow, "Один или несколько файлов уже существуют. Укажите другое имя префикса.",
+            GetMessageBox.Show(HostWindow, "Один или несколько файлов уже существуют. Укажите другое имя префикса.",
                 "Разделение PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (MessageBox.Show(HostWindow, $"Создать {pages.Length} отдельных PDF? Исходный файл не меняется.",
+        if (GetMessageBox.Show(HostWindow, $"Создать {pages.Length} отдельных PDF? Исходный файл не меняется.",
             "Разделение PDF", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
         using var cancel = new CancellationTokenSource();
@@ -189,7 +190,7 @@ public partial class PdfViewerWindow
             }
             StatusText.Text = "Разделение не завершено. Созданные файлы по возможности удалены.";
             if (ex is not OperationCanceledException)
-                MessageBox.Show(HostWindow, "Разделить документ не удалось. Проверьте свободное место и права на папку.",
+                GetMessageBox.Show(HostWindow, "Разделить документ не удалось. Проверьте свободное место и права на папку.",
                     "Разделение PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally { _batchCancel = null; _loading = false; SetControls(); }

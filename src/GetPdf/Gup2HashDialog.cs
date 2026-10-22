@@ -41,7 +41,7 @@ internal sealed class Gup2HashDialog : Window
             string raw = field.Text.Trim();
             if (raw.Length != 64 || !raw.All(Uri.IsHexDigit))
             {
-                MessageBox.Show(this, "Укажите 64 символа SHA-256 из карточки GUP-2.",
+                GetMessageBox.Show(this, "Укажите 64 символа SHA-256 из карточки GUP-2.",
                     "Проверка SHA-256", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }

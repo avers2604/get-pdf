@@ -8,14 +8,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>GetPdf</AssemblyName>
     <RootNamespace>GetPdf</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <!-- Exe, window and PDF-file icon: official GET mark (GET Design System 4.1). -->
+    <!-- Exe/window icon: brandbook inverse GET mark on corporate navy, legible on light and dark taskbars. -->
     <ApplicationIcon>Assets\get-pdf.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <!-- Official GET mark from GET Design System 4.1 (brandbook p.11, QA-verified). -->
     <Resource Include="Assets\get-mark.png" />
+    <!-- Icon Windows shows for .pdf files handled by GET PDF (registered by the MSI ProgID). -->
+    <None Include="Assets\pdf-document.ico" Link="pdf-document.ico"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="System.IO" />

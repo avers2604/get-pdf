@@ -27,7 +27,7 @@ public partial class PdfViewerWindow
         if (sourceIndex < 0)
             throw new InvalidOperationException("Исходная страница больше недоступна.");
         var reference = source.Pages[sourceIndex];
-        if (reference.Rotation != 0 || reference.Stamp.Length != 0 ||
+        if (reference.Rotation != 0 || reference.Stamp.Length != 0 || reference.PageNumber.Length != 0 ||
             reference.Rectangles is { Count: > 0 } ||
             reference.Notes is { Count: > 0 })
             throw new InvalidOperationException(

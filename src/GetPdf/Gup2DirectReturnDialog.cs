@@ -93,7 +93,7 @@ internal sealed class Gup2DirectReturnDialog : Window
             if (!Gup2DesktopReturnClient.IsValidCode(secret.Password) ||
                 string.IsNullOrWhiteSpace(path.Text) || !File.Exists(path.Text))
             {
-                MessageBox.Show(this,
+                GetMessageBox.Show(this,
                     "Укажите действительный 43-символьный код и выберите отдельную PDF-копию.",
                     "ГЭТ PDF ↔ GUP-2", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;

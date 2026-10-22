@@ -18,7 +18,7 @@ public partial class PdfViewerWindow
         if (!PdfOpenRequest.TryParse([other], out _)) return;
         if (new FileInfo(other).Length > WorkstationPolicy.Current.MaxPdfInputMiB * 1024L * 1024L)
         {
-            MessageBox.Show(HostWindow, "Второй PDF превышает установленный лимит.", "Сравнение PDF",
+            GetMessageBox.Show(HostWindow, "Второй PDF превышает установленный лимит.", "Сравнение PDF",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -30,14 +30,14 @@ public partial class PdfViewerWindow
         {
             var result = await Task.Run(() => PdfTextComparisonService.CompareFiles(first, other));
             StatusText.Text = "Сравнение текста завершено; изображения не проверялись.";
-            MessageBox.Show(HostWindow, result.ToRussianSummary(), "Сравнение PDF по тексту",
+            GetMessageBox.Show(HostWindow, result.ToRussianSummary(), "Сравнение PDF по тексту",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-text-compare", ex);
             StatusText.Text = "Не удалось сравнить текстовые слои PDF.";
-            MessageBox.Show(HostWindow, "Файл защищён, повреждён или не содержит доступной структуры для сравнения.",
+            GetMessageBox.Show(HostWindow, "Файл защищён, повреждён или не содержит доступной структуры для сравнения.",
                 "Сравнение PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally { _loading = false; if (!_closing) SetControls(); }

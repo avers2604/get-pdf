@@ -35,7 +35,7 @@ public partial class PdfViewerWindow
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             DiagnosticLog.Failure("pdf-signature-check", ex);
-            MessageBox.Show(HostWindow,
+            GetMessageBox.Show(HostWindow,
                 "Не удалось выполнить автономную криптографическую проверку. " +
                 "Подпись НЕ считается проверенной. Для работы с КЭП обратитесь в ИТ-службу.",
                 "Проверка электронных подписей", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -67,7 +67,7 @@ public partial class PdfViewerWindow
         }
         text.AppendLine("Не является подтверждением юридической действительности КЭП, " +
             "доверенной метки времени либо онлайн-статуса отзыва сертификатов.");
-        MessageBox.Show(HostWindow, text.ToString(), "Электронные подписи PDF",
+        GetMessageBox.Show(HostWindow, text.ToString(), "Электронные подписи PDF",
             MessageBoxButton.OK, signatures.Any(s => s.State == PdfSignatureTrust.Failed)
                 ? MessageBoxImage.Warning : MessageBoxImage.Information);
         StatusText.Text = signatures.Count == 0
