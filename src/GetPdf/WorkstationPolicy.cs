@@ -17,6 +17,8 @@ internal sealed record WorkstationPolicy
     public bool ExportGetSystemStatus { get; init; } = false;
     // Separate GUP-2 browser integration, not GET-system.
     public bool AllowGup2Portal { get; init; } = false;
+    // One-time HTTPS upload tokens; deliberately off until server/Windows acceptance.
+    public bool AllowGup2DirectReturn { get; init; } = false;
     public string Gup2PortalUrl { get; init; } = "";
     public int MaxPdfInputMiB { get; init; } = 1024;
     public int MaxDocumentPages { get; init; } = 1000;
@@ -47,6 +49,12 @@ internal sealed record WorkstationPolicy
             _ = Gup2PortalLink.Validate(value.Gup2PortalUrl);
         if (value.AllowGup2Portal && string.IsNullOrWhiteSpace(value.Gup2PortalUrl))
             throw new InvalidDataException("Укажите HTTPS-адрес портала GUP-2.");
+        if (value.AllowGup2DirectReturn &&
+            (!value.AllowGup2Portal ||
+             !Gup2PortalLink.Validate(value.Gup2PortalUrl).AbsolutePath
+                 .EndsWith("/documents/", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException(
+                "Для возврата PDF разрешите HTTPS-портал с путём /documents/.");
         if (value.Version != 1 || value.MaxPdfInputMiB is < 1 or > 1024 ||
             value.MaxDocumentPages is < 1 or > 1000 ||
             value.MaxRecoverySessionMiB is < 128 or > 65536 ||
