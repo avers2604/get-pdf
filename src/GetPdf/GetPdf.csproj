@@ -12,6 +12,10 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Official GET mark from GET Design System 4.1 (brandbook p.11, QA-verified). -->
+    <Resource Include="Assets\get-mark.png" />
+  </ItemGroup>
+  <ItemGroup>
     <Using Include="System.IO" />
     <PackageReference Include="NAPS2.Sdk" Version="1.4.0" />
     <PackageReference Include="NAPS2.Images.Wpf" Version="1.4.0" />

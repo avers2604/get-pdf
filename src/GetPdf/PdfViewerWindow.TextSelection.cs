@@ -37,7 +37,7 @@ public partial class PdfViewerWindow
         RectangleModeCheckBox.IsChecked = false;
         NoteModeCheckBox.IsChecked = false;
         _nativeDraftMode = null;
-        SelectTextButton.Content = "Выделение: вкл.";
+        GetPdf.Controls.Ui.SetIsActive(SelectTextButton, true);
         StatusText.Text = "Выделяйте символы текущей страницы мышью. Ctrl+C копирует выделение.";
         await EnsureSelectionWordsAsync();
     }
@@ -56,7 +56,7 @@ public partial class PdfViewerWindow
         PdfTextSelectionCanvas.Children.Clear();
         CopySelectedTextButton.IsEnabled = false;
         if (resetMode) _textSelectionMode = false;
-        SelectTextButton.Content = _textSelectionMode ? "Выделение: вкл." : "Выделить текст";
+        GetPdf.Controls.Ui.SetIsActive(SelectTextButton, _textSelectionMode);
     }
 
     internal async Task EnsureSelectionWordsAsync()

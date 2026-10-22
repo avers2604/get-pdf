@@ -9,6 +9,15 @@ namespace GetPdf.Controls;
 /// <summary>Pixel scrolling over lightweight page bounds; only viewport neighbors have image visuals.</summary>
 public partial class ContinuousDocumentView : UserControl
 {
+    // GET DS 4.1: the page sits as a raised sheet over the workspace underlay.
+    private static readonly Brush PageEdge = Frozen(new SolidColorBrush(Color.FromRgb(0xE3, 0xE6, 0xEE)));
+    private static readonly System.Windows.Media.Effects.DropShadowEffect PageShadow = Frozen(
+        new System.Windows.Media.Effects.DropShadowEffect
+        {
+            Color = Color.FromRgb(0x24, 0x30, 0x5E), BlurRadius = 18, ShadowDepth = 3,
+            Direction = 270, Opacity = 0.14, RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance
+        });
+    private static T Frozen<T>(T value) where T : Freezable { value.Freeze(); return value; }
     private IReadOnlyList<Size> _sizes = [];
     private Rect[] _bounds = [];
     private readonly DocumentRenderScheduler _renderer = new();
@@ -182,7 +191,7 @@ public partial class ContinuousDocumentView : UserControl
         {
             if (_realized.ContainsKey(index)) continue;
             token.ThrowIfCancellationRequested();
-            var border = new Border { Background = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(207, 214, 223)), BorderThickness = new(1) };
+            var border = new Border { Background = Brushes.White, BorderBrush = PageEdge, BorderThickness = new(1), Effect = PageShadow };
             border.Child = new TextBlock { Text = $"Страница {index + 1} · загрузка…", Margin = new(18), Foreground = Brushes.SlateGray };
             Position(border, _bounds[index]); PageCanvas.Children.Add(border); _realized[index] = border;
             try

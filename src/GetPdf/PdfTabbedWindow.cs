@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using GetPdf.Controls;
 
 namespace GetPdf;
 
@@ -18,7 +19,8 @@ internal sealed partial class PdfTabbedWindow : Window
     private static readonly HashSet<PdfTabbedWindow> OpenShells = [];
     private readonly PdfTabRegistry _registry = new();
     private readonly Dictionary<Guid, Handle> _handles = [];
-    private readonly TabControl _tabs = new() { BorderThickness = new Thickness(0) };
+    private readonly TabControl _tabs = new ShellTabControl { BorderThickness = new Thickness(0) };
+    private TabStripPanel? _tabStrip;
     private bool _shutdownApproved;
     private bool _shutdownPending;
     private bool _suppressSelection;
@@ -57,41 +59,43 @@ internal sealed partial class PdfTabbedWindow : Window
         MinWidth = 950;
         MinHeight = 650;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = Brushes.White;
-        var root = new DockPanel();
-        var actions = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(12, 7, 12, 5)
-        };
-        DockPanel.SetDock(actions, Dock.Top);
-        root.Children.Add(actions);
-        actions.Children.Add(ActionButton("＋ Вкладка", () =>
+        Background = (Brush)FindResource("CanvasBrush");
+        // Inherited text defaults (the implicit TextBlock style deliberately sets no colour).
+        Foreground = (Brush)FindResource("Ink");
+        FontFamily = new FontFamily("Segoe UI");
+        FontSize = 13;
+        // GET DS 4.1 GET PDF layout: mark + product name, document tabs and "+" share one header row.
+        _tabs.Style = (Style)FindResource("ShellTabs");
+        var newTab = IconAction("IconPlus", "Новая вкладка", "Новая вкладка (Ctrl+T)", () =>
         {
             if (_registry.Items.Count >= 16)
                 MessageBox.Show(this, "Допускается до 16 вкладок в одном окне.",
                     "ГЭТ PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
             else AddWorkspace(null);
-        }));
-        actions.Children.Add(ActionButton("←", () => MoveSelected(-1)));
-        actions.Children.Add(ActionButton("→", () => MoveSelected(1)));
-        actions.Children.Add(ActionButton("В отдельное окно", DetachSelected));
-        var help = ActionButton("?", ShowKeyboardHelp);
-        help.ToolTip = "Клавиатурная справка (F1)";
-        System.Windows.Automation.AutomationProperties.SetName(
-            help, "Справка по клавиатурным командам ГЭТ PDF");
-        actions.Children.Add(help);
+        });
+        newTab.Background = (Brush)FindResource("CanvasBrush");
+        var trailing = new StackPanel { Orientation = Orientation.Horizontal };
+        trailing.Children.Add(IconAction("IconArrowLeft", "Переместить вкладку влево",
+            "Переместить вкладку влево", () => MoveSelected(-1)));
+        trailing.Children.Add(IconAction("IconArrowRight", "Переместить вкладку вправо",
+            "Переместить вкладку вправо", () => MoveSelected(1)));
+        trailing.Children.Add(IconAction("IconArrowUpRight", "Открыть вкладку в отдельном окне",
+            "В отдельное окно", DetachSelected));
+        trailing.Children.Add(IconAction("IconHelp", "Справка по клавиатурным командам ГЭТ PDF",
+            "Клавиатурная справка (F1)", ShowKeyboardHelp));
+        _tabs.Tag = new ShellHeaderSlots { Leading = newTab, Trailing = trailing };
+        _tabs.Loaded += (_, _) => BindTabStrip();
         _tabs.SelectionChanged += (_, e) =>
         {
             if (_suppressSelection || !ReferenceEquals(e.OriginalSource, _tabs)) return;
+            _tabStrip?.InvalidateArrange(); // keep the selected tab scrolled into view
             if (_tabs.SelectedItem is TabItem selected && selected.Tag is Guid id)
             {
                 _registry.Select(id);
                 SaveSessions();
             }
         };
-        root.Children.Add(_tabs);
-        Content = root;
+        Content = _tabs;
         foreach (string path in paths.Take(16))
         {
             if (PdfOpenRequest.TryParse([path], out string? valid) && valid is not null)
@@ -147,16 +151,49 @@ internal sealed partial class PdfTabbedWindow : Window
         MessageBox.Show(this, PdfKeyboardHelp.Text, "ГЭТ PDF — справка",
             MessageBoxButton.OK, MessageBoxImage.Information);
 
-    private static Button ActionButton(string label, Action action)
+    private static Button IconAction(string icon, string name, string tip, Action action)
     {
         var button = new Button
         {
-            Content = label,
-            Margin = new Thickness(0, 0, 7, 0),
-            Padding = new Thickness(9, 4, 9, 4)
+            Style = (Style)Application.Current.FindResource("IconButton"),
+            ToolTip = tip
         };
+        Ui.SetIcon(button, (Geometry)Application.Current.FindResource(icon));
+        System.Windows.Automation.AutomationProperties.SetName(button, name);
         button.Click += (_, _) => action();
         return button;
+    }
+
+    /// <summary>The "+" slot follows the last tab, so cap the strip to leave room for it.</summary>
+    private void BindTabStrip()
+    {
+        if (_tabStrip is not null) return;
+        _tabs.ApplyTemplate();
+        if (_tabs.Template.FindName("PART_Strip", _tabs) is not Grid strip ||
+            _tabs.Template.FindName("PART_TabStrip", _tabs) is not TabStripPanel panel) return;
+        _tabStrip = panel;
+        void Fit() => panel.MaxWidth = Math.Max(0, strip.ActualWidth - 56);
+        strip.SizeChanged += (_, _) => Fit();
+        Fit();
+    }
+
+    private static FrameworkElement TabIcon(TabItem owner)
+    {
+        var path = new System.Windows.Shapes.Path
+        {
+            Data = (Geometry)Application.Current.FindResource("IconFileText"),
+            StrokeThickness = 1.75,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round
+        };
+        path.SetBinding(System.Windows.Shapes.Shape.StrokeProperty,
+            new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = owner });
+        return new Viewbox
+        {
+            Width = 16, Height = 16, Margin = new Thickness(0, 0, 8, 0),
+            Child = new Canvas { Width = 24, Height = 24, Children = { path } }
+        };
     }
 
     private Handle AddWorkspace(string? path, PdfViewerWindow? existing = null,
@@ -205,16 +242,25 @@ internal sealed partial class PdfTabbedWindow : Window
                 await InsertPageToTabAsync(drag.Source, viewer, drag.PageId);
             }
         };
-        var header = new StackPanel { Orientation = Orientation.Horizontal };
-        header.Children.Add(title);
+        // Implicit TextBlock style pins Ink; follow the tab's selected/unselected colour instead.
+        title.SetBinding(TextBlock.ForegroundProperty,
+            new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = tab });
+        var header = new DockPanel { LastChildFill = true };
         var close = new Button
         {
-            Content = "×", Margin = new Thickness(8, 0, 0, 0),
-            Padding = new Thickness(4, 0, 4, 0),
-            ToolTip = "Закрыть документ"
+            Style = (Style)FindResource("SmallIconButton"),
+            Margin = new Thickness(8, 0, 0, 0),
+            ToolTip = "Закрыть документ (Ctrl+W)"
         };
-        close.Click += async (_, e) => { e.Handled = true; await CloseTabAsync(item.Id); };
+        Ui.SetIcon(close, (Geometry)FindResource("IconX"));
+        System.Windows.Automation.AutomationProperties.SetName(close, "Закрыть документ");
+        DockPanel.SetDock(close, Dock.Right);
         header.Children.Add(close);
+        var icon = TabIcon(tab);
+        DockPanel.SetDock(icon, Dock.Left);
+        header.Children.Add(icon);
+        header.Children.Add(title);
+        close.Click += async (_, e) => { e.Handled = true; await CloseTabAsync(item.Id); };
         tab.Header = header;
 
         Action onReady = () =>

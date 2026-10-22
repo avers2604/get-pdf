@@ -3,144 +3,159 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:GetPdf.Controls"
         Background="{StaticResource CanvasBrush}" Loaded="Viewer_Loaded"
+        FontWeight="Normal" Foreground="{StaticResource Ink}"
         AllowDrop="True" DragOver="Viewer_DragOver" Drop="Viewer_Drop"
         PreviewKeyDown="Viewer_PreviewKeyDown"
         SizeChanged="Viewer_SizeChanged">
+  <UserControl.Resources>
+    <!-- Contextual commands appear only when they can act (search hits, selected text). -->
+    <Style x:Key="ContextualIconButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Visibility" Value="Collapsed"/></Trigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="ContextualGhostButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Visibility" Value="Collapsed"/></Trigger>
+      </Style.Triggers>
+    </Style>
+  </UserControl.Resources>
+  <!--
+    GET DS 4.1 · GET PDF final layout: one toolbar (search · pages · zoom · fit · text selection,
+    then compact Print and a separate Editing toggle), the document as the main object over a
+    muted underlay of the official mark, and a status bar. No left navigation sidebar (D41-05).
+  -->
   <Grid>
     <Grid.RowDefinitions>
-      <RowDefinition Height="64"/>
-      <RowDefinition Height="62"/>
-      <RowDefinition Height="52"/>
+      <RowDefinition Height="Auto"/>
       <RowDefinition Height="*"/>
-      <RowDefinition Height="58"/>
+      <RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
-    <Border Background="White" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="20,10">
-      <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <controls:GetBrand Margin="0,0,26,0"/>
-          
-          <Border Background="{StaticResource AccentSoft}" CornerRadius="5" Padding="14,10" Margin="0,0,22,0"><TextBlock Text="Просмотр PDF" Foreground="{StaticResource Teal}" FontWeight="SemiBold"/></Border>
-          <TextBlock x:Name="DocumentTitle" Text="Откройте документ" Foreground="{StaticResource Navy}" FontSize="12" VerticalAlignment="Center" MaxWidth="150" TextTrimming="CharacterEllipsis"/>
-        </StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-          <Button Visibility="Collapsed" Content="Для PDF по умолчанию…" Click="Defaults_Click" Margin="0,0,10,0"
-                  ToolTip="Открыть настройки Windows для выбора GET PDF приложением по умолчанию"/>
-          
-          <Button Content="Открыть PDF…" Click="Open_Click" MinWidth="130" Margin="0,0,8,0"/>
-          <Button x:Name="RecentButton" Content="Недавние ▾" Click="Recent_Click" Margin="0,0,8,0" ToolTip="Недавно открытые PDF"/>
-          <Button x:Name="Gup2PortalButton" Visibility="Collapsed"
-                   Content="GUP-2 ↗" Click="Gup2Portal_Click" Margin="0,0,8,0"
-                   AutomationProperties.Name="Открыть защищённый портал GUP-2"
-                   ToolTip="Перейти в GUP-2 в браузере; файлы и учётные данные не передаются"/>
-           <Button x:Name="ToolbarPrintButton" Content="Печать" Click="Print_Click" IsEnabled="{Binding CanPrint, Mode=OneWay}" Margin="0,0,8,0" ToolTip="Печать PDF (Ctrl+P)"/>
-        </StackPanel>
-      </Grid>
-    </Border>
-    <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="18,8">
-      <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <Button x:Name="PagePaneToggleButton" Content="Страницы" Click="PagePaneToggle_Click"
-                  ToolTip="Показать или скрыть список страниц (Ctrl+Shift+L)"
-                  AutomationProperties.Name="Показать или скрыть панель страниц"
-                  Margin="0,0,8,0"/>
-          <Button x:Name="PreviousButton" IsEnabled="{Binding CanNavigatePrevious, Mode=OneWay}" Content="←" ToolTip="Предыдущая страница"
-                  AutomationProperties.Name="Предыдущая страница PDF" Click="Previous_Click" Margin="0,0,6,0"/>
-          <Button x:Name="NextButton" IsEnabled="{Binding CanNavigateNext, Mode=OneWay}" Content="→" ToolTip="Следующая страница"
-                  AutomationProperties.Name="Следующая страница PDF" Click="Next_Click" Margin="0,0,13,0"/>
-          <TextBlock x:Name="PagePosition" Text="Нет страниц" VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <TextBox x:Name="PageNumberBox" Width="48" Height="30" Margin="0,0,4,0"
-                   IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
-                   KeyDown="PageNumberBox_KeyDown" MaxLength="7"
-                   ToolTip="Номер страницы для перехода (Ctrl+G)"
-                   AutomationProperties.Name="Перейти на страницу номер"/>
-          <Button Content="Перейти" Click="GoToPage_Click" Margin="0,0,13,0"
-                  IsEnabled="{Binding CanSelectPage, Mode=OneWay}"/>
-          <Button x:Name="ZoomOutButton" IsEnabled="{Binding CanZoom, Mode=OneWay}" Content="−" Click="ZoomOut_Click"
-                  AutomationProperties.Name="Уменьшить масштаб PDF" Margin="0,0,4,0"/>
-          <Button Content="Вся страница" Click="FitPage_Click"/>
-          <Button Content="По ширине" Click="FitWidth_Click"/>
-          <ComboBox x:Name="LayoutModeBox" Width="165" Height="32" SelectedIndex="0"
-                    SelectionChanged="LayoutMode_SelectionChanged" Margin="0,0,10,0"
-                    ToolTip="Режим просмотра страниц">
-            <ComboBoxItem Content="Непрерывно"/>
-            <ComboBoxItem Content="Одна страница"/>
-            <ComboBoxItem Content="Две страницы"/>
-          </ComboBox>
-          <Button Content="Полный экран" Click="Fullscreen_Click" Margin="0,0,10,0"
-                  ToolTip="F11 — полноэкранный просмотр"/>
-          <Button x:Name="BookmarkButton" Content="Закладка ☆" Click="Bookmark_Click" Margin="0,0,10,0"
-                  ToolTip="Добавить или снять закладку текущей страницы"/>
-          <Button Content="Закладки ▾" Click="BookmarksMenu_Click" Margin="0,0,10,0"/>
-          <Button x:Name="InternalLinksButton" Content="Переходы ▾" Click="InternalLinks_Click"
-                  IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
-                  Margin="0,0,10,0" ToolTip="Безопасные внутренние ссылки текущей страницы, без переходов в интернет"
-                  AutomationProperties.Name="Внутренние ссылки страницы PDF"/>
-          <Button x:Name="ZoomInButton" IsEnabled="{Binding CanZoom, Mode=OneWay}" Content="+" Click="ZoomIn_Click"
-                  AutomationProperties.Name="Увеличить масштаб PDF" Margin="0,0,13,0"/>
-          <Button x:Name="RotateLeftButton" IsEnabled="{Binding CanRotate, Mode=OneWay}" Content="↶ 90°" Click="RotateLeft_Click" ToolTip="Повернуть страницу влево" Margin="0,0,5,0" Visibility="Collapsed" />
-          <Button x:Name="RotateRightButton" IsEnabled="{Binding CanRotate, Mode=OneWay}" Content="↷ 90°" Click="RotateRight_Click" ToolTip="Повернуть страницу вправо" Margin="0,0,15,0" Visibility="Collapsed" />
-          <Button x:Name="MoveUpButton" IsEnabled="{Binding CanMoveUp, Mode=OneWay}" Content="↑" Click="MoveUp_Click"
-                  AutomationProperties.Name="Переместить страницу выше" ToolTip="Передвинуть страницу выше" Margin="0,0,5,0" Visibility="Collapsed" />
-          <Button x:Name="MoveDownButton" IsEnabled="{Binding CanMoveDown, Mode=OneWay}" Content="↓" Click="MoveDown_Click"
-                  AutomationProperties.Name="Переместить страницу ниже" ToolTip="Передвинуть страницу ниже" Margin="0,0,5,0" Visibility="Collapsed" />
-          <Button x:Name="DuplicateButton" IsEnabled="{Binding CanDuplicate, Mode=OneWay}" Content="Дублировать" Click="Duplicate_Click" Margin="0,0,5,0"
-                  ToolTip="Создать копию текущей страницы после неё" Visibility="Collapsed" />
-          <Button x:Name="DeleteButton" IsEnabled="{Binding CanDelete, Mode=OneWay}" Content="Удалить страницу" Click="Delete_Click" Visibility="Collapsed" />
-        </StackPanel>
-      </ScrollViewer>
-    </Border>
-    <Border Grid.Row="2" Background="White" Padding="18,6"
-            BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
-      <!-- Keep editor mode reachable while secondary actions scroll on narrow or scaled desktops. -->
+    <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="20,12">
       <DockPanel LastChildFill="True">
-        <Button x:Name="EditModeButton" Content="Редактирование"
-                Click="ToggleEditor_Click" DockPanel.Dock="Right" Margin="8,0,0,0"
-                AutomationProperties.Name="Показать или скрыть инструменты редактирования PDF"
-                ToolTip="Показать или скрыть дополнительные инструменты"/>
+        <!-- Document title feeds the tab caption; the tab itself shows it to the operator. -->
+        <TextBlock x:Name="DocumentTitle" Text="Откройте документ" Visibility="Collapsed"/>
+        <!-- Pinned right: never scrolls away on narrow or scaled desktops. -->
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+          <Button Visibility="Collapsed" Content="Для PDF по умолчанию…" Click="Defaults_Click" Margin="0,0,8,0"
+                  ToolTip="Открыть настройки Windows для выбора GET PDF приложением по умолчанию"/>
+          <Button Style="{StaticResource IconButton}" controls:Ui.Icon="{StaticResource IconFolder}" Click="Open_Click"
+                  ToolTip="Открыть PDF… (Ctrl+O)" AutomationProperties.Name="Открыть PDF"/>
+          <Button x:Name="RecentButton" Style="{StaticResource IconButton}" controls:Ui.Icon="{StaticResource IconClock}"
+                  Click="Recent_Click" ToolTip="Недавно открытые PDF" AutomationProperties.Name="Недавние PDF"/>
+          <Button x:Name="Gup2PortalButton" Visibility="Collapsed" Style="{StaticResource GhostButton}"
+                  controls:Ui.Icon="{StaticResource IconArrowUpRight}" MinHeight="44"
+                  Content="GUP-2" Click="Gup2Portal_Click"
+                  AutomationProperties.Name="Открыть защищённый портал GUP-2"
+                  ToolTip="Перейти в GUP-2 в браузере; файлы и учётные данные не передаются"/>
+          <Border Style="{StaticResource ToolbarDivider}"/>
+          <Button x:Name="ToolbarPrintButton" Content="Печать" Style="{StaticResource PrimaryButton}"
+                  controls:Ui.Icon="{StaticResource IconPrinter}" MinHeight="44" Padding="18,0"
+                  Click="Print_Click" IsEnabled="{Binding CanPrint, Mode=OneWay}" ToolTip="Печать PDF (Ctrl+P)"/>
+          <Button x:Name="EditModeButton" Content="Редактирование" controls:Ui.Icon="{StaticResource IconSliders}"
+                  MinHeight="44" Padding="16,0" Margin="8,0,0,0" Click="ToggleEditor_Click"
+                  AutomationProperties.Name="Показать или скрыть инструменты редактирования PDF"
+                  ToolTip="Показать или скрыть дополнительные инструменты"/>
+        </StackPanel>
         <ScrollViewer x:Name="SecondaryToolbarScroll"
                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
-                      Focusable="False" AutomationProperties.Name="Поиск и режимы PDF">
-         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <StackPanel x:Name="SearchTools" Orientation="Horizontal" VerticalAlignment="Center">
-          <TextBox x:Name="SearchBox" IsEnabled="{Binding CanSearch, Mode=OneWay}" Width="250" Height="32" Margin="0,0,5,0"
-                   ToolTip="Поиск по имеющемуся текстовому слою PDF" AutomationProperties.Name="Найти текст PDF"
-                    KeyDown="SearchBox_KeyDown" TextChanged="SearchBox_TextChanged"/>
-          <Button x:Name="FindButton" IsEnabled="{Binding CanSearch, Mode=OneWay}" Content="Найти" Click="Find_Click" Margin="0,0,5,0"/>
-          <Button x:Name="FindNextButton" IsEnabled="{Binding CanFindNext, Mode=OneWay}" Content="Следующее" Click="FindNext_Click" Margin="0,0,5,0"/>
-          <Button x:Name="FindPreviousButton" IsEnabled="{Binding CanFindNext, Mode=OneWay}"
-                  Content="Предыдущее" Click="FindPrevious_Click" Margin="0,0,6,0"
-                  ToolTip="Предыдущее совпадение (Shift+F3)"/>
-          <Button x:Name="SelectTextButton" Content="Выделить текст" Click="ToggleTextSelection_Click"
-                  IsEnabled="{Binding CanSelectPage, Mode=OneWay}" Margin="0,0,5,0"
-                  ToolTip="Выбрать слова текстового слоя мышью; PDF не меняется"/>
-          <Button x:Name="CopySelectedTextButton" Content="Копировать" Click="CopySelectedText_Click"
-                  IsEnabled="False" Margin="0,0,12,0"
-                  ToolTip="Копировать выбранный текст (Ctrl+C)"/>
+                      Focusable="False" AutomationProperties.Name="Поиск и навигация PDF">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel x:Name="SearchTools" Orientation="Horizontal" VerticalAlignment="Center">
+              <Grid>
+                <TextBox x:Name="SearchBox" Style="{StaticResource SearchField}" controls:Ui.Icon="{x:Null}"
+                         controls:Ui.Placeholder="Поиск по документу" Width="248"
+                         IsEnabled="{Binding CanSearch, Mode=OneWay}"
+                         ToolTip="Поиск по имеющемуся текстовому слою PDF; Enter — найти"
+                         AutomationProperties.Name="Найти текст PDF"
+                         KeyDown="SearchBox_KeyDown" TextChanged="SearchBox_TextChanged"/>
+                <!-- The field's search glyph is the Find command itself. -->
+                <Button x:Name="FindButton" Style="{StaticResource SmallIconButton}" controls:Ui.Icon="{StaticResource IconSearch}"
+                        HorizontalAlignment="Left" Margin="8,0,0,0" IsEnabled="{Binding CanSearch, Mode=OneWay}"
+                        Click="Find_Click" ToolTip="Найти" AutomationProperties.Name="Найти"/>
+              </Grid>
+              <Button x:Name="FindPreviousButton" Style="{StaticResource ContextualIconButton}" controls:Ui.Icon="{StaticResource IconChevronUp}"
+                      IsEnabled="{Binding CanFindNext, Mode=OneWay}" Click="FindPrevious_Click" Margin="4,0,0,0"
+                      ToolTip="Предыдущее совпадение (Shift+F3)" AutomationProperties.Name="Предыдущее совпадение"/>
+              <Button x:Name="FindNextButton" Style="{StaticResource ContextualIconButton}" controls:Ui.Icon="{StaticResource IconChevronDown}"
+                      IsEnabled="{Binding CanFindNext, Mode=OneWay}" Click="FindNext_Click"
+                      ToolTip="Следующее совпадение (F3)" AutomationProperties.Name="Следующее совпадение"/>
             </StackPanel>
-          <TabControl x:Name="PdfToolModeBox" Visibility="Collapsed" Style="{StaticResource DocumentToolTabs}" Width="650" Height="40" Margin="0,0,10,0"
-                  VerticalAlignment="Center"
-                  SelectionChanged="PdfToolMode_SelectionChanged"
-                  ToolTip="Контекстные инструменты PDF"
-                  AutomationProperties.Name="Группа инструментов PDF">
-          <TabItem Header="Просмотр" ToolTip="Только просмотр и навигация по PDF"/>
-          <TabItem Header="Разметка" ToolTip="Видимые штампы, рамки и заметки"/>
-          <TabItem Header="Страницы" ToolTip="Порядок, повороты и извлечение страниц"/>
-          <TabItem Header="Документ" ToolTip="Объединение, формы, подписи, OCR и печать"/>
-          <TabItem Header="Текст" ToolTip="Экспериментальное редактирование текста PDF"/>
-          </TabControl>
-         </StackPanel>
+            <Border Style="{StaticResource ToolbarDivider}"/>
+            <Button x:Name="PreviousButton" Style="{StaticResource IconButton}" controls:Ui.Icon="{StaticResource IconChevronLeft}"
+                    IsEnabled="{Binding CanNavigatePrevious, Mode=OneWay}" Click="Previous_Click"
+                    ToolTip="Предыдущая страница" AutomationProperties.Name="Предыдущая страница PDF"/>
+            <TextBox x:Name="PageNumberBox" Width="56" Height="44" Margin="4,0,8,0" TextAlignment="Center"
+                     FontWeight="SemiBold" IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
+                     KeyDown="PageNumberBox_KeyDown" MaxLength="7"
+                     ToolTip="Номер страницы; Enter — перейти (Ctrl+G)"
+                     AutomationProperties.Name="Перейти на страницу номер"/>
+            <TextBlock x:Name="PagePosition" Text="из 0" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
+                       Margin="0,0,4,0" AutomationProperties.Name="Всего страниц"/>
+            <Button Content="Перейти" Click="GoToPage_Click" Visibility="Collapsed"
+                    IsEnabled="{Binding CanSelectPage, Mode=OneWay}"/>
+            <Button x:Name="NextButton" Style="{StaticResource IconButton}" controls:Ui.Icon="{StaticResource IconChevronRight}"
+                    IsEnabled="{Binding CanNavigateNext, Mode=OneWay}" Click="Next_Click"
+                    ToolTip="Следующая страница" AutomationProperties.Name="Следующая страница PDF"/>
+            <Border Style="{StaticResource ToolbarDivider}"/>
+            <Button x:Name="ZoomOutButton" Style="{StaticResource IconButton}" controls:Ui.Icon="{StaticResource IconMinus}"
+                    IsEnabled="{Binding CanZoom, Mode=OneWay}" Click="ZoomOut_Click"
+                    ToolTip="Уменьшить масштаб" AutomationProperties.Name="Уменьшить масштаб PDF"/>
+            <Button x:Name="ZoomInButton" Style="{StaticResource IconButton}" controls:Ui.Icon="{StaticResource IconPlus}"
+                    IsEnabled="{Binding CanZoom, Mode=OneWay}" Click="ZoomIn_Click"
+                    ToolTip="Увеличить масштаб" AutomationProperties.Name="Увеличить масштаб PDF"/>
+            <Button x:Name="ViewMenuButton" MinHeight="44" Margin="4,0,0,0" Padding="14,0,12,0" Click="ViewMenu_Click"
+                    ToolTip="По ширине, страница целиком и режим просмотра страниц"
+                    AutomationProperties.Name="Вид страницы: масштаб и режим просмотра">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Вид страницы" VerticalAlignment="Center"/>
+                <Viewbox Width="16" Height="16" Margin="8,0,0,0" VerticalAlignment="Center">
+                  <Canvas Width="24" Height="24">
+                    <Path Data="{StaticResource IconChevronDown}" Stroke="{StaticResource Navy}" StrokeThickness="1.75"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                  </Canvas>
+                </Viewbox>
+              </StackPanel>
+            </Button>
+            <!-- Layout state + preferences; operated through the "Вид страницы" menu. -->
+            <ComboBox x:Name="LayoutModeBox" Visibility="Collapsed" SelectedIndex="0"
+                      SelectionChanged="LayoutMode_SelectionChanged"
+                      ToolTip="Режим просмотра страниц" AutomationProperties.Name="Режим просмотра страниц">
+              <ComboBoxItem Content="Непрерывно"/>
+              <ComboBoxItem Content="Одна страница"/>
+              <ComboBoxItem Content="Две страницы"/>
+            </ComboBox>
+            <Border Style="{StaticResource ToolbarDivider}"/>
+            <Button x:Name="SelectTextButton" Content="Выделение текста" Click="ToggleTextSelection_Click"
+                    MinHeight="44" IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
+                    ToolTip="Выбрать символы текстового слоя мышью; PDF не меняется">
+              <Button.Style>
+                <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                  <Setter Property="controls:Ui.Icon" Value="{StaticResource IconBox}"/>
+                  <Style.Triggers>
+                    <Trigger Property="controls:Ui.IsActive" Value="True">
+                      <Setter Property="controls:Ui.Icon" Value="{StaticResource IconCheck}"/>
+                    </Trigger>
+                  </Style.Triggers>
+                </Style>
+              </Button.Style>
+            </Button>
+            <Button x:Name="CopySelectedTextButton" Content="Копировать" Style="{StaticResource ContextualGhostButton}"
+                    controls:Ui.Icon="{StaticResource IconFiles}" MinHeight="44" Margin="4,0,0,0"
+                    Click="CopySelectedText_Click" IsEnabled="False"
+                    ToolTip="Копировать выбранный текст (Ctrl+C)"/>
+          </StackPanel>
         </ScrollViewer>
       </DockPanel>
     </Border>
-    <Grid Grid.Row="3" Margin="0">
+    <Grid Grid.Row="1">
       <Grid.ColumnDefinitions><ColumnDefinition x:Name="PagePaneColumn" Width="205"/><ColumnDefinition Width="*"/><ColumnDefinition x:Name="ToolPaneColumn" Width="280"/></Grid.ColumnDefinitions>
-      <Border x:Name="PagePaneBorder" Background="White" Style="{StaticResource CardBorder}" Margin="0,0,12,0">
+      <Border x:Name="PagePaneBorder" Style="{StaticResource CardBorder}" Margin="12,12,0,12">
         <DockPanel>
-          <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="8,8,8,7">
-            <Button x:Name="ShowPagesButton" Content="Страницы" Click="ShowPagePane_Click"
-                    Margin="0,0,5,0" AutomationProperties.Name="Показать миниатюры PDF"/>
-            <Button x:Name="ShowOutlineButton" Content="Оглавление" Click="ShowOutlinePane_Click"
+          <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="8,8,8,4">
+            <Button x:Name="ShowPagesButton" Content="Страницы" Style="{StaticResource GhostButton}" Click="ShowPagePane_Click"
+                    controls:Ui.IsActive="True" Margin="0,0,4,0" AutomationProperties.Name="Показать миниатюры PDF"/>
+            <Button x:Name="ShowOutlineButton" Content="Оглавление" Style="{StaticResource GhostButton}" Click="ShowOutlinePane_Click"
                     AutomationProperties.Name="Показать оглавление PDF"/>
           </StackPanel>
           <StackPanel x:Name="SearchResultsPanel" DockPanel.Dock="Bottom" Visibility="Collapsed"
@@ -166,7 +181,7 @@
             </ListBox>
           </StackPanel>
           <Grid>
-          <TreeView x:Name="PdfOutlineTree" Visibility="Collapsed" Margin="7"
+          <TreeView x:Name="PdfOutlineTree" Visibility="Collapsed" Margin="7" BorderThickness="0"
                     IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
                     SelectedItemChanged="PdfOutline_SelectedItemChanged"
                     AutomationProperties.Name="Безопасная навигация по оглавлению PDF">
@@ -190,8 +205,8 @@
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <StackPanel Margin="4,5" Width="152" Orientation="Vertical">
-                  <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Raised}"
-                          CornerRadius="5" HorizontalAlignment="Center" Width="148" Height="160">
+                  <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}"
+                          CornerRadius="6" HorizontalAlignment="Center" Width="148" Height="160">
                     <Grid>
                       <TextBlock Text="Без изображения" Foreground="{StaticResource Muted}"
                                  FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -212,46 +227,72 @@
           </Grid>
         </DockPanel>
       </Border>
-      <Border Grid.Column="1" Background="{StaticResource Raised}" Style="{StaticResource CardBorder}" ClipToBounds="True">
-        <Grid>
-          <controls:ContinuousDocumentView x:Name="DocumentView" PreviewMouseWheel="Viewer_PreviewMouseWheel"/>
-          <Grid x:Name="ActivePageParking" Visibility="Collapsed">
-            <Grid x:Name="PageVisual" HorizontalAlignment="Center" VerticalAlignment="Center">
-              <Image x:Name="PdfPageImage" HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="Fill"/>
-              <Canvas x:Name="PdfSearchHighlightCanvas" IsHitTestVisible="False"
-                      Panel.ZIndex="1" ClipToBounds="True"
-                      AutomationProperties.Name="Подсветка совпадения поиска PDF"/>
-              <Canvas x:Name="PdfTextSelectionCanvas" IsHitTestVisible="False"
-                      Panel.ZIndex="2" ClipToBounds="True"
-                      AutomationProperties.Name="Выделенный текст PDF"/>
-              <Canvas x:Name="PdfMarkupCanvas" Background="Transparent" Panel.ZIndex="3"
-                      MouseLeftButtonDown="PdfMarkupCanvas_MouseLeftButtonDown"
-                      MouseMove="PdfMarkupCanvas_MouseMove"
-                      MouseLeftButtonUp="PdfMarkupCanvas_MouseLeftButtonUp"
-                      LostMouseCapture="PdfMarkupCanvas_LostMouseCapture"
-                      ToolTipService.IsEnabled="False"/>
-              <TextBlock x:Name="StampPreview" Panel.ZIndex="3" HorizontalAlignment="Left" VerticalAlignment="Top"
-                         Margin="27,27,0,0" FontSize="18" FontWeight="Bold" Foreground="#9D253D"
-                         Visibility="Collapsed" IsHitTestVisible="False" TextWrapping="NoWrap"
-                         ToolTip="Предварительное расположение штампа"/>
-            </Grid>
+      <Grid Grid.Column="1" Background="{StaticResource CanvasBrush}" ClipToBounds="True">
+        <Rectangle Fill="{StaticResource WorkspaceUnderlay}" IsHitTestVisible="False"/>
+        <controls:ContinuousDocumentView x:Name="DocumentView" PreviewMouseWheel="Viewer_PreviewMouseWheel"/>
+        <Grid x:Name="ActivePageParking" Visibility="Collapsed">
+          <Grid x:Name="PageVisual" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Image x:Name="PdfPageImage" HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="Fill"/>
+            <Canvas x:Name="PdfSearchHighlightCanvas" IsHitTestVisible="False"
+                    Panel.ZIndex="1" ClipToBounds="True"
+                    AutomationProperties.Name="Подсветка совпадения поиска PDF"/>
+            <Canvas x:Name="PdfTextSelectionCanvas" IsHitTestVisible="False"
+                    Panel.ZIndex="2" ClipToBounds="True"
+                    AutomationProperties.Name="Выделенный текст PDF"/>
+            <Canvas x:Name="PdfMarkupCanvas" Background="Transparent" Panel.ZIndex="3"
+                    MouseLeftButtonDown="PdfMarkupCanvas_MouseLeftButtonDown"
+                    MouseMove="PdfMarkupCanvas_MouseMove"
+                    MouseLeftButtonUp="PdfMarkupCanvas_MouseLeftButtonUp"
+                    LostMouseCapture="PdfMarkupCanvas_LostMouseCapture"
+                    ToolTipService.IsEnabled="False"/>
+            <TextBlock x:Name="StampPreview" Panel.ZIndex="3" HorizontalAlignment="Left" VerticalAlignment="Top"
+                       Margin="27,27,0,0" FontSize="18" FontWeight="Bold" Foreground="#9D253D"
+                       Visibility="Collapsed" IsHitTestVisible="False" TextWrapping="NoWrap"
+                       ToolTip="Предварительное расположение штампа"/>
           </Grid>
-          <TextBlock x:Name="EmptyMessage" Text="Откройте PDF-документ" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="18" Foreground="{StaticResource Muted}" IsHitTestVisible="False"/>
         </Grid>
-      </Border>
-      <Border Grid.Column="2" Background="White" Padding="18" BorderBrush="{StaticResource Border}" BorderThickness="1,0,0,0">
+        <!-- Empty state (DS universal states): what to do next, not just a blank canvas. -->
+        <Border x:Name="EmptyMessage" Style="{StaticResource CardBorder}" CornerRadius="16" Padding="40,32"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+          <StackPanel HorizontalAlignment="Center">
+            <Viewbox Width="40" Height="40" Margin="0,0,0,16">
+              <Canvas Width="24" Height="24">
+                <Path Data="{StaticResource IconFileText}" Stroke="{StaticResource Navy}" StrokeThickness="1.75"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+              </Canvas>
+            </Viewbox>
+            <TextBlock Text="Откройте PDF-документ" Style="{StaticResource SectionHeading}" FontSize="18"
+                       HorizontalAlignment="Center"/>
+            <TextBlock Text="Перетащите файлы в окно или нажмите Ctrl+O" Foreground="{StaticResource Muted}"
+                       HorizontalAlignment="Center" Margin="0,6,0,20"/>
+            <Button Content="Открыть PDF…" Style="{StaticResource PrimaryButton}" controls:Ui.Icon="{StaticResource IconFolder}"
+                    MinHeight="44" Padding="20,0" HorizontalAlignment="Center" Click="Open_Click"/>
+          </StackPanel>
+        </Border>
+      </Grid>
+      <Border Grid.Column="2" Background="{StaticResource Surface}" Padding="18" BorderBrush="{StaticResource Border}" BorderThickness="1,0,0,0">
        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
-        <TextBlock Text="Инструменты PDF" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Navy}" DockPanel.Dock="Top" Margin="0,0,0,18"/>
-        <StackPanel x:Name="SourceTextTools" Visibility="Collapsed" DockPanel.Dock="Top">
-         <TextBlock Text="Исходный текст" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+        <TextBlock Text="Инструменты PDF" Style="{StaticResource SectionHeading}" FontSize="16" Margin="0,0,0,12"/>
+        <TabControl x:Name="PdfToolModeBox" Visibility="Collapsed" Style="{StaticResource DocumentToolTabs}" Margin="0,0,0,16"
+                    SelectionChanged="PdfToolMode_SelectionChanged"
+                    ToolTip="Контекстные инструменты PDF"
+                    AutomationProperties.Name="Группа инструментов PDF">
+          <TabItem Header="Просмотр" ToolTip="Только просмотр и навигация по PDF"/>
+          <TabItem Header="Разметка" ToolTip="Видимые штампы, рамки и заметки"/>
+          <TabItem Header="Страницы" ToolTip="Порядок, повороты и извлечение страниц"/>
+          <TabItem Header="Документ" ToolTip="Объединение, формы, подписи, OCR и печать"/>
+          <TabItem Header="Текст" ToolTip="Экспериментальное редактирование текста PDF"/>
+        </TabControl>
+        <StackPanel x:Name="SourceTextTools" Visibility="Collapsed">
+         <TextBlock Text="Исходный текст" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Navy}" Margin="0,0,0,10"/>
          <TextBlock Text="Выберите текстовый фрагмент на странице." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,12"/>
          <ListBox x:Name="TextFragmentList" Height="140" SelectionChanged="TextFragment_SelectionChanged" DisplayMemberPath="Text" AutomationProperties.Name="Текстовые фрагменты страницы"/>
          <TextBox x:Name="ReplacementTextBox" AcceptsReturn="True" TextWrapping="Wrap" Height="100" Margin="0,12,0,10" AutomationProperties.Name="Новый текст фрагмента"/>
-         <TextBlock Text="Шрифт новой строки" Foreground="{StaticResource Muted}" Margin="0,0,0,5"/>
+         <TextBlock Text="Шрифт новой строки" Style="{StaticResource FieldLabel}"/>
          <ComboBox x:Name="TextFontCombo" SelectionChanged="TextFont_Changed" Margin="0,0,0,10"><ComboBoxItem Content="Arial"/><ComboBoxItem Content="Times New Roman"/><ComboBoxItem Content="Courier New"/></ComboBox>
          <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-          <StackPanel Margin="0,0,6,0"><TextBlock Text="Размер" Foreground="{StaticResource Muted}"/><TextBox x:Name="TextSizeBox" Text="14" AutomationProperties.Name="Размер текста"/></StackPanel>
-          <StackPanel Grid.Column="1"><TextBlock Text="Цвет" Foreground="{StaticResource Muted}"/><TextBox x:Name="TextColorBox" Text="#000000" AutomationProperties.Name="Цвет текста"/></StackPanel>
+          <StackPanel Margin="0,0,6,0"><TextBlock Text="Размер" Style="{StaticResource FieldLabel}"/><TextBox x:Name="TextSizeBox" Text="14" AutomationProperties.Name="Размер текста"/></StackPanel>
+          <StackPanel Grid.Column="1"><TextBlock Text="Цвет" Style="{StaticResource FieldLabel}"/><TextBox x:Name="TextColorBox" Text="#000000" AutomationProperties.Name="Цвет текста"/></StackPanel>
          </Grid>
          <TextBlock x:Name="TextEditDetails" Text="Проверка движка редактирования…" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,10"/>
          <Button x:Name="ApplyTextButton" Content="Применить" IsEnabled="False" Click="ApplyText_Click" Style="{StaticResource PrimaryButton}"/>
@@ -260,25 +301,27 @@
           <StackPanel Orientation="Vertical" VerticalAlignment="Top">
 
             <StackPanel x:Name="MarkupTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed">
-          <TextBox x:Name="StampTextBox" IsEnabled="{Binding CanStamp, Mode=OneWay}" Text="КОПИЯ" Width="132" MaxLength="80" Height="32" Margin="0,0,5,0"
+          <TextBlock Text="Текст штампа" Style="{StaticResource FieldLabel}"/>
+          <TextBox x:Name="StampTextBox" IsEnabled="{Binding CanStamp, Mode=OneWay}" Text="КОПИЯ" MaxLength="80" Margin="0,0,0,8"
                    AutomationProperties.Name="Текст видимого штампа"/>
-          <Button x:Name="StampButton" IsEnabled="{Binding CanStamp, Mode=OneWay}" Content="Штамп" Click="Stamp_Click" Margin="0,0,12,0"
+          <Button x:Name="StampButton" IsEnabled="{Binding CanStamp, Mode=OneWay}" Content="Штамп" Click="Stamp_Click" Margin="0,0,0,12"
                   ToolTip="Добавить видимую надпись на текущую страницу; не электронная подпись"/>
-          <CheckBox x:Name="RectangleModeCheckBox" IsEnabled="{Binding CanDrawMarkup, Mode=OneWay}" Content="Красная рамка мышью" Margin="0,0,7,0"
+          <CheckBox x:Name="RectangleModeCheckBox" IsEnabled="{Binding CanDrawMarkup, Mode=OneWay}" Content="Красная рамка мышью"
                     Click="RectangleMode_Click" VerticalAlignment="Center"
                     ToolTip="Нарисовать векторную рамку. Не PDF-комментарий и не удаление содержимого."/>
           <Button x:Name="ClearRectanglesButton" IsEnabled="{Binding CanClearRectangles, Mode=OneWay}" Content="Убрать рамки" Click="ClearRectangles_Click"
-                  Margin="0,0,12,0" ToolTip="Удалить рамки с текущей страницы (можно отменить)"/>
-          <TextBox x:Name="NoteTextBox" IsEnabled="{Binding CanWriteNotes, Mode=OneWay}" Width="165" Height="32" MaxLength="120" Margin="0,0,6,0"
+                  Margin="0,0,0,12" ToolTip="Удалить рамки с текущей страницы (можно отменить)"/>
+          <TextBlock Text="Текст заметки" Style="{StaticResource FieldLabel}"/>
+          <TextBox x:Name="NoteTextBox" IsEnabled="{Binding CanWriteNotes, Mode=OneWay}" MaxLength="120" Margin="0,0,0,4"
                    Text="Проверить документ" AutomationProperties.Name="Текст заметки"
                    ToolTip="Однострочный комментарий до 120 символов"/>
           <CheckBox x:Name="NoteModeCheckBox" IsEnabled="{Binding CanDrawMarkup, Mode=OneWay}" Content="Заметка мышью" Click="NoteMode_Click"
-                    Margin="0,0,6,0" VerticalAlignment="Center"
+                    VerticalAlignment="Center"
                     ToolTip="Поставить заметку щелчком на странице; не интерактивная PDF-аннотация"/>
           <Button x:Name="ClearNotesButton" IsEnabled="{Binding CanClearNotes, Mode=OneWay}" Content="Убрать заметки" Click="ClearNotes_Click"
-                  Margin="0,0,12,0" ToolTip="Очистить заметки текущей страницы (можно отменить)"/>
+                  Margin="0,0,0,12" ToolTip="Очистить заметки текущей страницы (можно отменить)"/>
           <Button x:Name="NativeDraftButton" Content="Аннотации ▾"
-                  Click="NativeDraftMenu_Click" Margin="0,0,12,0" IsEnabled="False"
+                  Click="NativeDraftMenu_Click" Margin="0,0,0,12" IsEnabled="False"
                   AutomationProperties.Name="Аннотации PDF: комментарии, рамки и выделения сохраняются в отдельную копию"
                   ToolTip="Сохранение /Text, /Square и /Highlight в новый PDF после проверки структуры документа">
             <Button.ContextMenu>
@@ -305,60 +348,90 @@
           <Button Content="Разделить по страницам…" Click="SplitIntoPages_Click" Margin="0,0,0,8"/>
           <Button x:Name="CrossTabPageCopyButton" Content="Копировать страницу в другой PDF…"
                   Click="CopyPageToTab_Click" Margin="0,0,0,8"
-                  ToolTip="Создать новый PDF из страниц другой вкладки и этой страницы; оригиналы не меняются"/><WrapPanel Margin="0,0,0,8"><Button Content="↶ 90°" Click="RotateLeft_Click"/><Button Content="↷ 90°" Click="RotateRight_Click"/><Button Content="↑" Click="MoveUp_Click"/><Button Content="↓" Click="MoveDown_Click"/><Button Content="Дублировать" Click="Duplicate_Click"/><Button Content="Удалить" Click="Delete_Click"/></WrapPanel>
-          <Button x:Name="ExtractButton" IsEnabled="{Binding CanExtract, Mode=OneWay}" Content="Извлечь" Click="Extract_Click" Margin="0,0,5,0"
+                  ToolTip="Создать новый PDF из страниц другой вкладки и этой страницы; оригиналы не меняются"/>
+          <WrapPanel Margin="0,0,0,8">
+            <WrapPanel.Resources>
+              <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Margin" Value="0,0,6,6"/>
+              </Style>
+            </WrapPanel.Resources>
+            <Button Content="↶ 90°" Click="RotateLeft_Click" ToolTip="Повернуть страницу влево"/>
+            <Button Content="↷ 90°" Click="RotateRight_Click" ToolTip="Повернуть страницу вправо"/>
+            <Button Content="↑" Click="MoveUp_Click" ToolTip="Передвинуть страницу выше" AutomationProperties.Name="Переместить страницу выше"/>
+            <Button Content="↓" Click="MoveDown_Click" ToolTip="Передвинуть страницу ниже" AutomationProperties.Name="Переместить страницу ниже"/>
+            <Button Content="Дублировать" Click="Duplicate_Click"/>
+            <Button Content="Удалить" Style="{StaticResource DangerButton}" Click="Delete_Click" ToolTip="Удалить текущую страницу из черновика (можно отменить)"/>
+          </WrapPanel>
+          <Button x:Name="ExtractButton" IsEnabled="{Binding CanExtract, Mode=OneWay}" Content="Извлечь страницу" Click="Extract_Click" Margin="0,0,0,12"
                   ToolTip="Сохранить текущую страницу в отдельный PDF"/>
-          <TextBox x:Name="PageRangeBox" IsEnabled="{Binding CanSetPageRange, Mode=OneWay}" Width="120" Height="32" Text="1" Margin="0,0,5,0"
+          <TextBlock Text="Диапазон страниц" Style="{StaticResource FieldLabel}"/>
+          <TextBox x:Name="PageRangeBox" IsEnabled="{Binding CanSetPageRange, Mode=OneWay}" Text="1" Margin="0,0,0,8"
                    ToolTip="Номера страниц для извлечения, например: 1-3, 5, 10-12"
                    AutomationProperties.Name="Диапазон страниц"/>
-          <Button x:Name="ExtractRangeButton" IsEnabled="{Binding CanExtract, Mode=OneWay}" Content="Диапазон…" Click="ExtractRange_Click" Margin="0,0,10,0"
+          <Button x:Name="ExtractRangeButton" IsEnabled="{Binding CanExtract, Mode=OneWay}" Content="Извлечь диапазон…" Click="ExtractRange_Click"
                   ToolTip="Извлечь указанные страницы в отдельный PDF"/>
+          <!-- Legacy page commands kept for existing bindings/automation; the WrapPanel above is the visible set. -->
+          <Button x:Name="RotateLeftButton" IsEnabled="{Binding CanRotate, Mode=OneWay}" Content="↶ 90°" Click="RotateLeft_Click" Visibility="Collapsed"/>
+          <Button x:Name="RotateRightButton" IsEnabled="{Binding CanRotate, Mode=OneWay}" Content="↷ 90°" Click="RotateRight_Click" Visibility="Collapsed"/>
+          <Button x:Name="MoveUpButton" IsEnabled="{Binding CanMoveUp, Mode=OneWay}" Content="↑" Click="MoveUp_Click" Visibility="Collapsed"/>
+          <Button x:Name="MoveDownButton" IsEnabled="{Binding CanMoveDown, Mode=OneWay}" Content="↓" Click="MoveDown_Click" Visibility="Collapsed"/>
+          <Button x:Name="DuplicateButton" IsEnabled="{Binding CanDuplicate, Mode=OneWay}" Content="Дублировать" Click="Duplicate_Click" Visibility="Collapsed"/>
+          <Button x:Name="DeleteButton" IsEnabled="{Binding CanDelete, Mode=OneWay}" Content="Удалить страницу" Click="Delete_Click" Visibility="Collapsed"/>
             </StackPanel>
             <StackPanel x:Name="DocumentTools" Orientation="Vertical" VerticalAlignment="Top" Visibility="Collapsed">
-          <Button Content="Копировать текст текущей страницы" Click="CopyPageText_Click" Margin="0,0,0,8"
+              <StackPanel.Resources>
+                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                  <Setter Property="Margin" Value="0,0,0,8"/>
+                  <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                </Style>
+              </StackPanel.Resources>
+          <Button Content="Копировать текст текущей страницы" Click="CopyPageText_Click"
                   ToolTip="Копирует распознанный текст страницы в буфер обмена; только по вашему запросу"/>
-          <Button Content="Оптимизировать PDF (qpdf)…" Click="OptimizePdf_Click" Margin="0,0,5,10"
+          <Button Content="Оптимизировать PDF (qpdf)…" Click="OptimizePdf_Click"
                   ToolTip="Создать отдельную оптимизированную копию без обработки изображений с потерями"/>
-          <Button Content="Сравнить с другим PDF…" Click="ComparePdf_Click" Margin="0,0,5,10"
+          <Button Content="Сравнить с другим PDF…" Click="ComparePdf_Click"
                   ToolTip="Сравнение по извлечённому тексту; изображения и графика не анализируются"/>
           <Button x:Name="VerifyPdfSignaturesButton" Content="Проверить электронные подписи…"
                   IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
-                  Click="VerifyPdfSignatures_Click" Margin="0,0,5,10"
+                  Click="VerifyPdfSignatures_Click"
                   ToolTip="Автономная криптографическая проверка и локальная цепочка Windows, без внешних запросов"/>
           <Button x:Name="FillTextFormButton" Content="Заполнить текстовую форму…"
                   IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
-                  Click="FillTextForm_Click" Margin="0,0,5,10"
+                  Click="FillTextForm_Click"
                   ToolTip="Только простые неподписанные текстовые AcroForm. Сохранение в новый PDF."/>
           <Button x:Name="Gup2VerifyShaButton" Content="Сверить SHA-256 с GUP-2…"
                   Visibility="Collapsed" IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
-                  Click="Gup2VerifySha_Click" Margin="0,0,5,10"
+                  Click="Gup2VerifySha_Click"
                   ToolTip="Сверить неизменённый скачанный PDF с хешем WORM-оригинала из карточки GUP-2"/>
           <Button x:Name="Gup2DirectReturnButton"
                   Content="Отправить PDF-копию в GUP-2…"
                   Visibility="Collapsed" IsEnabled="False"
-                  Click="Gup2DirectReturn_Click" Margin="0,0,5,10"
+                  Click="Gup2DirectReturn_Click"
                   AutomationProperties.Name="Загрузить подготовленную PDF-копию по одноразовому коду GUP-2"
                   ToolTip="Только с разрешения ИТ. Использует пяти-минутный код из GUP-2 и HTTPS без cookies браузера"/>
           <Button x:Name="PdfStructureButton" Content="Состав PDF…" Click="PdfStructure_Click"
-                  IsEnabled="False" Margin="0,0,10,0"
+                  IsEnabled="False"
                   ToolTip="Только сведения о полях и аннотациях без их содержимого; не проверка цифровой подписи"
                   AutomationProperties.Name="Состав PDF и интерактивные элементы"/>
-          <Button x:Name="MergeButton" IsEnabled="{Binding CanMerge, Mode=OneWay}" Content="Объединить" Click="Merge_Click" Margin="0,0,5,0"
+          <Button x:Name="MergeButton" IsEnabled="{Binding CanMerge, Mode=OneWay}" Content="Объединить…" Click="Merge_Click"
                   ToolTip="Сохранить объединённый документ как новый PDF"/>
-          <Button x:Name="OcrButton" IsEnabled="{Binding CanOcr, Mode=OneWay}" Content="OCR" Click="Ocr_Click" Margin="0,0,5,0" ToolTip="Создать PDF с текстовым слоем: локальное распознавание rus+eng"/>
-          <TextBox x:Name="PrintPageRangeBox" IsEnabled="{Binding CanPrint, Mode=OneWay}" Width="120" Height="32" Text="1" Margin="0,0,5,0"
+          <Button x:Name="OcrButton" IsEnabled="{Binding CanOcr, Mode=OneWay}" Content="Распознать текст (OCR)…" Click="Ocr_Click" ToolTip="Создать PDF с текстовым слоем: локальное распознавание rus+eng"/>
+          <TextBlock Text="Страницы для печати" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+          <TextBox x:Name="PrintPageRangeBox" IsEnabled="{Binding CanPrint, Mode=OneWay}" Text="1" Margin="0,0,0,8"
                    ToolTip="Страницы для печати: например, 1-3, 5"
                    AutomationProperties.Name="Номера страниц для печати"/>
           <Button x:Name="PrintRangeButton" IsEnabled="{Binding CanPrint, Mode=OneWay}" Content="Печать диапазона…" Click="PrintRange_Click"
-                  Margin="0,0,5,0" ToolTip="Печатать только номера страниц из поля «Диапазон страниц»"/>
-          <Button x:Name="PrintButton" IsEnabled="{Binding CanPrint, Mode=OneWay}" Content="Печать" Click="Print_Click" ToolTip="Печать всего видимого PDF"/>
+                  controls:Ui.Icon="{StaticResource IconPrinter}"
+                  ToolTip="Печатать только номера страниц из поля «Страницы для печати»"/>
+          <Button x:Name="PrintButton" IsEnabled="{Binding CanPrint, Mode=OneWay}" Content="Печать документа…" Click="Print_Click"
+                  controls:Ui.Icon="{StaticResource IconPrinter}" ToolTip="Печать всего видимого PDF"/>
             </StackPanel>
           </StackPanel>
         </ScrollViewer>
        </StackPanel></ScrollViewer>
       </Border>
     </Grid>
-    <Border Grid.Row="4" Background="White" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="20,10">
+    <Border Grid.Row="2" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="20,8">
       <Grid>
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <StackPanel VerticalAlignment="Center">
@@ -367,21 +440,38 @@
                      Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"/>
           <ProgressBar x:Name="PdfJobProgressBar" Minimum="0" Maximum="100"
                        Value="{Binding Percent, Mode=OneWay}"
-                       IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}" Height="5"
+                       IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}" Height="4"
                        Visibility="Collapsed" Margin="0,6,16,0"
                        AutomationProperties.Name="Прогресс подготовки PDF"
                        ToolTip="Подготовка страниц OCR или печати; не время работы Windows-принтера"/>
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
           <Button x:Name="CancelPdfJobButton" IsEnabled="{Binding CanCancelJob, Mode=OneWay}" Content="Отменить задание" Click="CancelPdfJob_Click"
-                  Visibility="Collapsed" Margin="0,0,12,0"
+                  Visibility="Collapsed" Margin="0,0,8,0"
                   ToolTip="Отменяет ожидание или прерывает до сохранения результата. Уже начатую печать Windows остановить не может."/>
           <Button x:Name="UndoButton" Visibility="Collapsed" IsEnabled="{Binding CanUndo, Mode=OneWay}" Content="↶ Отменить" Click="Undo_Click" Margin="0,0,6,0"
                   ToolTip="Отменить последнее изменение (Ctrl+Z)"/>
-          <Button x:Name="RedoButton" Visibility="Collapsed" IsEnabled="{Binding CanRedo, Mode=OneWay}" Content="↷ Повторить" Click="Redo_Click" Margin="0,0,12,0"
+          <Button x:Name="RedoButton" Visibility="Collapsed" IsEnabled="{Binding CanRedo, Mode=OneWay}" Content="↷ Повторить" Click="Redo_Click" Margin="0,0,8,0"
                   ToolTip="Повторить отменённое изменение (Ctrl+Y)"/>
           <Button x:Name="SaveAsButton" Visibility="Collapsed" Content="{Binding SaveAsLabel, Mode=OneWay}" IsEnabled="{Binding CanSaveAs, Mode=OneWay}" Style="{StaticResource PrimaryButton}"
-                  Click="SaveAs_Click" MinWidth="160"/>
+                  Click="SaveAs_Click" MinWidth="160" Margin="0,0,8,0"/>
+          <!-- View options: secondary to the document, so they live in the status bar, not the main toolbar. -->
+          <Button x:Name="PagePaneToggleButton" Content="Страницы" Style="{StaticResource GhostButton}"
+                  controls:Ui.Icon="{StaticResource IconColumns}" Click="PagePaneToggle_Click"
+                  ToolTip="Показать или скрыть список страниц (Ctrl+Shift+L)"
+                  AutomationProperties.Name="Показать или скрыть панель страниц"/>
+          <Button x:Name="BookmarkButton" Content="Закладка ☆" Style="{StaticResource GhostButton}"
+                  controls:Ui.Icon="{StaticResource IconPin}" Click="Bookmark_Click"
+                  ToolTip="Добавить или снять закладку текущей страницы"/>
+          <Button Content="Закладки" Style="{StaticResource GhostButton}" controls:Ui.Icon="{StaticResource IconBookOpen}"
+                  Click="BookmarksMenu_Click" ToolTip="Закладки этого PDF"/>
+          <Button x:Name="InternalLinksButton" Content="Переходы" Style="{StaticResource GhostButton}"
+                  controls:Ui.Icon="{StaticResource IconRoute}" Click="InternalLinks_Click"
+                  IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
+                  ToolTip="Безопасные внутренние ссылки текущей страницы, без переходов в интернет"
+                  AutomationProperties.Name="Внутренние ссылки страницы PDF"/>
+          <Button Style="{StaticResource GhostButton}" controls:Ui.Icon="{StaticResource IconMonitor}" Click="Fullscreen_Click"
+                  ToolTip="Полноэкранный просмотр (F11)" AutomationProperties.Name="Полный экран"/>
         </StackPanel>
       </Grid>
     </Border>

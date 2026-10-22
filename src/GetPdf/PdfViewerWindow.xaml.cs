@@ -200,6 +200,7 @@ public partial class PdfViewerWindow : UserControl
             PdfToolModeBox.SelectedIndex = 2; // Page tools on first entry, not an empty panel.
         PdfToolModeBox.Visibility = _editingToolsVisible ? Visibility.Visible : Visibility.Collapsed;
         EditModeButton.Content = _editingToolsVisible ? "Закрыть редактор" : "Редактирование";
+        GetPdf.Controls.Ui.SetIsActive(EditModeButton, _editingToolsVisible);
         UndoButton.Visibility = _editingToolsVisible ? Visibility.Visible : Visibility.Collapsed;
         RedoButton.Visibility = _editingToolsVisible ? Visibility.Visible : Visibility.Collapsed;
         SaveAsButton.Visibility = _editingToolsVisible ? Visibility.Visible : Visibility.Collapsed;
@@ -281,9 +282,9 @@ public partial class PdfViewerWindow : UserControl
         SearchResultsPanel.Visibility = _showOutline || _searchHits.Count == 0
             ? Visibility.Collapsed : Visibility.Visible;
         if (ShowOutlineButton is not null)
-            ShowOutlineButton.FontWeight = _showOutline ? FontWeights.Bold : FontWeights.Normal;
+            GetPdf.Controls.Ui.SetIsActive(ShowOutlineButton, _showOutline);
         if (ShowPagesButton is not null)
-            ShowPagesButton.FontWeight = _showOutline ? FontWeights.Normal : FontWeights.Bold;
+            GetPdf.Controls.Ui.SetIsActive(ShowPagesButton, !_showOutline);
         ApplyResponsiveLayout();
     }
 
@@ -751,7 +752,7 @@ public partial class PdfViewerWindow : UserControl
         ConfigureContinuousDocument();
         DocumentView.Zoom = _zoom;
         DocumentView.ScrollToPage(_pageIndex);
-        PagePosition.Text = $"{_pageIndex + 1} / {_plan.Pages.Count}";
+        PagePosition.Text = $"из {_plan.Pages.Count}";
         if (_textSelectionMode) _ = EnsureSelectionWordsAsync();
         if (!PageNumberBox.IsKeyboardFocusWithin)
             PageNumberBox.Text = (_pageIndex + 1).ToString();

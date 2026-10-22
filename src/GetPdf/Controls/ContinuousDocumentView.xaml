@@ -3,7 +3,7 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
  <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                CanContentScroll="False" ScrollChanged="OnScrollChanged" SizeChanged="OnViewportChanged"
-               Background="#E7EBF0" Focusable="True" AutomationProperties.Name="Документ с непрерывной прокруткой">
+               Background="Transparent" Focusable="True" AutomationProperties.Name="Документ с непрерывной прокруткой">
    <Canvas x:Name="PageCanvas" Margin="24" HorizontalAlignment="Center"/>
  </ScrollViewer>
 </UserControl>

@@ -33,7 +33,7 @@ public partial class PdfViewerWindow
             _refreshingList = true;
             try { PageList.SelectedIndex = index; }
             finally { _refreshingList = false; }
-            PagePosition.Text = $"{index + 1} / {_plan.Pages.Count}";
+            PagePosition.Text = $"из {_plan.Pages.Count}";
             if (!PageNumberBox.IsKeyboardFocusWithin)
                 PageNumberBox.Text = (index + 1).ToString();
             SetControls();
