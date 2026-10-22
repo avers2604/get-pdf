@@ -859,7 +859,9 @@ public partial class PdfViewerWindow : UserControl
             (hasNativeDrafts || (_canModify && CanDrawOnCurrentPage &&
              _plan!.Pages.Count <= PdfNativeAnnotationPolicy.MaxPdfPages));
         NativeDraftButton.Content = hasNativeDrafts
-            ? $"Эскизы /Annots: {_nativeDrafts.Count} ▾" : "Аннотации · эскиз ▾";
+            ? $"Аннотации: {_nativeDrafts.Count} ▾" : "Аннотации ▾";
+        if (NativeDraftSaveItem is not null)
+            NativeDraftSaveItem.IsEnabled = ready && hasNativeDrafts;
         PdfStructureButton.IsEnabled = ready && _sourcePath is not null;
         // Temporarily disable markup tools while rendering without losing
         // the operator's chosen tool; reset only for intrinsically ineligible pages.
@@ -996,7 +998,7 @@ public partial class PdfViewerWindow : UserControl
         RectangleModeCheckBox.IsChecked = false;
         NoteModeCheckBox.IsChecked = false;
         StatusText.Text = kind == "text"
-            ? "Эскиз /Annots: щёлкните по странице. Текст берётся из поля заметки. НЕ сохраняется в PDF."
+            ? "Щёлкните по странице для комментария. Его можно сохранить отдельной PDF-копией через меню аннотаций."
             : "Эскиз /Annots: выделите область мышью. НЕ сохраняется в PDF.";
         SetControls();
     }
@@ -1005,7 +1007,7 @@ public partial class PdfViewerWindow : UserControl
     {
         _nativeDraftMode = null;
         StatusText.Text = _nativeDrafts.Count > 0
-            ? "Эскизы остаются на экране, но в PDF НЕ сохраняются. Для обычного сохранения очистите их."
+            ? "Текстовые комментарии можно сохранить через меню аннотаций; рамки и выделения пока только эскизы."
             : "Предпросмотр аннотаций завершён; PDF не изменён.";
         SetControls();
     }
@@ -1087,7 +1089,7 @@ public partial class PdfViewerWindow : UserControl
                         NoteTextBox.Text));
                     ShowRectangles(_plan.Pages[_pageIndex]);
                     SetControls();
-                    StatusText.Text = "Эскиз комментария добавлен. Не попадёт в PDF при сохранении.";
+                    StatusText.Text = "Текстовый комментарий добавлен. Сохраните его через меню аннотаций в новый PDF.";
                 }
                 else
                 {
@@ -2297,9 +2299,9 @@ public partial class PdfViewerWindow : UserControl
         if (_nativeDrafts.Count > 0)
         {
             MessageBox.Show(HostWindow,
-                "Эскизы интерактивных аннотаций пока нельзя сохранить в PDF. " +
-                "Сначала очистите их в меню «Аннотации · эскиз». " +
-                "Исходный документ не изменён.",
+                "Обычное «Сохранить как» не включает эскизы аннотаций. " +
+                "Текстовые комментарии можно записать отдельно в меню «Аннотации». " +
+                "Рамки и выделения пока нужно убрать. Исходный документ не изменён.",
                 "Аннотации — только эскиз",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
