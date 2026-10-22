@@ -90,7 +90,7 @@ internal static class PdfNativeAnnotationPolicy
                         throw new InvalidDataException("Отсутствует текст комментария.");
                     comment = text.GetString()!;
                     if (comment.Length is < 1 or > MaxCommentLength ||
-                        comment.Any(ch => char.IsControl(ch) || char.IsSurrogate(ch)))
+                        PdfFormFillLabPolicy.HasUnsafeText(comment))
                         throw new InvalidDataException("Недопустимое содержимое комментария.");
                 }
                 result.Add(new PdfNativeAnnotationSpec(kind, pageNo - 1,
