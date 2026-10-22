@@ -115,6 +115,10 @@ internal sealed class PdfNativeAnnotationDraftSession
     internal IReadOnlyList<PdfNativeAnnotationDraft> ForPage(int pageIndex) =>
         _entries.Where(x => x.PageIndex == pageIndex).ToList().AsReadOnly();
 
+    /// <summary>An immutable snapshot for safe new-copy export across all pages.</summary>
+    internal IReadOnlyList<PdfNativeAnnotationDraft> Snapshot() =>
+        Array.AsReadOnly(_entries.ToArray());
+
     internal void Add(PdfNativeAnnotationDraft draft)
     {
         if (draft is null || !draft.IsValid)
