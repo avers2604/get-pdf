@@ -6,6 +6,22 @@ namespace GetPdf.Tests;
 public sealed class PdfNativeAnnotationDraftSessionTests
 {
     [TestMethod]
+    public void InvisibleBidiControlsCannotBeInsertedIntoPdfCommentText()
+    {
+        var draft = new PdfNativeAnnotationDraft(
+            "text", 0, .1, .1, .2, .2, "Приказ" + '\u202e' + "txt");
+        Assert.IsFalse(draft.IsValid);
+        var session = new PdfNativeAnnotationDraftSession();
+        Assert.ThrowsExactly<ArgumentException>(() => session.Add(draft));
+
+        byte[] json = System.Text.Encoding.UTF8.GetBytes(
+            "{\"version\":1,\"annotations\":[{\"type\":\"text\",\"page\":1," +
+            "\"rect\":[10,10,30,30],\"text\":\"Приказ\\u202etxt\"}]}");
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            PdfNativeAnnotationPolicy.ReadRequest(json));
+    }
+
+    [TestMethod]
     public void SnapshotContainsAllPagesAndCannotMutateDraftSession()
     {
         var drafts = new PdfNativeAnnotationDraftSession();
