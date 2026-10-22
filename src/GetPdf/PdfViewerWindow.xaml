@@ -333,6 +333,12 @@
                   Visibility="Collapsed" IsEnabled="{Binding CanSelectPage, Mode=OneWay}"
                   Click="Gup2VerifySha_Click" Margin="0,0,5,10"
                   ToolTip="Сверить неизменённый скачанный PDF с хешем WORM-оригинала из карточки GUP-2"/>
+          <Button x:Name="Gup2DirectReturnButton"
+                  Content="Отправить PDF-копию в GUP-2…"
+                  Visibility="Collapsed" IsEnabled="False"
+                  Click="Gup2DirectReturn_Click" Margin="0,0,5,10"
+                  AutomationProperties.Name="Загрузить подготовленную PDF-копию по одноразовому коду GUP-2"
+                  ToolTip="Только с разрешения ИТ. Использует пяти-минутный код из GUP-2 и HTTPS без cookies браузера"/>
           <Button x:Name="PdfStructureButton" Content="Состав PDF…" Click="PdfStructure_Click"
                   IsEnabled="False" Margin="0,0,10,0"
                   ToolTip="Только сведения о полях и аннотациях без их содержимого; не проверка цифровой подписи"
