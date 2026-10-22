@@ -140,6 +140,7 @@ internal static class PdfNativeTextAnnotationWriter
                 catch (IOException) { /* Next session cleanup can retry. */ }
             }
         }
+    }
 
     // PDFsharp 6.2.4 exposes PdfDictionary.CreateStream and Internals.AddObject.
     // /AP uses *local* BBox coordinates, never the absolute /Rect PDF positions.
@@ -204,6 +205,5 @@ internal static class PdfNativeTextAnnotationWriter
         annot.Elements.SetObject("/AP", ap);
         pdf.Internals.AddObject(annot);
         page.Annotations.Elements.Add(annot.ReferenceNotNull);
-    }
     }
 }
