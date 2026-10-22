@@ -11,14 +11,6 @@ public partial class PdfViewerWindow
             return;
         var drafts = _nativeDrafts.Snapshot();
         if (drafts.Count == 0) return;
-        if (drafts.Any(d => d.Kind != "text"))
-        {
-            MessageBox.Show(HostWindow,
-                "Настоящие PDF-аннотации пока поддерживаются только для текстовых комментариев. " +
-                "Рамки и выделение остаются эскизами; удалите или отмените их перед сохранением.",
-                "Сохранение PDF-аннотаций", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
         // A draft references the original page indexes. A reordered or replaced
         // page plan cannot safely be annotated with those stale coordinates.
         if (_plan.HasChanges || !string.Equals(_sourcePath, _originalSourceCopyPath,
@@ -33,7 +25,7 @@ public partial class PdfViewerWindow
         string source = _originalSourceCopyPath;
         var dialog = NewPdfOutputDialog(
             Path.GetFileNameWithoutExtension(_originalPath) + "_комментарии");
-        dialog.Title = "Сохранить интерактивные текстовые комментарии в отдельный PDF";
+        dialog.Title = "Сохранить интерактивные аннотации в отдельный PDF";
         if (dialog.ShowDialog(HostWindow) != true || !ValidateOutput(dialog.FileName))
             return;
 
@@ -50,7 +42,7 @@ public partial class PdfViewerWindow
             _nativeDrafts.Discard();
             _nativeDraftMode = null;
             if (_plan is not null) ShowRectangles(_plan.Pages[_pageIndex]);
-            StatusText.Text = $"Сохранено текстовых PDF-аннотаций: {drafts.Count}. " +
+            StatusText.Text = $"Сохранено PDF-аннотаций: {drafts.Count}. " +
                 "Исходный PDF не изменён.";
         }
         catch (OperationCanceledException)
@@ -61,7 +53,7 @@ public partial class PdfViewerWindow
         {
             DiagnosticLog.Failure("pdf-native-comment-export", ex);
             MessageBox.Show(HostWindow,
-                "Не удалось проверить или сохранить текстовые аннотации PDF. " +
+                "Не удалось проверить или сохранить интерактивные аннотации PDF. " +
                 "Оригинал не изменён. Выберите другой простой PDF без форм, " +
                 "подписей, действий и существующих аннотаций.",
                 "Сохранение PDF-аннотаций", MessageBoxButton.OK,
