@@ -23,7 +23,7 @@ public sealed class WopiReadOnlySessionTests
         Assert.AreEqual(Now.AddMinutes(5).ToUnixTimeMilliseconds(), session.AccessTokenTtl);
         var grant = WopiReadOnlySessionService.Authorize(
             session.AccessToken, Secret, Document(), Now.AddMinutes(1));
-        using var json = JsonDocument.Parse(WopiReadOnlySessionService.CheckFileInfo(Document(), grant));
+        using var json = JsonDocument.Parse(WopiReadOnlySessionService.CheckFileInfo(Document(), grant, Now));
         var root = json.RootElement;
         Assert.AreEqual("Приказ.docx", root.GetProperty("BaseFileName").GetString());
         Assert.AreEqual("employee-1", root.GetProperty("UserId").GetString());
@@ -41,7 +41,7 @@ public sealed class WopiReadOnlySessionTests
         var item = Document(canEdit: true, worm: true);
         var session = WopiReadOnlySessionService.Issue(item, Secret, Now, TimeSpan.FromMinutes(5));
         var authorized = WopiReadOnlySessionService.Authorize(session.AccessToken, Secret, item, Now);
-        using var json = JsonDocument.Parse(WopiReadOnlySessionService.CheckFileInfo(item, authorized));
+        using var json = JsonDocument.Parse(WopiReadOnlySessionService.CheckFileInfo(item, authorized, Now));
         Assert.IsFalse(json.RootElement.GetProperty("UserCanWrite").GetBoolean());
     }
 
@@ -88,7 +88,7 @@ public sealed class WopiReadOnlySessionTests
         var doc = Document();
         var session = WopiReadOnlySessionService.Issue(doc, Secret, Now, TimeSpan.FromMinutes(5));
         var grant = WopiReadOnlySessionService.Authorize(session.AccessToken, Secret, doc, Now);
-        string json = WopiReadOnlySessionService.CheckFileInfo(doc, grant);
+        string json = WopiReadOnlySessionService.CheckFileInfo(doc, grant, Now);
         Assert.IsFalse(json.Contains(session.AccessToken, StringComparison.Ordinal));
         Assert.IsFalse(json.Contains("secret", StringComparison.OrdinalIgnoreCase));
         Assert.IsFalse(json.Contains("C:\\", StringComparison.OrdinalIgnoreCase));
@@ -100,13 +100,25 @@ public sealed class WopiReadOnlySessionTests
         var doc = Document();
         var session = WopiReadOnlySessionService.Issue(doc, Secret, Now, TimeSpan.FromMinutes(5));
         var grant = WopiReadOnlySessionService.Authorize(session.AccessToken, Secret, doc, Now);
-        var plan = WopiReadOnlySessionService.PlanGetFile(doc, grant);
+        var plan = WopiReadOnlySessionService.PlanGetFile(doc, grant, Now);
         Assert.AreEqual("get-42", plan.DocumentId);
-        Assert.AreEqual(1250, plan.ExpectedSize);
+        Assert.AreEqual(1250L, plan.ExpectedSize);
         Assert.IsTrue(plan.ReadOnly);
         Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
             WopiReadOnlySessionService.PlanGetFile(
-                doc with { DocumentId = "other-document" }, grant));
+                doc with { DocumentId = "other-document" }, grant, Now));
+    }
+
+    [TestMethod]
+    public void ExpiredGrantsCannotProduceFileMetadataOrGetFilePlans()
+    {
+        var doc = Document();
+        var session = WopiReadOnlySessionService.Issue(doc, Secret, Now, TimeSpan.FromMinutes(5));
+        var grant = WopiReadOnlySessionService.Authorize(session.AccessToken, Secret, doc, Now);
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
+            WopiReadOnlySessionService.CheckFileInfo(doc, grant, Now.AddMinutes(6)));
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
+            WopiReadOnlySessionService.PlanGetFile(doc, grant, Now.AddMinutes(6)));
     }
 
     [TestMethod]
