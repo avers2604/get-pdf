@@ -8,7 +8,7 @@ namespace GetDocument.Collaboration;
 /// WOPI proof-key verification contract (MS-WOPI):
 /// 4-byte network-order length + UTF-8 token,
 /// 4-byte network-order length + UTF-8 uppercase absolute request URL,
-/// 4-byte network-order length (8) + little-endian 64-bit UTC ticks.
+/// 4-byte network-order length (8) + big-endian 64-bit UTC ticks.
 /// RSA public keys MUST be obtained from pinned, authenticated discovery XML;
 /// never use keys supplied by a WOPI request itself.
 /// </summary>
@@ -36,7 +36,7 @@ public static class WopiProofValidator
         url.CopyTo(data, offset);
         offset += url.Length;
         WriteLength(sizeof(long));
-        BinaryPrimitives.WriteInt64LittleEndian(data.AsSpan(offset), timestampTicks);
+        BinaryPrimitives.WriteInt64BigEndian(data.AsSpan(offset), timestampTicks);
         return data;
 
         void WriteLength(int length)
