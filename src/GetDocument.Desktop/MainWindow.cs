@@ -10,6 +10,7 @@ using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using GetDocument.Core.EasterEgg;
 using GetDocument.Core.Workspace;
+using GetDocument.Desktop.Preview;
 
 namespace GetDocument.Desktop;
 
@@ -174,22 +175,7 @@ public sealed class MainWindow : Window
     {
         if (!_views.TryGetValue(item.Id, out var view))
         {
-            var panel = new StackPanel { Margin = new Thickness(32), Spacing = 12 };
-            panel.Children.Add(new TextBlock { Text = item.Title, FontSize = 24,
-                FontWeight = FontWeight.SemiBold });
-            panel.Children.Add(new TextBlock
-            {
-                Text = item.IsDraft
-                    ? "Черновик открыт во вкладке. Редактор и сохранение будут подключены на следующем этапе."
-                    : "Файл зарегистрирован в единой вкладке. Просмотр этого формата будет подключён через адаптер.",
-                TextWrapping = TextWrapping.Wrap
-            });
-            if (item.FilePath is not null)
-                panel.Children.Add(new TextBlock
-                {
-                    Text = "Источник: " + item.FilePath,
-                    TextWrapping = TextWrapping.Wrap
-                });
+            Control panel = PreviewFactory.Create(item);
 
             var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             title.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center,
@@ -210,6 +196,7 @@ public sealed class MainWindow : Window
     {
         if (!_views.Remove(id, out var view)) return;
         _workspace.Close(id);
+        if (view.Content is IDisposable disposable) disposable.Dispose();
         _items.Remove(view);
         if (_tabs.SelectedItem is null || ReferenceEquals(_tabs.SelectedItem, view))
         {
