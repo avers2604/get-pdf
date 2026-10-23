@@ -117,12 +117,14 @@ public sealed class DocumentWorkspace
         int index = _tabs.FindIndex(t => t.Id == id);
         if (index < 0) throw new ArgumentException("Вкладка отсутствует.", nameof(id));
         var tab = _tabs[index];
-        if (tab.IsDraft || tab.FilePath is null || tab.Kind != WorkspaceDocumentKind.Text)
-            throw new InvalidOperationException("Новая редакция пока поддерживается только для сохранённого DOCX.");
+        if (tab.IsDraft || tab.FilePath is null ||
+            tab.Kind is not (WorkspaceDocumentKind.Text or WorkspaceDocumentKind.Spreadsheet))
+            throw new InvalidOperationException("Новая редакция поддерживается только для простых DOCX/XLSX.");
         ArgumentException.ThrowIfNullOrWhiteSpace(destination);
         string full = Path.GetFullPath(destination);
-        if (!Path.GetExtension(full).Equals(".docx", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Новая редакция должна иметь формат DOCX.", nameof(destination));
+        string expected = tab.Kind == WorkspaceDocumentKind.Text ? ".docx" : ".xlsx";
+        if (!Path.GetExtension(full).Equals(expected, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Формат новой редакции не соответствует документу.", nameof(destination));
         if (_pathComparer.Equals(tab.FilePath, full))
             throw new IOException("Оригинал нельзя перезаписывать.");
         if (_tabs.Any(x => x.Id != id && x.FilePath is not null && _pathComparer.Equals(x.FilePath, full)))

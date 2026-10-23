@@ -70,7 +70,7 @@ public sealed class MainWindow : Window
         KeyDown += OnKeyDown;
         Closing += (_, e) =>
         {
-            if (_views.Values.Any(v => v.Content is SimpleDocxEditPane { HasUnsavedChanges: true }))
+            if (_views.Values.Any(v => v.Content is SimpleDocxEditPane { HasUnsavedChanges: true } or SimpleXlsxEditPane { HasUnsavedChanges: true }))
             {
                 e.Cancel = true;
                 _status.Text = "Есть несохранённые правки: сохраните редакцию или отмените изменения.";
@@ -185,7 +185,7 @@ public sealed class MainWindow : Window
     {
         if (!_views.TryGetValue(item.Id, out var view))
         {
-            Control panel = PreviewFactory.Create(item, SaveDraftAsync, SaveRevisionAsync);
+            Control panel = PreviewFactory.Create(item, SaveDraftAsync, SaveRevisionAsync, SaveSpreadsheetRevisionAsync);
 
             var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             title.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center,
@@ -312,10 +312,60 @@ public sealed class MainWindow : Window
         }
     }
 
+    private async Task SaveSpreadsheetRevisionAsync(WorkspaceDocumentTab item, string expectedSha256, string[][] cells)
+    {
+        IStorageFile? selected;
+        try
+        {
+            selected = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Сохранить новую редакцию таблицы",
+                SuggestedFileName = Path.GetFileNameWithoutExtension(item.Title) + " - редакция.xlsx",
+                DefaultExtension = "xlsx",
+                ShowOverwritePrompt = false,
+                FileTypeChoices = [new FilePickerFileType("XLSX") { Patterns = ["*.xlsx"] }]
+            });
+        }
+        catch (Exception ex)
+        {
+            _status.Text = "Ошибка выбора файла: " + ex.Message;
+            return;
+        }
+        if (selected is null) return;
+        if (!selected.Path.IsFile)
+        {
+            _status.Text = "Выберите локальную или подключённую сетевую папку.";
+            return;
+        }
+        try
+        {
+            string target = selected.Path.LocalPath;
+            await Task.Run(() =>
+                SimpleXlsxEditor.SaveNewRevision(item.FilePath!, expectedSha256, target, cells));
+            var updated = _workspace.BindNewRevision(item.Id, target);
+            if (_views.TryGetValue(item.Id, out var tab))
+            {
+                if (tab.Header is StackPanel header &&
+                    header.Children.FirstOrDefault() is TextBlock title)
+                    title.Text = updated.Title;
+                var previous = tab.Content;
+                tab.Content = PreviewFactory.Create(updated, SaveDraftAsync,
+                    SaveRevisionAsync, SaveSpreadsheetRevisionAsync);
+                if (previous is IDisposable disposable) disposable.Dispose();
+            }
+            _status.Text = "Новая редакция XLSX создана: " + updated.Title;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            ArgumentException or InvalidOperationException or NotSupportedException or InvalidDataException)
+        {
+            _status.Text = "Сохранение XLSX отклонено: " + ex.Message;
+        }
+    }
+
     private void CloseDocument(Guid id)
     {
         if (!_views.TryGetValue(id, out var view)) return;
-        if (view.Content is SimpleDocxEditPane { HasUnsavedChanges: true })
+        if (view.Content is SimpleDocxEditPane { HasUnsavedChanges: true } or SimpleXlsxEditPane { HasUnsavedChanges: true })
         {
             _status.Text = "Сначала сохраните новую редакцию или нажмите «Отменить правки».";
             return;
