@@ -2,6 +2,10 @@ using System.Security.Cryptography;
 using GetDocument.WopiGateway;
 
 var builder = WebApplication.CreateBuilder(args);
+// Do not let ASP.NET request-start messages reveal WOPI bearer access_token
+// query parameters in ordinary application logs. Reverse-proxy logs must
+// independently redact access_token as well.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 
 // FAIL CLOSED: no self-provisioning secret, anonymous file share or ACL bypass.
 // Secrets should be mounted into the server process by corporate secret management.
