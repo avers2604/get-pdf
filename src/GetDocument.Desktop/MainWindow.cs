@@ -363,18 +363,20 @@ public sealed class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center
         });
         var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
-        close.Click += (_, _) =>
-        {
-            if (_filesTab is null) return;
-            if (_filesTab.Content is IDisposable disposable) disposable.Dispose();
-            _items.Remove(_filesTab);
-            _filesTab = null;
-            _tabs.SelectedIndex = 0;
-        };
+        close.Click += (_, _) => CloseGetFiles();
         heading.Children.Add(close);
         _filesTab = new TabItem { Header = heading, Content = pane };
         _items.Add(_filesTab);
         _tabs.SelectedItem = _filesTab;
+    }
+
+    private void CloseGetFiles()
+    {
+        if (_filesTab is null) return;
+        if (_filesTab.Content is IDisposable disposable) disposable.Dispose();
+        _items.Remove(_filesTab);
+        _filesTab = null;
+        _tabs.SelectedIndex = 0;
     }
 
     private void OpenHiddenGame()
@@ -424,5 +426,7 @@ public sealed class MainWindow : Window
         }
         else if (e.Key == Key.W && _tabs.SelectedItem is TabItem { Tag: Guid id })
         { e.Handled = true; CloseDocument(id); }
+        else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _filesTab))
+        { e.Handled = true; CloseGetFiles(); }
     }
 }
