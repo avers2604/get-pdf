@@ -1,0 +1,9 @@
+<Project Sdk="MSTest.Sdk/4.5.1">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsTestApplication>true</IsTestApplication>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/GetDocument.Core/GetDocument.Core.csproj" /></ItemGroup>
+</Project>

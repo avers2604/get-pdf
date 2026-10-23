@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="src/GetDocument.Core/GetDocument.Core.csproj" />
   <Project Path="src/GetPdf/GetPdf.csproj" />
+  <Project Path="tests/GetDocument.Core.Tests/GetDocument.Core.Tests.csproj" />
   <Project Path="tests/GetPdf.Tests/GetPdf.Tests.csproj" />
 </Solution>
