@@ -11,6 +11,7 @@ using Avalonia.Platform.Storage;
 using GetDocument.Core.EasterEgg;
 using GetDocument.Core.Workspace;
 using GetDocument.Desktop.Preview;
+using GetDocument.Desktop.Files;
 using GetDocument.Office;
 
 namespace GetDocument.Desktop;
@@ -29,6 +30,7 @@ public sealed class MainWindow : Window
     private readonly TabControl _tabs = new();
     private readonly TextBlock _status = new();
     private TabItem? _gameTab;
+    private TabItem? _filesTab;
 
     public MainWindow()
     {
@@ -68,6 +70,10 @@ public sealed class MainWindow : Window
         root.Children.Add(_tabs);
         Content = root;
         KeyDown += OnKeyDown;
+        Closed += (_, _) =>
+        {
+            if (_filesTab?.Content is IDisposable files) files.Dispose();
+        };
         Closing += (_, args) =>
         {
             if (_views.Values.Any(t => t.Content is SimpleDocxEditorPane { HasUnsavedChanges: true }))
@@ -112,6 +118,9 @@ public sealed class MainWindow : Window
         var open = new Button { Content = "Открыть файл" };
         open.Click += async (_, _) => await OpenFilesAsync();
         bar.Children.Add(open);
+        var getFiles = new Button { Content = "ГЭТ Файлы" };
+        getFiles.Click += (_, _) => ShowGetFiles();
+        bar.Children.Add(getFiles);
         var home = new Button { Content = "Главная" };
         home.Click += (_, _) => _tabs.SelectedIndex = 0;
         bar.Children.Add(home);
@@ -152,13 +161,15 @@ public sealed class MainWindow : Window
             () => AddDocument(_workspace.CreateDraft(WorkspaceDocumentKind.Presentation))));
         actions.Children.Add(CreateAction("Открыть", "PDF, Office, изображения",
             () => _ = OpenFilesAsync()));
+        actions.Children.Add(CreateAction("ГЭТ Файлы", "Сетевые папки и документы",
+            ShowGetFiles));
         actions.Children.Add(CreateAction("ГЭТ Сканирование", "Подключение позднее",
             () => OpenPlaceholder("ГЭТ Сканирование",
                 "Интеграция с отдельным приложением ГЭТ Сканирование предусмотрена, но пока не подключена.")));
         content.Children.Add(actions);
         content.Children.Add(new TextBlock
         {
-            Text = "ГЭТ Файлы: интеграция с существующими сетевыми папками — следующий этап.",
+            Text = "ГЭТ Файлы: подключение к доступным общим папкам Windows и Linux, без второго хранилища.",
             Margin = new Thickness(0, 26, 0, 0)
         });
         return new ScrollViewer { Content = content };
@@ -326,6 +337,44 @@ public sealed class MainWindow : Window
         };
         _items.Add(tab);
         _tabs.SelectedItem = tab;
+    }
+
+    private void ShowGetFiles()
+    {
+        if (_filesTab is not null)
+        {
+            _tabs.SelectedItem = _filesTab;
+            return;
+        }
+
+        var pane = new GetFilesPane(path =>
+        {
+            try { AddDocument(_workspace.OpenExisting(path)); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                ArgumentException or NotSupportedException)
+            {
+                _status.Text = "Не удалось открыть документ из ГЭТ Файлы: " + ex.Message;
+            }
+        });
+        var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        heading.Children.Add(new TextBlock
+        {
+            Text = "ГЭТ Файлы",
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
+        close.Click += (_, _) =>
+        {
+            if (_filesTab is null) return;
+            if (_filesTab.Content is IDisposable disposable) disposable.Dispose();
+            _items.Remove(_filesTab);
+            _filesTab = null;
+            _tabs.SelectedIndex = 0;
+        };
+        heading.Children.Add(close);
+        _filesTab = new TabItem { Header = heading, Content = pane };
+        _items.Add(_filesTab);
+        _tabs.SelectedItem = _filesTab;
     }
 
     private void OpenHiddenGame()
