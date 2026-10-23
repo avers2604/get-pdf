@@ -78,7 +78,8 @@ public sealed class MainWindow : Window
         };
         Closing += (_, args) =>
         {
-            if (_views.Values.Any(t => t.Content is SimpleDocxEditorPane { HasUnsavedChanges: true }))
+            if (_views.Values.Any(t => t.Content is SimpleDocxEditorPane { HasUnsavedChanges: true } or
+                SimpleXlsxEditPane { HasUnsavedChanges: true }))
             {
                 args.Cancel = true;
                 _status.Text = "Есть несохранённые правки DOCX. Сохраните новую редакцию или отмените изменения.";
@@ -203,7 +204,7 @@ public sealed class MainWindow : Window
     {
         if (!_views.TryGetValue(item.Id, out var view))
         {
-            Control panel = PreviewFactory.Create(item, SaveDraftAsync, OpenSavedCopyAsync);
+            Control panel = PreviewFactory.Create(item, SaveDraftAsync, OpenSavedCopyAsync, SaveXlsxRevisionAsync);
 
             var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             title.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center,
@@ -267,7 +268,7 @@ public sealed class MainWindow : Window
             {
                 if (tab.Header is StackPanel title && title.Children.FirstOrDefault() is TextBlock caption)
                     caption.Text = saved.Title;
-                tab.Content = PreviewFactory.Create(saved, SaveDraftAsync, OpenSavedCopyAsync);
+                tab.Content = PreviewFactory.Create(saved, SaveDraftAsync, OpenSavedCopyAsync, SaveXlsxRevisionAsync);
             }
             _status.Text = "Создан новый офисный файл: " + saved.Title;
         }
@@ -284,10 +285,61 @@ public sealed class MainWindow : Window
         return Task.CompletedTask;
     }
 
+    private async Task<bool> SaveXlsxRevisionAsync(
+        WorkspaceDocumentTab tab, string expectedSha256, string[][] values)
+    {
+        if (tab.FilePath is null || !Path.GetExtension(tab.FilePath)
+                .Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            _status.Text = "Сохранение возможно только для уже открытого XLSX.";
+            return false;
+        }
+
+        IStorageFile? chosen;
+        try
+        {
+            chosen = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Сохранить новую редакцию XLSX",
+                SuggestedFileName = Path.GetFileNameWithoutExtension(tab.FilePath) + "-редакция.xlsx",
+                DefaultExtension = "xlsx",
+                ShowOverwritePrompt = false,
+                FileTypeChoices = [new FilePickerFileType("XLSX") { Patterns = ["*.xlsx"] }]
+            });
+        }
+        catch (Exception ex)
+        {
+            _status.Text = "Не удалось открыть диалог сохранения: " + ex.Message;
+            return false;
+        }
+        if (chosen is null) return false;
+        if (!chosen.Path.IsFile)
+        {
+            _status.Text = "Выберите файловую папку или доступный сетевой каталог.";
+            return false;
+        }
+
+        try
+        {
+            string destination = chosen.Path.LocalPath;
+            await Task.Run(() => SimpleXlsxEditor.SaveNewRevision(
+                tab.FilePath, expectedSha256, destination, values));
+            await OpenSavedCopyAsync(destination);
+            _status.Text = "Создана новая редакция XLSX. Оригинал не изменён.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _status.Text = "Не удалось сохранить XLSX: " + ex.Message;
+            return false;
+        }
+    }
+
     private void CloseDocument(Guid id)
     {
         if (!_views.TryGetValue(id, out var view)) return;
-        if (view.Content is SimpleDocxEditorPane { HasUnsavedChanges: true })
+        if (view.Content is SimpleDocxEditorPane { HasUnsavedChanges: true } or
+            SimpleXlsxEditPane { HasUnsavedChanges: true })
         {
             _status.Text = "Есть несохранённые изменения. Сохраните редакцию или отмените правки.";
             return;

@@ -7,7 +7,9 @@ namespace GetDocument.Desktop.Preview;
 
 internal static class PreviewFactory
 {
-    public static Control Create(WorkspaceDocumentTab item, Func<WorkspaceDocumentTab, Task> saveDraft, Func<string, Task> openSavedCopy)
+    public static Control Create(WorkspaceDocumentTab item, Func<WorkspaceDocumentTab, Task> saveDraft,
+        Func<string, Task> openSavedCopy,
+        Func<WorkspaceDocumentTab, string, string[][], Task<bool>> saveXlsxRevision)
     {
         if (item.IsDraft)
             return new OfficeDraftPane(item, saveDraft);
@@ -17,6 +19,9 @@ internal static class PreviewFactory
         if (item.Kind == WorkspaceDocumentKind.Text &&
             Path.GetExtension(item.FilePath).Equals(".docx", StringComparison.OrdinalIgnoreCase))
             return new SimpleDocxEditorPane(item.FilePath, openSavedCopy);
+        if (item.Kind == WorkspaceDocumentKind.Spreadsheet &&
+            Path.GetExtension(item.FilePath).Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
+            return new SimpleXlsxEditPane(item, saveXlsxRevision);
         if (item.Kind == WorkspaceDocumentKind.Pdf)
             return new PdfPreviewPane(item.FilePath);
         if (item.Kind == WorkspaceDocumentKind.Image)
