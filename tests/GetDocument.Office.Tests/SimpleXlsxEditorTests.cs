@@ -128,6 +128,27 @@ public sealed class SimpleXlsxEditorTests
         Assert.IsFalse(File.Exists(destination));
     }
 
+    [TestMethod]
+    public void OriginalAndRevisionOpenInDistinctSharedWorkspaceTabsWithoutDuplicates()
+    {
+        using var temp = new Folder();
+        string source = Path.Combine(temp.Path, "original.xlsx");
+        string revised = Path.Combine(temp.Path, "revision.xlsx");
+        OfficeDocumentFactory.CreateNew(WorkspaceDocumentKind.Spreadsheet, source);
+        var snapshot = SimpleXlsxEditor.Load(source);
+        snapshot.Cells[0][0] = "Вторая редакция";
+        SimpleXlsxEditor.SaveNewRevision(source, snapshot.Sha256, revised, snapshot.Cells);
+
+        var workspace = new DocumentWorkspace();
+        var first = workspace.OpenExisting(source);
+        var second = workspace.OpenExisting(revised);
+        Assert.AreNotEqual(first.Id, second.Id);
+        Assert.AreEqual(WorkspaceDocumentKind.Spreadsheet, second.Kind);
+        Assert.AreEqual(second.Id, workspace.OpenExisting(revised).Id);
+        Assert.AreEqual(2, workspace.Tabs.Count);
+        Assert.AreEqual(second.Id, workspace.ActiveId);
+    }
+
     private sealed class Folder : IDisposable
     {
         public string Path { get; } = System.IO.Path.Combine(
