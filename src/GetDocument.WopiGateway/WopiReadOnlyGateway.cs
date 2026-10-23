@@ -4,6 +4,7 @@ using System.Text.Json;
 using GetDocument.Collaboration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace GetDocument.WopiGateway;
@@ -88,13 +89,15 @@ public static class WopiReadOnlyGateway
         ArgumentNullException.ThrowIfNull(options);
         endpoints.MapGet("/wopi/files/{fileId}", (
             HttpContext context, string fileId,
-            IWopiReadOnlyStore store, IWopiReadAuthorization authorization,
+            [FromServices] IWopiReadOnlyStore store,
+            [FromServices] IWopiReadAuthorization authorization,
             CancellationToken cancellationToken) =>
             HandleAsync(context, fileId, false, options, store, authorization,
                 DateTimeOffset.UtcNow, cancellationToken));
         endpoints.MapGet("/wopi/files/{fileId}/contents", (
             HttpContext context, string fileId,
-            IWopiReadOnlyStore store, IWopiReadAuthorization authorization,
+            [FromServices] IWopiReadOnlyStore store,
+            [FromServices] IWopiReadAuthorization authorization,
             CancellationToken cancellationToken) =>
             HandleAsync(context, fileId, true, options, store, authorization,
                 DateTimeOffset.UtcNow, cancellationToken));
@@ -116,7 +119,7 @@ public static class WopiReadOnlyGateway
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(authorization);
 
-        context.Response.Headers.CacheControl = "private, no-store, max-age=0";
+        context.Response.Headers["Cache-Control"] = "private, no-store, max-age=0";
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         context.Response.Headers["Referrer-Policy"] = "no-referrer";
         context.Response.Headers["X-WOPI-ServerVersion"] = "GET-Document-WOPI-readonly/0.1";
@@ -213,7 +216,6 @@ public static class WopiReadOnlyGateway
             revision.Sha256.Length != 64)
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
 
-        context.Response.Headers["X-WOPI-ItemVersion"] = revision.RevisionId;
         var doc = new WopiDocument(
             revision.DocumentId, revision.RevisionId, revision.FileName,
             revision.OwnerId, user.UserId, user.DisplayName, revision.Size,
@@ -229,6 +231,7 @@ public static class WopiReadOnlyGateway
             return Results.Unauthorized();
         }
 
+        context.Response.Headers["X-WOPI-ItemVersion"] = revision.RevisionId;
         if (!contents)
         {
             try
