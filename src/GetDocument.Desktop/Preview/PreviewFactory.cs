@@ -7,11 +7,10 @@ namespace GetDocument.Desktop.Preview;
 
 internal static class PreviewFactory
 {
-    public static Control Create(WorkspaceDocumentTab item)
+    public static Control Create(WorkspaceDocumentTab item, Func<WorkspaceDocumentTab, Task> saveDraft)
     {
         if (item.IsDraft)
-            return Message(item.Title, "Черновик создан в общей вкладке. " +
-                "Создание настоящего офисного файла и редактор подключаются на следующем этапе.");
+            return new OfficeDraftPane(item, saveDraft);
         if (item.FilePath is null)
             return Message(item.Title, "Не указан источник документа.");
 

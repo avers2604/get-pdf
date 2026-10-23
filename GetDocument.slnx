@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="src/GetDocument.Core/GetDocument.Core.csproj" />
+  <Project Path="src/GetDocument.Office/GetDocument.Office.csproj" />
+  <Project Path="tests/GetDocument.Office.Tests/GetDocument.Office.Tests.csproj" />
   <Project Path="src/GetDocument.Desktop/GetDocument.Desktop.csproj" />
   <Project Path="tests/GetDocument.Core.Tests/GetDocument.Core.Tests.csproj" />
 </Solution>
