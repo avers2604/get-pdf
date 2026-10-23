@@ -68,6 +68,14 @@ public sealed class MainWindow : Window
         root.Children.Add(_tabs);
         Content = root;
         KeyDown += OnKeyDown;
+        Closing += (_, args) =>
+        {
+            if (_views.Values.Any(t => t.Content is SimpleDocxEditorPane { HasUnsavedChanges: true }))
+            {
+                args.Cancel = true;
+                _status.Text = "Есть несохранённые правки DOCX. Сохраните новую редакцию или отмените изменения.";
+            }
+        };
     }
 
     private Control BuildHeader()
@@ -177,7 +185,7 @@ public sealed class MainWindow : Window
     {
         if (!_views.TryGetValue(item.Id, out var view))
         {
-            Control panel = PreviewFactory.Create(item, SaveDraftAsync);
+            Control panel = PreviewFactory.Create(item, SaveDraftAsync, OpenSavedCopyAsync);
 
             var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             title.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center,
@@ -241,7 +249,7 @@ public sealed class MainWindow : Window
             {
                 if (tab.Header is StackPanel title && title.Children.FirstOrDefault() is TextBlock caption)
                     caption.Text = saved.Title;
-                tab.Content = PreviewFactory.Create(saved, SaveDraftAsync);
+                tab.Content = PreviewFactory.Create(saved, SaveDraftAsync, OpenSavedCopyAsync);
             }
             _status.Text = "Создан новый офисный файл: " + saved.Title;
         }
@@ -252,9 +260,21 @@ public sealed class MainWindow : Window
         }
     }
 
+    private Task OpenSavedCopyAsync(string savedPath)
+    {
+        AddDocument(_workspace.OpenExisting(savedPath));
+        return Task.CompletedTask;
+    }
+
     private void CloseDocument(Guid id)
     {
-        if (!_views.Remove(id, out var view)) return;
+        if (!_views.TryGetValue(id, out var view)) return;
+        if (view.Content is SimpleDocxEditorPane { HasUnsavedChanges: true })
+        {
+            _status.Text = "Есть несохранённые изменения. Сохраните редакцию или отмените правки.";
+            return;
+        }
+        _views.Remove(id);
         _workspace.Close(id);
         if (view.Content is IDisposable disposable) disposable.Dispose();
         _items.Remove(view);
