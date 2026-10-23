@@ -65,7 +65,7 @@ public sealed class WopiHttpGatewayTests
         Assert.AreEqual(200, ctx.Response.StatusCode);
         CollectionAssert.AreEqual(Content, ((MemoryStream)ctx.Response.Body).ToArray());
         Assert.AreEqual("r1", ctx.Response.Headers["X-WOPI-ItemVersion"].ToString());
-        Assert.AreEqual(Content.Length, ctx.Response.ContentLength);
+        Assert.AreEqual((long)Content.Length, ctx.Response.ContentLength.GetValueOrDefault());
         Assert.AreEqual(1, _store.OpenCount);
     }
 
@@ -107,6 +107,28 @@ public sealed class WopiHttpGatewayTests
         await WopiHttpGateway.HandleGetFileAsync(ctx, "doc-42",
             _store, _security, TimeProviderForTest());
         Assert.AreEqual(412, ctx.Response.StatusCode);
+        Assert.AreEqual(0, _store.OpenCount);
+    }
+
+    [TestMethod]
+    public async Task MissingTokenIsUnauthorizedWithoutMetadataLookup()
+    {
+        var ctx = Context("/wopi/files/doc-42");
+        ctx.Request.QueryString = QueryString.Empty;
+        await WopiHttpGateway.HandleCheckFileInfoAsync(ctx, "doc-42",
+            _store, _security, TimeProviderForTest());
+        Assert.AreEqual(401, ctx.Response.StatusCode);
+        Assert.AreEqual(0, _store.ResolveCount);
+    }
+
+    [TestMethod]
+    public async Task InvalidMaxExpectedSizeIsRejectedBeforeOpeningStream()
+    {
+        var ctx = Context("/wopi/files/doc-42/contents");
+        ctx.Request.Headers["X-WOPI-MaxExpectedSize"] = "not-a-number";
+        await WopiHttpGateway.HandleGetFileAsync(ctx, "doc-42",
+            _store, _security, TimeProviderForTest());
+        Assert.AreEqual(400, ctx.Response.StatusCode);
         Assert.AreEqual(0, _store.OpenCount);
     }
 
