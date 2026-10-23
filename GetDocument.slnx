@@ -4,6 +4,8 @@
   <Project Path="src/GetDocument.Images/GetDocument.Images.csproj" />
   <Project Path="src/GetDocument.Revisions/GetDocument.Revisions.csproj" />
   <Project Path="src/GetDocument.Collaboration/GetDocument.Collaboration.csproj" />
+  <Project Path="src/GetDocument.WopiGateway/GetDocument.WopiGateway.csproj" />
+  <Project Path="tests/GetDocument.WopiGateway.Tests/GetDocument.WopiGateway.Tests.csproj" />
   <Project Path="tests/GetDocument.Collaboration.Tests/GetDocument.Collaboration.Tests.csproj" />
   <Project Path="tests/GetDocument.Revisions.Tests/GetDocument.Revisions.Tests.csproj" />
   <Project Path="tests/GetDocument.Office.Tests/GetDocument.Office.Tests.csproj" />
