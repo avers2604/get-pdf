@@ -87,13 +87,13 @@ public static class WopiHttpGateway
             HandleGetFileAsync(context, fileId, store, settings, clock));
         routes.MapPost("/wopi/files/{fileId}/contents", (HttpContext ctx) =>
         {
-            ctx.Response.Headers.Allow = "GET";
+            ctx.Response.Headers["Allow"] = "GET";
             ctx.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
             return Task.CompletedTask;
         });
         routes.MapPost("/wopi/files/{fileId}", (HttpContext ctx) =>
         {
-            ctx.Response.Headers.Allow = "GET";
+            ctx.Response.Headers["Allow"] = "GET";
             ctx.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
             return Task.CompletedTask;
         });
@@ -113,7 +113,7 @@ public static class WopiHttpGateway
         string json = WopiReadOnlySessionService.CheckFileInfo(
             access.Source!.Metadata, access.Grant!, clock.GetUtcNow());
         context.Response.StatusCode = StatusCodes.Status200OK;
-        context.Response.Headers.CacheControl = "no-store";
+        context.Response.Headers["Cache-Control"] = "no-store";
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         context.Response.ContentType = "application/json; charset=utf-8";
         await context.Response.WriteAsync(json, context.RequestAborted);
@@ -176,7 +176,7 @@ public static class WopiHttpGateway
             }
             stream.Position = 0;
             context.Response.StatusCode = StatusCodes.Status200OK;
-            context.Response.Headers.CacheControl = "no-store";
+            context.Response.Headers["Cache-Control"] = "no-store";
             context.Response.Headers["X-Content-Type-Options"] = "nosniff";
             context.Response.Headers["X-WOPI-ItemVersion"] = source.Metadata.RevisionId;
             context.Response.ContentType = "application/octet-stream";
