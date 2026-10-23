@@ -13,6 +13,7 @@ using GetDocument.Core.Workspace;
 using GetDocument.Desktop.Preview;
 using GetDocument.Desktop.Files;
 using GetDocument.Desktop.Templates;
+using GetDocument.Desktop.Revisions;
 using GetDocument.Office;
 
 namespace GetDocument.Desktop;
@@ -33,6 +34,7 @@ public sealed class MainWindow : Window
     private TabItem? _gameTab;
     private TabItem? _filesTab;
     private TabItem? _templatesTab;
+    private readonly Dictionary<Guid, TabItem> _revisionTabs = [];
 
     public MainWindow()
     {
@@ -75,6 +77,8 @@ public sealed class MainWindow : Window
         Closed += (_, _) =>
         {
             if (_filesTab?.Content is IDisposable files) files.Dispose();
+            foreach (var history in _revisionTabs.Values)
+                if (history.Content is IDisposable pane) pane.Dispose();
         };
         Closing += (_, args) =>
         {
@@ -83,7 +87,7 @@ public sealed class MainWindow : Window
                 ImagePreviewPane { HasUnsavedChanges: true }))
             {
                 args.Cancel = true;
-                _status.Text = "Есть несохранённые правки DOCX. Сохраните новую редакцию или отмените изменения.";
+                _status.Text = "Есть несохранённые правки документа. Сохраните новую редакцию или отмените изменения.";
             }
         };
     }
@@ -128,6 +132,9 @@ public sealed class MainWindow : Window
         var templates = new Button { Content = "Шаблоны" };
         templates.Click += (_, _) => ShowCorporateTemplates();
         bar.Children.Add(templates);
+        var history = new Button { Content = "История и комментарии" };
+        history.Click += (_, _) => ShowRevisionHistory();
+        bar.Children.Add(history);
         var home = new Button { Content = "Главная" };
         home.Click += (_, _) => _tabs.SelectedIndex = 0;
         bar.Children.Add(home);
@@ -474,6 +481,57 @@ public sealed class MainWindow : Window
         _tabs.SelectedIndex = 0;
     }
 
+    private void ShowRevisionHistory()
+    {
+        var source = _workspace.Tabs.FirstOrDefault(t => t.Id == _workspace.ActiveId);
+        if (source?.FilePath is not { } filePath)
+        {
+            _status.Text = "Для истории сначала откройте и выберите сохранённый документ.";
+            return;
+        }
+        if (_revisionTabs.TryGetValue(source.Id, out var existing))
+        {
+            _tabs.SelectedItem = existing;
+            return;
+        }
+        var pane = new RevisionHistoryPane(filePath, saved =>
+        {
+            try { AddDocument(_workspace.OpenExisting(saved)); }
+            catch (Exception ex)
+            {
+                _status.Text = "Не удалось открыть редакцию во вкладке: " + ex.Message;
+            }
+        });
+        var heading = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 5
+        };
+        heading.Children.Add(new TextBlock
+        {
+            Text = "История: " + source.Title,
+            VerticalAlignment = VerticalAlignment.Center,
+            MaxWidth = 210,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
+        Guid sourceId = source.Id;
+        close.Click += (_, _) => CloseRevisionHistory(sourceId);
+        heading.Children.Add(close);
+        var view = new TabItem { Header = heading, Content = pane };
+        _revisionTabs[source.Id] = view;
+        _items.Add(view);
+        _tabs.SelectedItem = view;
+    }
+
+    private void CloseRevisionHistory(Guid sourceId)
+    {
+        if (!_revisionTabs.Remove(sourceId, out var tab)) return;
+        if (tab.Content is IDisposable disposable) disposable.Dispose();
+        _items.Remove(tab);
+        _tabs.SelectedIndex = 0;
+    }
+
     private void OpenHiddenGame()
     {
         if (_gameTab is not null)
@@ -525,5 +583,14 @@ public sealed class MainWindow : Window
         { e.Handled = true; CloseGetFiles(); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _templatesTab))
         { e.Handled = true; CloseCorporateTemplates(); }
+        else if (e.Key == Key.W)
+        {
+            var pair = _revisionTabs.FirstOrDefault(kv => ReferenceEquals(kv.Value, _tabs.SelectedItem));
+            if (pair.Value is not null)
+            {
+                e.Handled = true;
+                CloseRevisionHistory(pair.Key);
+            }
+        }
     }
 }
