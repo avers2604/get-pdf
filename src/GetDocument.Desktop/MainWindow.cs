@@ -68,6 +68,14 @@ public sealed class MainWindow : Window
         root.Children.Add(_tabs);
         Content = root;
         KeyDown += OnKeyDown;
+        Closing += (_, e) =>
+        {
+            if (_views.Values.Any(v => v.Content is SimpleDocxEditPane { HasUnsavedChanges: true }))
+            {
+                e.Cancel = true;
+                _status.Text = "Есть несохранённые правки: сохраните редакцию или отмените изменения.";
+            }
+        };
     }
 
     private Control BuildHeader()
@@ -177,7 +185,7 @@ public sealed class MainWindow : Window
     {
         if (!_views.TryGetValue(item.Id, out var view))
         {
-            Control panel = PreviewFactory.Create(item, SaveDraftAsync);
+            Control panel = PreviewFactory.Create(item, SaveDraftAsync, SaveRevisionAsync);
 
             var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             title.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center,
@@ -241,7 +249,7 @@ public sealed class MainWindow : Window
             {
                 if (tab.Header is StackPanel title && title.Children.FirstOrDefault() is TextBlock caption)
                     caption.Text = saved.Title;
-                tab.Content = PreviewFactory.Create(saved, SaveDraftAsync);
+                tab.Content = PreviewFactory.Create(saved, SaveDraftAsync, SaveRevisionAsync);
             }
             _status.Text = "Создан новый офисный файл: " + saved.Title;
         }
@@ -252,9 +260,67 @@ public sealed class MainWindow : Window
         }
     }
 
+
+    private async Task SaveRevisionAsync(WorkspaceDocumentTab item, string expectedSha256, string text)
+    {
+        var ext = new FilePickerFileType("DOCX") { Patterns = ["*.docx"] };
+        IStorageFile? selected;
+        try
+        {
+            selected = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Сохранить новую редакцию",
+                SuggestedFileName = Path.GetFileNameWithoutExtension(item.Title) + " - редакция.docx",
+                DefaultExtension = "docx",
+                ShowOverwritePrompt = false,
+                FileTypeChoices = [ext]
+            });
+        }
+        catch (Exception ex)
+        {
+            _status.Text = "Ошибка выбора файла: " + ex.Message;
+            return;
+        }
+        if (selected is null) return;
+        if (!selected.Path.IsFile)
+        {
+            _status.Text = "Укажите локальный файл или доступную сетевую папку.";
+            return;
+        }
+        try
+        {
+            // Revisions are always additive; neither source nor destination is overwritten.
+            string target = selected.Path.LocalPath;
+            await Task.Run(() => SimpleDocxEditor.SaveNewRevision(
+                item.FilePath!, expectedSha256, target, text));
+            var updated = _workspace.BindNewRevision(item.Id, target);
+            if (_views.TryGetValue(item.Id, out var tab))
+            {
+                if (tab.Header is StackPanel header &&
+                    header.Children.FirstOrDefault() is TextBlock title)
+                    title.Text = updated.Title;
+                var previous = tab.Content;
+                tab.Content = PreviewFactory.Create(updated, SaveDraftAsync, SaveRevisionAsync);
+                if (previous is IDisposable disposable) disposable.Dispose();
+            }
+            _status.Text = "Новая редакция создана: " + updated.Title;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            ArgumentException or InvalidOperationException or NotSupportedException or InvalidDataException)
+        {
+            _status.Text = "Сохранение редакции отклонено: " + ex.Message;
+        }
+    }
+
     private void CloseDocument(Guid id)
     {
-        if (!_views.Remove(id, out var view)) return;
+        if (!_views.TryGetValue(id, out var view)) return;
+        if (view.Content is SimpleDocxEditPane { HasUnsavedChanges: true })
+        {
+            _status.Text = "Сначала сохраните новую редакцию или нажмите «Отменить правки».";
+            return;
+        }
+        _views.Remove(id);
         _workspace.Close(id);
         if (view.Content is IDisposable disposable) disposable.Dispose();
         _items.Remove(view);

@@ -107,6 +107,33 @@ public sealed class DocumentWorkspace
         return updated;
     }
 
+
+    /// <summary>
+    /// Points an already saved tab to a separate new revision; the old source remains unchanged.
+    /// The caller must publish a verified file before rebinding.
+    /// </summary>
+    public WorkspaceDocumentTab BindNewRevision(Guid id, string destination)
+    {
+        int index = _tabs.FindIndex(t => t.Id == id);
+        if (index < 0) throw new ArgumentException("Вкладка отсутствует.", nameof(id));
+        var tab = _tabs[index];
+        if (tab.IsDraft || tab.FilePath is null || tab.Kind != WorkspaceDocumentKind.Text)
+            throw new InvalidOperationException("Новая редакция пока поддерживается только для сохранённого DOCX.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(destination);
+        string full = Path.GetFullPath(destination);
+        if (!Path.GetExtension(full).Equals(".docx", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Новая редакция должна иметь формат DOCX.", nameof(destination));
+        if (_pathComparer.Equals(tab.FilePath, full))
+            throw new IOException("Оригинал нельзя перезаписывать.");
+        if (_tabs.Any(x => x.Id != id && x.FilePath is not null && _pathComparer.Equals(x.FilePath, full)))
+            throw new InvalidOperationException("Этот путь уже открыт в другой вкладке.");
+        if (!File.Exists(full)) throw new FileNotFoundException("Сохранённая редакция не найдена.", full);
+        var updated = tab with { FilePath = full, Title = SafeTitle(Path.GetFileName(full)) };
+        _tabs[index] = updated;
+        ActiveId = updated.Id;
+        return updated;
+    }
+
     public bool Select(Guid id)
     {
         if (!_tabs.Any(t => t.Id == id)) return false;
