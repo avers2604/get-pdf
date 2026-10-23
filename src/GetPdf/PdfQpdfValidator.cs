@@ -21,24 +21,48 @@ internal static class PdfQpdfValidator
         }
     }
 
+    /// <summary>For showing commands: a missing or tampered qpdf hides them instead of failing the window.</summary>
+    public static bool IsUsable
+    {
+        get
+        {
+            try { return IsAvailable; }
+            catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or
+                                       IOException or UnauthorizedAccessException)
+            {
+                DiagnosticLog.Failure("pdf-qpdf-approval", ex);
+                return false;
+            }
+        }
+    }
+
     internal static void EnsureApproved() =>
         PdfQpdfBinaryApproval.RequireApproved(ExecutablePath, ApprovalManifestPath);
 
-    /// <returns>False if optional qpdf is absent, true when qpdf checked the PDF.</returns>
-    public static async Task<bool> ValidateIfAvailableAsync(
+    /// <returns>
+    /// <see cref="PdfQpdfCheck.Unavailable"/> if qpdf is absent; otherwise whether qpdf found the
+    /// structure clean or readable with recoverable warnings. Errors throw.
+    /// </returns>
+    public static async Task<PdfQpdfCheck> ValidateIfAvailableAsync(
         string path, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!IsAvailable) return false;
+        if (!IsAvailable) return PdfQpdfCheck.Unavailable;
         if (!File.Exists(path))
             throw new FileNotFoundException("PDF не найден для проверки.", path);
 
         var (code, _) = await PdfQpdfProcessRunner.RunAsync(
             ["--check", Path.GetFullPath(path)], cancellationToken);
-        if (code != 0)
-            throw new InvalidDataException(
-                "qpdf обнаружил предупреждения или нарушения структуры PDF. " +
-                "Перед эксплуатацией проверьте файл вручную.");
-        return true;
+        return Interpret(code);
     }
+
+    internal static PdfQpdfCheck Interpret(int exitCode) => exitCode switch
+    {
+        0 => PdfQpdfCheck.Clean,
+        PdfQpdfProcessRunner.ExitWarnings => PdfQpdfCheck.Warnings,
+        _ => throw new InvalidDataException(
+            "qpdf обнаружил нарушения структуры PDF. Перед эксплуатацией проверьте файл вручную.")
+    };
 }
+
+internal enum PdfQpdfCheck { Unavailable, Clean, Warnings }

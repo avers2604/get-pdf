@@ -31,6 +31,77 @@
         <Trigger Property="IsEnabled" Value="False"><Setter Property="Visibility" Value="Collapsed"/></Trigger>
       </Style.Triggers>
     </Style>
+    <!-- Favourite toggle: outline star, filled DS yellow when the document is in "Избранное". -->
+    <Style x:Key="StarButton" TargetType="Button" BasedOn="{StaticResource SmallIconButton}">
+      <Setter Property="Width" Value="36"/>
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid Background="Transparent">
+              <Border x:Name="Overlay" Background="#0B1530" Opacity="0" CornerRadius="10"/>
+              <Viewbox Width="20" Height="20">
+                <Canvas Width="24" Height="24">
+                  <Path x:Name="Star" Data="{StaticResource IconStar}" Fill="Transparent" Stroke="{StaticResource Muted}"
+                        StrokeThickness="1.75" StrokeLineJoin="Round"/>
+                </Canvas>
+              </Viewbox>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="controls:Ui.IsActive" Value="True">
+                <Setter TargetName="Star" Property="Fill" Value="{StaticResource Yellow}"/>
+                <Setter TargetName="Star" Property="Stroke" Value="#C98F00"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Overlay" Property="Opacity" Value="0.05"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Overlay" Property="Opacity" Value="0.11"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- Start screen row: the whole left part opens the document; star/remove sit beside it. -->
+    <DataTemplate x:Key="StartDocumentRow">
+      <Grid Margin="0,2">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Button Style="{StaticResource SidebarButton}" Padding="8,6" MinHeight="52" Click="StartItemOpen_Click"
+                FontWeight="Normal" ToolTip="{Binding Path}" AutomationProperties.Name="{Binding AccessibleName}">
+          <StackPanel Orientation="Horizontal" Opacity="{Binding RowOpacity}">
+            <Grid Width="32" Height="38" Margin="0,0,12,0">
+              <Viewbox><Canvas Width="24" Height="24">
+                <Path Data="{StaticResource IconFileText}" Stroke="{StaticResource Navy}" StrokeThickness="1.5"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+              </Canvas></Viewbox>
+              <Border Background="{StaticResource Red}" CornerRadius="3" Padding="3,0" VerticalAlignment="Bottom"
+                      HorizontalAlignment="Left" Margin="0,0,0,1">
+                <TextBlock Text="PDF" Foreground="White" FontSize="8" FontWeight="Bold"/>
+              </Border>
+            </Grid>
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{StaticResource Navy}" FontSize="13"
+                         TextTrimming="CharacterEllipsis" MaxWidth="520"/>
+              <TextBlock Text="{Binding Detail}" Foreground="{StaticResource Muted}" FontSize="12"
+                         TextTrimming="CharacterEllipsis" MaxWidth="520" Margin="0,2,0,0"/>
+            </StackPanel>
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="1" Style="{StaticResource StarButton}" VerticalAlignment="Center" Margin="4,0,0,0"
+                controls:Ui.IsActive="{Binding IsFavorite}" Click="StartItemFavorite_Click"
+                Visibility="{Binding StarVisibility}"
+                ToolTip="{Binding StarToolTip}" AutomationProperties.Name="{Binding StarToolTip}"/>
+        <Button Grid.Column="2" Style="{StaticResource SmallIconButton}" Width="36" Height="36"
+                controls:Ui.Icon="{StaticResource IconX}" VerticalAlignment="Center"
+                Visibility="{Binding RemoveVisibility}" Click="StartItemRemove_Click"
+                ToolTip="Убрать из истории (файл не удаляется)" AutomationProperties.Name="Убрать из истории"/>
+      </Grid>
+    </DataTemplate>
   </UserControl.Resources>
   <!--
     GET DS 4.1 · GET PDF final layout: one toolbar (search · pages · zoom · fit · text selection,
@@ -53,8 +124,12 @@
                   ToolTip="Открыть настройки Windows для выбора GET PDF приложением по умолчанию"/>
           <Button Style="{StaticResource IconButton}" controls:Ui.Icon="{StaticResource IconFolder}" Click="Open_Click"
                   ToolTip="Открыть PDF… (Ctrl+O)" AutomationProperties.Name="Открыть PDF"/>
+          <Button x:Name="FavoriteButton" Style="{StaticResource StarButton}" Width="44" Height="44" Visibility="Collapsed"
+                  Click="ToggleFavorite_Click" ToolTip="Добавить документ в избранное"
+                  AutomationProperties.Name="Добавить документ в избранное"/>
           <Button x:Name="RecentButton" Style="{StaticResource IconButton}" controls:Ui.Icon="{StaticResource IconClock}"
-                  Click="Recent_Click" ToolTip="Недавно открытые PDF" AutomationProperties.Name="Недавние PDF"/>
+                  Click="Recent_Click" ToolTip="Избранное и недавние документы"
+                  AutomationProperties.Name="Избранное и недавние документы"/>
           <Button x:Name="Gup2PortalButton" Visibility="Collapsed" Style="{StaticResource GhostButton}"
                   controls:Ui.Icon="{StaticResource IconArrowUpRight}" MinHeight="44"
                   Content="GUP-2" Click="Gup2Portal_Click"
@@ -263,24 +338,61 @@
                        ToolTip="Предварительное расположение штампа"/>
           </Grid>
         </Grid>
-        <!-- Empty state (DS universal states): what to do next, not just a blank canvas. -->
-        <Border x:Name="EmptyMessage" Style="{StaticResource CardBorder}" CornerRadius="16" Padding="40,32"
-                HorizontalAlignment="Center" VerticalAlignment="Center">
-          <StackPanel HorizontalAlignment="Center">
-            <Viewbox Width="40" Height="40" Margin="0,0,0,16">
-              <Canvas Width="24" Height="24">
-                <Path Data="{StaticResource IconFileText}" Stroke="{StaticResource Navy}" StrokeThickness="1.75"
-                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
-              </Canvas>
-            </Viewbox>
-            <TextBlock Text="Откройте PDF-документ" Style="{StaticResource SectionHeading}" FontSize="18"
-                       HorizontalAlignment="Center"/>
-            <TextBlock Text="Перетащите файлы в окно или нажмите Ctrl+O" Foreground="{StaticResource Muted}"
-                       HorizontalAlignment="Center" Margin="0,6,0,20"/>
-            <Button Content="Открыть PDF…" Style="{StaticResource PrimaryButton}" controls:Ui.Icon="{StaticResource IconFolder}"
-                    MinHeight="44" Padding="20,0" HorizontalAlignment="Center" Click="Open_Click"/>
-          </StackPanel>
-        </Border>
+        <!-- Start screen (DS universal empty state): open a file, or pick one from Избранное / Недавние. -->
+        <ScrollViewer x:Name="EmptyMessage" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Focusable="False" AutomationProperties.Name="Начальный экран ГЭТ PDF">
+          <Border Style="{StaticResource CardBorder}" CornerRadius="16" Padding="32,28" Margin="24"
+                  MaxWidth="760" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel>
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Открыть PDF…" Style="{StaticResource PrimaryButton}"
+                        controls:Ui.Icon="{StaticResource IconFolder}" MinHeight="44" Padding="20,0"
+                        VerticalAlignment="Center" Margin="24,0,0,0" Click="Open_Click"/>
+                <Viewbox Width="40" Height="40" Margin="0,0,16,0" VerticalAlignment="Center" DockPanel.Dock="Left">
+                  <Canvas Width="24" Height="24">
+                    <Path Data="{StaticResource IconFileText}" Stroke="{StaticResource Navy}" StrokeThickness="1.75"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                  </Canvas>
+                </Viewbox>
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="Откройте PDF-документ" Style="{StaticResource SectionHeading}" FontSize="18"/>
+                  <TextBlock Text="Перетащите файлы в окно, нажмите Ctrl+O или выберите документ ниже"
+                             Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+              </DockPanel>
+              <StackPanel x:Name="FavoritesSection" Margin="0,28,0,0">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                  <Viewbox Width="18" Height="18" Margin="0,0,8,0"><Canvas Width="24" Height="24">
+                    <Path Data="{StaticResource IconStar}" Fill="{StaticResource Yellow}" Stroke="#C98F00"
+                          StrokeThickness="1.75" StrokeLineJoin="Round"/>
+                  </Canvas></Viewbox>
+                  <TextBlock Text="Избранное" Style="{StaticResource SectionHeading}" FontSize="15"/>
+                </StackPanel>
+                <ItemsControl x:Name="FavoritesList" ItemTemplate="{StaticResource StartDocumentRow}"
+                              AutomationProperties.Name="Избранные документы" Focusable="False"/>
+                <TextBlock x:Name="FavoritesEmptyHint" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Откройте документ и нажмите звёздочку на панели инструментов — он закрепится здесь."/>
+              </StackPanel>
+              <StackPanel x:Name="RecentSection" Margin="0,28,0,0">
+                <DockPanel Margin="0,0,0,6">
+                  <Button x:Name="ClearRecentButton" DockPanel.Dock="Right" Content="Очистить историю"
+                          Style="{StaticResource GhostButton}" Click="ClearRecent_Click"
+                          ToolTip="Удалить список недавних документов (сами файлы не удаляются)"/>
+                  <Viewbox Width="18" Height="18" Margin="0,0,8,0" DockPanel.Dock="Left"><Canvas Width="24" Height="24">
+                    <Path Data="{StaticResource IconClock}" Stroke="{StaticResource Navy}" StrokeThickness="1.75"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                  </Canvas></Viewbox>
+                  <TextBlock Text="Недавние документы" Style="{StaticResource SectionHeading}" FontSize="15"
+                             VerticalAlignment="Center"/>
+                </DockPanel>
+                <ItemsControl x:Name="RecentList" ItemTemplate="{StaticResource StartDocumentRow}"
+                              AutomationProperties.Name="Недавние документы" Focusable="False"/>
+                <TextBlock x:Name="RecentEmptyHint" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Здесь появятся документы, которые вы открывали."/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </ScrollViewer>
       </Grid>
       <Border Grid.Column="2" Background="{StaticResource Surface}" Padding="18" BorderBrush="{StaticResource Border}" BorderThickness="1,0,0,0">
        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>

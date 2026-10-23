@@ -9,9 +9,12 @@ internal sealed record WorkstationPolicy
     public bool AllowPrinting { get; init; } = true;
     // Experimental native GDI print spool path. Default raster print remains.
     public bool AllowNativeGdiPrinting { get; init; } = false;
-    // Internal document paths reveal titles/locations. Persist neither by default;
-    // administrators may explicitly enable each option in the managed policy.
-    public bool RememberRecentDocuments { get; init; } = false;
+    // Internal document paths reveal titles/locations. The opening history and the
+    // operator's favourites stay user-local (%LOCALAPPDATA%\GET-PDF) and are on by default
+    // since 0.1.2 (users asked for them); administrators may switch each one off, which
+    // also deletes the stored list at the next start. Tab restoration remains opt-in.
+    public bool RememberRecentDocuments { get; init; } = true;
+    public bool AllowFavoriteDocuments { get; init; } = true;
     public bool RestoreTabs { get; init; } = false;
     // Independent, opt-in local JSON contract; NEVER includes PDF paths or contents.
     public bool ExportGetSystemStatus { get; init; } = false;

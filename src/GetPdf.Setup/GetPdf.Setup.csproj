@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    GET DS 4.1 setup wizard for ГЭТ PDF. .NET Framework 4.8 is part of Windows 10 1903+ and 11,
+    so the wizard needs no runtime download and stays small; the product itself is the embedded MSI
+    (built by scripts/windows-build-msi.ps1 and passed as -p:MsiPath=…). IT keeps using the MSI directly.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>GetPdf.Setup</AssemblyName>
+    <RootNamespace>GetPdf.Setup</RootNamespace>
+    <Version>0.1.2</Version>
+    <Product>ГЭТ PDF</Product>
+    <Company>SPb GUP Gorelektrotrans</Company>
+    <AssemblyTitle>Установка ГЭТ PDF</AssemblyTitle>
+    <ApplicationIcon>..\GetPdf\Assets\get-pdf.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="..\GetPdf\Assets\get-mark-inverse.png" Link="Assets\get-mark-inverse.png" />
+    <Resource Include="..\GetPdf\Assets\get-mark.png" Link="Assets\get-mark.png" />
+  </ItemGroup>
+  <!-- The product MSI travels inside the wizard; without it the wizard explains what is missing. -->
+  <ItemGroup Condition="'$(MsiPath)' != '' And Exists('$(MsiPath)')">
+    <EmbeddedResource Include="$(MsiPath)" LogicalName="GetPdf.msi" />
+  </ItemGroup>
+</Project>

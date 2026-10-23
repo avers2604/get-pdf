@@ -1,15 +1,23 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <!-- Separate product identity from GUP Scan: installations can coexist. -->
-  <Package Name="ГЭТ PDF" Language="1049" Codepage="1251" Version="0.1.1.0"
+  <Package Name="ГЭТ PDF" Language="1049" Codepage="1251" Version="0.1.2.0"
            Manufacturer="SPb GUP Gorelektrotrans"
            UpgradeCode="BE5C1496-701B-4ED4-937E-DA3B41C2A770" Scope="perMachine">
-    <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия ГЭТ PDF." />
-    <MediaTemplate EmbedCab="yes" />
+    <!-- Same-version rebuilds replace each other instead of appearing twice in Apps & Features. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="Установлена более новая версия ГЭТ PDF." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <!-- Official GET mark (GET Design System 4.1) for Apps & Features. -->
     <Icon Id="GetPdfIcon" SourceFile="$(var.IconFile)" />
     <Property Id="ARPPRODUCTICON" Value="GetPdfIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/avers2604/get-pdf" />
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" />
+
+    <!-- GET DS 4.1 artwork for the classic MSI wizard (IT / direct msiexec use). -->
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.BannerBmp)" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.DialogBmp)" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="GET PDF" />
