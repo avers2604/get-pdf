@@ -8,13 +8,17 @@ namespace GetDocument.Desktop.Preview;
 internal static class PreviewFactory
 {
     public static Control Create(WorkspaceDocumentTab item, Func<WorkspaceDocumentTab, Task> saveDraft,
-        Func<WorkspaceDocumentTab, string, string, Task> saveRevision)
+        Func<WorkspaceDocumentTab, string, string, Task> saveRevision,
+        Func<WorkspaceDocumentTab, string, string[][], Task> saveSpreadsheetRevision)
     {
         if (item.IsDraft)
             return new OfficeDraftPane(item, saveDraft);
         if (item.FilePath is null)
             return Message(item.Title, "Не указан источник документа.");
 
+        if (item.Kind == WorkspaceDocumentKind.Spreadsheet &&
+            Path.GetExtension(item.FilePath).Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
+            return new SimpleXlsxEditPane(item, saveSpreadsheetRevision);
         if (item.Kind == WorkspaceDocumentKind.Text &&
             Path.GetExtension(item.FilePath).Equals(".docx", StringComparison.OrdinalIgnoreCase))
             return new SimpleDocxEditPane(item, saveRevision);
