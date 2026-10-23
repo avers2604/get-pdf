@@ -79,7 +79,8 @@ public sealed class MainWindow : Window
         Closing += (_, args) =>
         {
             if (_views.Values.Any(t => t.Content is SimpleDocxEditorPane { HasUnsavedChanges: true } or
-                SimpleXlsxEditPane { HasUnsavedChanges: true }))
+                SimpleXlsxEditPane { HasUnsavedChanges: true } or
+                ImagePreviewPane { HasUnsavedChanges: true }))
             {
                 args.Cancel = true;
                 _status.Text = "Есть несохранённые правки DOCX. Сохраните новую редакцию или отмените изменения.";
@@ -339,7 +340,8 @@ public sealed class MainWindow : Window
     {
         if (!_views.TryGetValue(id, out var view)) return;
         if (view.Content is SimpleDocxEditorPane { HasUnsavedChanges: true } or
-            SimpleXlsxEditPane { HasUnsavedChanges: true })
+            SimpleXlsxEditPane { HasUnsavedChanges: true } or
+            ImagePreviewPane { HasUnsavedChanges: true })
         {
             _status.Text = "Есть несохранённые изменения. Сохраните редакцию или отмените правки.";
             return;

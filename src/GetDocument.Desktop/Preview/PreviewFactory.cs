@@ -35,7 +35,7 @@ internal static class PreviewFactory
         if (item.Kind == WorkspaceDocumentKind.Pdf)
             return new PdfPreviewPane(item.FilePath);
         if (item.Kind == WorkspaceDocumentKind.Image)
-            return new ImagePreviewPane(item.FilePath);
+            return new ImagePreviewPane(item.FilePath, openSavedCopy);
         if (Path.GetExtension(item.FilePath) is ".txt" or ".md" or ".csv" or ".TXT" or ".MD" or ".CSV")
             return new TextPreviewPane(item.FilePath);
         return Message(item.Title, "Формат распознан, но встроенный редактор ещё не подключён. " +
