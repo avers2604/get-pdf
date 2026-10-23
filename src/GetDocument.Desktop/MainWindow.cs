@@ -12,6 +12,7 @@ using GetDocument.Core.EasterEgg;
 using GetDocument.Core.Workspace;
 using GetDocument.Desktop.Preview;
 using GetDocument.Desktop.Files;
+using GetDocument.Desktop.Templates;
 using GetDocument.Office;
 
 namespace GetDocument.Desktop;
@@ -31,6 +32,7 @@ public sealed class MainWindow : Window
     private readonly TextBlock _status = new();
     private TabItem? _gameTab;
     private TabItem? _filesTab;
+    private TabItem? _templatesTab;
 
     public MainWindow()
     {
@@ -121,6 +123,9 @@ public sealed class MainWindow : Window
         var getFiles = new Button { Content = "ГЭТ Файлы" };
         getFiles.Click += (_, _) => ShowGetFiles();
         bar.Children.Add(getFiles);
+        var templates = new Button { Content = "Шаблоны" };
+        templates.Click += (_, _) => ShowCorporateTemplates();
+        bar.Children.Add(templates);
         var home = new Button { Content = "Главная" };
         home.Click += (_, _) => _tabs.SelectedIndex = 0;
         bar.Children.Add(home);
@@ -163,6 +168,8 @@ public sealed class MainWindow : Window
             () => _ = OpenFilesAsync()));
         actions.Children.Add(CreateAction("ГЭТ Файлы", "Сетевые папки и документы",
             ShowGetFiles));
+        actions.Children.Add(CreateAction("Шаблоны документов", "Записка, акт, письмо",
+            ShowCorporateTemplates));
         actions.Children.Add(CreateAction("ГЭТ Сканирование", "Подключение позднее",
             () => OpenPlaceholder("ГЭТ Сканирование",
                 "Интеграция с отдельным приложением ГЭТ Сканирование предусмотрена, но пока не подключена.")));
@@ -379,6 +386,40 @@ public sealed class MainWindow : Window
         _tabs.SelectedIndex = 0;
     }
 
+    private void ShowCorporateTemplates()
+    {
+        if (_templatesTab is not null)
+        {
+            _tabs.SelectedItem = _templatesTab;
+            return;
+        }
+        var content = new CorporateTemplatesPane(path =>
+        {
+            AddDocument(_workspace.OpenExisting(path));
+            return Task.CompletedTask;
+        });
+        var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        heading.Children.Add(new TextBlock
+        {
+            Text = "Шаблоны",
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
+        close.Click += (_, _) => CloseCorporateTemplates();
+        heading.Children.Add(close);
+        _templatesTab = new TabItem { Header = heading, Content = content };
+        _items.Add(_templatesTab);
+        _tabs.SelectedItem = _templatesTab;
+    }
+
+    private void CloseCorporateTemplates()
+    {
+        if (_templatesTab is null) return;
+        _items.Remove(_templatesTab);
+        _templatesTab = null;
+        _tabs.SelectedIndex = 0;
+    }
+
     private void OpenHiddenGame()
     {
         if (_gameTab is not null)
@@ -428,5 +469,7 @@ public sealed class MainWindow : Window
         { e.Handled = true; CloseDocument(id); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _filesTab))
         { e.Handled = true; CloseGetFiles(); }
+        else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _templatesTab))
+        { e.Handled = true; CloseCorporateTemplates(); }
     }
 }
