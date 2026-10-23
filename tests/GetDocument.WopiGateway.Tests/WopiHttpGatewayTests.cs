@@ -52,6 +52,7 @@ public sealed class WopiHttpGatewayTests
         string payload = Encoding.UTF8.GetString(((MemoryStream)ctx.Response.Body).ToArray());
         StringAssert.Contains(payload, "\"BaseFileName\":\"Приказ.docx\"");
         StringAssert.Contains(payload, "\"UserCanWrite\":false");
+        StringAssert.Contains(payload, "\"UserCanNotWriteRelative\":true");
         Assert.AreEqual(1, _store.ResolveCount);
         Assert.AreEqual(0, _store.OpenCount);
     }
