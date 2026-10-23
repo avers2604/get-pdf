@@ -11,6 +11,7 @@ using Avalonia.Platform.Storage;
 using GetDocument.Core.EasterEgg;
 using GetDocument.Core.Workspace;
 using GetDocument.Desktop.Preview;
+using GetDocument.Office;
 
 namespace GetDocument.Desktop;
 
@@ -130,7 +131,8 @@ public sealed class MainWindow : Window
         content.Children.Add(new TextBlock
         {
             Text = "Все открытые файлы — в верхних вкладках одного окна.\n" +
-                "Новые черновики получат полноценные редакторы в следующих этапах.",
+                "Новые документы можно сохранить в DOCX, XLSX и PPTX.\n" +
+                "Полный офисный редактор подключается следующим этапом.",
             FontSize = 14
         });
         var actions = new WrapPanel { Orientation = Orientation.Horizontal };
@@ -175,7 +177,7 @@ public sealed class MainWindow : Window
     {
         if (!_views.TryGetValue(item.Id, out var view))
         {
-            Control panel = PreviewFactory.Create(item);
+            Control panel = PreviewFactory.Create(item, SaveDraftAsync);
 
             var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             title.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center,
@@ -190,6 +192,64 @@ public sealed class MainWindow : Window
         _tabs.SelectedItem = view;
         _status.Text = item.IsDraft ? "Создана вкладка черновика: " + item.Title
             : "Файл добавлен во вкладку: " + item.Title;
+    }
+
+    private async Task SaveDraftAsync(WorkspaceDocumentTab item)
+    {
+        string extension = item.Kind switch
+        {
+            WorkspaceDocumentKind.Text => "docx",
+            WorkspaceDocumentKind.Spreadsheet => "xlsx",
+            WorkspaceDocumentKind.Presentation => "pptx",
+            _ => throw new NotSupportedException("Нельзя создать файл этого типа.")
+        };
+        var fileType = new FilePickerFileType(extension.ToUpperInvariant())
+        {
+            Patterns = ["*." + extension]
+        };
+        IStorageFile? chosen;
+        try
+        {
+            chosen = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Создать " + item.Title,
+                SuggestedFileName = item.Title + "." + extension,
+                DefaultExtension = extension,
+                ShowOverwritePrompt = false,
+                FileTypeChoices = [fileType]
+            });
+        }
+        catch (Exception ex)
+        {
+            _status.Text = "Ошибка выбора файла: " + ex.Message;
+            return;
+        }
+        if (chosen is null) return;
+        if (!chosen.Path.IsFile)
+        {
+            _status.Text = "Сохранение возможно только в локальную или подключённую сетевую папку.";
+            return;
+        }
+
+        var target = chosen.Path.LocalPath;
+        try
+        {
+            // Both local and SMB paths preserve existing files, including WORM originals.
+            await Task.Run(() => OfficeDocumentFactory.CreateNew(item.Kind, target));
+            var saved = _workspace.BindSavedDraft(item.Id, target);
+            if (_views.TryGetValue(item.Id, out var tab))
+            {
+                if (tab.Header is StackPanel title && title.Children.FirstOrDefault() is TextBlock caption)
+                    caption.Text = saved.Title;
+                tab.Content = PreviewFactory.Create(saved, SaveDraftAsync);
+            }
+            _status.Text = "Создан новый офисный файл: " + saved.Title;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            ArgumentException or NotSupportedException or InvalidOperationException)
+        {
+            _status.Text = "Не удалось сохранить документ: " + ex.Message;
+        }
     }
 
     private void CloseDocument(Guid id)

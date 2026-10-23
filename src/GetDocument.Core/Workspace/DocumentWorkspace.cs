@@ -76,6 +76,37 @@ public sealed class DocumentWorkspace
         return tab;
     }
 
+    /// <summary>
+    /// Connect a successfully saved Office draft to its original tab.
+    /// Caller must generate/verify the actual new file before binding.
+    /// </summary>
+    public WorkspaceDocumentTab BindSavedDraft(Guid id, string destination)
+    {
+        int index = _tabs.FindIndex(t => t.Id == id);
+        if (index < 0) throw new ArgumentException("Вкладка отсутствует.", nameof(id));
+        var tab = _tabs[index];
+        if (!tab.IsDraft) throw new InvalidOperationException("Редакция уже связана с файлом.");
+        string expected = tab.Kind switch
+        {
+            WorkspaceDocumentKind.Text => ".docx",
+            WorkspaceDocumentKind.Spreadsheet => ".xlsx",
+            WorkspaceDocumentKind.Presentation => ".pptx",
+            _ => throw new NotSupportedException("Этот тип документа нельзя сохранить как Office.")
+        };
+        ArgumentException.ThrowIfNullOrWhiteSpace(destination);
+        string path = Path.GetFullPath(destination);
+        if (!Path.GetExtension(path).Equals(expected, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Расширение не соответствует типу документа.", nameof(destination));
+        if (_tabs.Any(t => t.Id != id && t.FilePath is not null &&
+                           _pathComparer.Equals(t.FilePath, path)))
+            throw new InvalidOperationException("Этот файл уже привязан к другой вкладке.");
+
+        var updated = tab with { FilePath = path, Title = SafeTitle(Path.GetFileName(path)), IsDraft = false };
+        _tabs[index] = updated;
+        ActiveId = updated.Id;
+        return updated;
+    }
+
     public bool Select(Guid id)
     {
         if (!_tabs.Any(t => t.Id == id)) return false;

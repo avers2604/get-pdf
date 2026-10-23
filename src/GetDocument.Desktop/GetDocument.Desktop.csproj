@@ -16,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../GetDocument.Core/GetDocument.Core.csproj" />
+    <ProjectReference Include="../GetDocument.Office/GetDocument.Office.csproj" />
   </ItemGroup>
 </Project>
