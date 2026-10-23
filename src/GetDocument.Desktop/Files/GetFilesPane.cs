@@ -153,6 +153,7 @@ internal sealed class GetFilesPane : DockPanel, IDisposable
         catch (Exception ex)
         {
             if (!_disposed) _status.Text = "Каталог недоступен: " + ex.Message;
+            return;
         }
         finally { _refreshing = false; }
         await RefreshAsync();

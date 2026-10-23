@@ -41,7 +41,7 @@ public sealed class RootedFileBrowser
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         EnsureWithinRoot(full);
-        EnsureNoLinks(full, includeTargetFile: false);
+        EnsureNoLinks(full);
         if (!Directory.Exists(full))
             throw new DirectoryNotFoundException("Папка недоступна или не существует.");
         CurrentPath = full;
@@ -61,7 +61,7 @@ public sealed class RootedFileBrowser
         if (maxEntries is < 1 or > 1000)
             throw new ArgumentOutOfRangeException(nameof(maxEntries));
         EnsureWithinRoot(CurrentPath);
-        EnsureNoLinks(CurrentPath, includeTargetFile: false);
+        EnsureNoLinks(CurrentPath);
         var entries = new List<SharedFileEntry>(Math.Min(maxEntries, 400));
         bool more = false;
         // Never recurse: a single refresh must not index the entire corporate share.
@@ -98,7 +98,7 @@ public sealed class RootedFileBrowser
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         var full = Path.GetFullPath(filePath);
         EnsureWithinRoot(full);
-        EnsureNoLinks(full, includeTargetFile: true);
+        EnsureNoLinks(full);
         if (!File.Exists(full))
             throw new FileNotFoundException("Файл больше не существует или недоступен.", full);
         if (DocumentFileClassifier.Classify(full).Kind == DocumentFileKind.Unsupported)
@@ -115,7 +115,7 @@ public sealed class RootedFileBrowser
             throw new UnauthorizedAccessException("Выход за пределы выбранной папки запрещён.");
     }
 
-    private void EnsureNoLinks(string target, bool includeTargetFile)
+    private void EnsureNoLinks(string target)
     {
         if ((File.GetAttributes(RootPath) & FileAttributes.ReparsePoint) != 0)
             throw new UnauthorizedAccessException("Переход по ссылкам недоступен.");
@@ -127,14 +127,7 @@ public sealed class RootedFileBrowser
             StringSplitOptions.RemoveEmptyEntries);
         for (int i = 0; i < components.Length; i++)
         {
-            if (!includeTargetFile && i == components.Length - 1)
-            {
-                current = Path.Combine(current, components[i]);
-            }
-            else
-            {
-                current = Path.Combine(current, components[i]);
-            }
+            current = Path.Combine(current, components[i]);
             var attrs = File.GetAttributes(current);
             if ((attrs & FileAttributes.ReparsePoint) != 0)
                 throw new UnauthorizedAccessException("Символические ссылки и junction не открываются.");
