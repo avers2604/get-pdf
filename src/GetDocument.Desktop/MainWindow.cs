@@ -5,6 +5,8 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using GetDocument.Core.EasterEgg;
 using GetDocument.Core.Workspace;
@@ -75,12 +77,28 @@ public sealed class MainWindow : Window
             Margin = new Thickness(14, 10)
         };
         // Temporary text target; use official brandbook mark asset after visual acceptance.
-        var mark = new Button { Content = "ГЭТ Документ" };
+        // Reuse the verified official mark from the existing GetPdf asset without altering it.
+        Bitmap logo;
+        using (var stream = AssetLoader.Open(new Uri("avares://GetDocument.Desktop/Assets/get-mark.png")))
+            logo = new Bitmap(stream);
+        var mark = new Button
+        {
+            Content = new Image { Source = logo, Width = 34, Height = 34 },
+            Padding = new Thickness(7, 3)
+        };
+        ToolTip.SetTip(mark, "ГЭТ");
         mark.Click += (_, _) =>
         {
             if (_hiddenGame.Tap(DateTimeOffset.UtcNow)) OpenHiddenGame();
         };
         bar.Children.Add(mark);
+        bar.Children.Add(new TextBlock
+        {
+            Text = "ГЭТ Документ",
+            FontSize = 18,
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center
+        });
         var open = new Button { Content = "Открыть файл" };
         open.Click += async (_, _) => await OpenFilesAsync();
         bar.Children.Add(open);

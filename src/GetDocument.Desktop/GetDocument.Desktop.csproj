@@ -11,6 +11,9 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
   </ItemGroup>
   <ItemGroup>
+    <AvaloniaResource Include="Assets/get-mark.png" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../GetDocument.Core/GetDocument.Core.csproj" />
   </ItemGroup>
 </Project>
