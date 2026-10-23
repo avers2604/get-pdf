@@ -60,6 +60,17 @@ public sealed class WopiProofValidationTests
     }
 
     [TestMethod]
+    public void TimestampIsNetworkOrderBigEndianMatchingOfficialWopiVectors()
+    {
+        // The official microsoft/Office-Online-Test-Tools-and-Documentation
+        // samples/python/proof_keys implementation encodes u64 as struct.pack('>Q', ...).
+        byte[] proof = WopiProofValidator.BuildExpectedProof("a",
+            new Uri("https://get-files.intra.example/wopi/files/42"), 0x0102030405060708L);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 },
+            proof[^8..]);
+    }
+
+    [TestMethod]
     public void ProofBytesIncludeUppercaseUrlAndBinaryTimestamp()
     {
         var bytes = WopiProofValidator.BuildExpectedProof(
