@@ -22,6 +22,13 @@ public sealed record WopiReadOnlySession(string AccessToken, long AccessTokenTtl
 public sealed record WopiReadOnlyGrant(
     string DocumentId, string RevisionId, string UserId, long ExpiresAtUnixSeconds);
 
+/// <summary>
+/// Authorization DECISION for a trusted HTTP GetFile host. This object does not
+/// read the storage, reveal a pathname, or bypass server-side ACL checks.
+/// </summary>
+public sealed record WopiGetFilePlan(
+    string DocumentId, string RevisionId, long ExpectedSize, bool ReadOnly = true);
+
 public static class WopiReadOnlySessionService
 {
     public static WopiReadOnlySession Issue(
@@ -104,6 +111,16 @@ public static class WopiReadOnlySessionService
             DisablePrint = true,
             DisableBrowserCachingOfUserContent = true
         });
+    }
+
+    public static WopiGetFilePlan PlanGetFile(WopiDocument doc, WopiReadOnlyGrant grant)
+    {
+        ValidateDocument(doc);
+        ArgumentNullException.ThrowIfNull(grant);
+        if (doc.DocumentId != grant.DocumentId ||
+            doc.RevisionId != grant.RevisionId || doc.UserId != grant.UserId)
+            throw new UnauthorizedAccessException("WOPI GetFile: нет доступа к данной редакции.");
+        return new WopiGetFilePlan(doc.DocumentId, doc.RevisionId, doc.FileSize);
     }
 
     public static void PlanPutFile(WopiReadOnlyGrant grant)

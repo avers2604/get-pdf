@@ -95,6 +95,21 @@ public sealed class WopiReadOnlySessionTests
     }
 
     [TestMethod]
+    public void GetFilePlanningRemainsBoundToDocumentAndCannotReadFromDisk()
+    {
+        var doc = Document();
+        var session = WopiReadOnlySessionService.Issue(doc, Secret, Now, TimeSpan.FromMinutes(5));
+        var grant = WopiReadOnlySessionService.Authorize(session.AccessToken, Secret, doc, Now);
+        var plan = WopiReadOnlySessionService.PlanGetFile(doc, grant);
+        Assert.AreEqual("get-42", plan.DocumentId);
+        Assert.AreEqual(1250, plan.ExpectedSize);
+        Assert.IsTrue(plan.ReadOnly);
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
+            WopiReadOnlySessionService.PlanGetFile(
+                doc with { DocumentId = "other-document" }, grant));
+    }
+
+    [TestMethod]
     public void NoPutFileCapabilityCanBeAdvertisedUntilServerSinkExists()
     {
         var doc = Document();
