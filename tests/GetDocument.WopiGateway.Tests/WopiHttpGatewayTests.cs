@@ -164,6 +164,33 @@ public sealed class WopiHttpGatewayTests
         Assert.AreEqual(0, ((MemoryStream)ctx.Response.Body).Length);
     }
 
+    [TestMethod]
+    public async Task SameLengthTamperingIsRejectedBeforeWritingAnyBytes()
+    {
+        _store.CorruptSameLengthBytes = true;
+        var ctx = Context("/wopi/files/doc-42/contents");
+        await WopiHttpGateway.HandleGetFileAsync(
+            ctx, "doc-42", _store, _security, TimeProviderForTest());
+        Assert.AreEqual(409, ctx.Response.StatusCode);
+        Assert.AreEqual(0, ((MemoryStream)ctx.Response.Body).Length);
+    }
+
+    [TestMethod]
+    public async Task RevokedAclIsCheckedAgainForNextRequest()
+    {
+        var before = Context("/wopi/files/doc-42");
+        await WopiHttpGateway.HandleCheckFileInfoAsync(
+            before, "doc-42", _store, _security, TimeProviderForTest());
+        Assert.AreEqual(200, before.Response.StatusCode);
+        _store.AllowRead = false;
+        var after = Context("/wopi/files/doc-42/contents");
+        await WopiHttpGateway.HandleGetFileAsync(
+            after, "doc-42", _store, _security, TimeProviderForTest());
+        Assert.AreEqual(404, after.Response.StatusCode);
+        Assert.AreEqual(0, _store.OpenCount);
+        Assert.AreEqual(2, _store.ResolveCount);
+    }
+
     private TimeProvider TimeProviderForTest() => new FixedClock(Now);
 
     private DefaultHttpContext Context(string path, string revision = "r1", DateTimeOffset? at = null)
@@ -196,18 +223,22 @@ public sealed class WopiHttpGatewayTests
     {
         public int ResolveCount { get; private set; }
         public int OpenCount { get; private set; }
+        public bool AllowRead { get; set; } = true;
+        public bool CorruptSameLengthBytes { get; set; }
 
         public ValueTask<WopiAuthorizedContent?> ResolveForReadAsync(
             string docId, string revisionId, string userId, CancellationToken ct)
         {
             ResolveCount++;
-            if (doc.DocumentId != docId || doc.RevisionId != revisionId || doc.UserId != userId)
+            if (!AllowRead || doc.DocumentId != docId || doc.RevisionId != revisionId || doc.UserId != userId)
                 return ValueTask.FromResult<WopiAuthorizedContent?>(null);
             return ValueTask.FromResult<WopiAuthorizedContent?>(new WopiAuthorizedContent(
-                doc, _ =>
+                doc, Convert.ToHexString(SHA256.HashData(data)), _ =>
                 {
                     OpenCount++;
-                    return ValueTask.FromResult<Stream>(new MemoryStream(data, writable: false));
+                    byte[] delivered = (byte[])data.Clone();
+                    if (CorruptSameLengthBytes) delivered[0] ^= 0x7F;
+                    return ValueTask.FromResult<Stream>(new MemoryStream(delivered, writable: false));
                 }));
         }
     }
