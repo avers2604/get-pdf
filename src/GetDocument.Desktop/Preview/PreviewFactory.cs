@@ -19,6 +19,14 @@ internal static class PreviewFactory
         if (item.Kind == WorkspaceDocumentKind.Text &&
             Path.GetExtension(item.FilePath).Equals(".docx", StringComparison.OrdinalIgnoreCase))
             return new SimpleDocxEditorPane(item.FilePath, openSavedCopy);
+        // Legacy Excel workbooks are read-only: do not pretend to convert or edit
+        // formulas, chart parts, macros or complex XLSB sheets.
+        if (item.Kind == WorkspaceDocumentKind.Spreadsheet &&
+            Path.GetExtension(item.FilePath).Equals(".xls", StringComparison.OrdinalIgnoreCase) ||
+            item.Kind == WorkspaceDocumentKind.Spreadsheet &&
+            Path.GetExtension(item.FilePath).Equals(".xlsb", StringComparison.OrdinalIgnoreCase))
+            return new SpreadsheetReadOnlyPane(item.FilePath);
+
         if (item.Kind == WorkspaceDocumentKind.Spreadsheet &&
             Path.GetExtension(item.FilePath).Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
             return new SimpleXlsxEditPane(item, saveXlsxRevision);
