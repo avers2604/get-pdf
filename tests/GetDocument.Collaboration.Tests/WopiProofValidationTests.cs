@@ -60,6 +60,19 @@ public sealed class WopiProofValidationTests
     }
 
     [TestMethod]
+    public void TimestampMatchesOfficialBigEndianWopiProofReference()
+    {
+        // Microsoft's cross-language reference uses struct.pack('>Q', timestamp).
+        // A locally signed proof with little-endian timestamps would falsely pass
+        // an implementation sharing the same serialization bug.
+        const long timestamp = 0x0102030405060708L;
+        byte[] proof = WopiProofValidator.BuildExpectedProof(
+            "A", new Uri("https://get-files.intra.example/wopi/files/1"), timestamp);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 },
+            proof[^8..]);
+    }
+
+    [TestMethod]
     public void ProofBytesIncludeUppercaseUrlAndBinaryTimestamp()
     {
         var bytes = WopiProofValidator.BuildExpectedProof(
