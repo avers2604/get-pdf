@@ -87,13 +87,9 @@ public static class WopiReadOnlySessionService
         }
     }
 
-    public static string CheckFileInfo(WopiDocument doc, WopiReadOnlyGrant grant)
+    public static string CheckFileInfo(WopiDocument doc, WopiReadOnlyGrant grant, DateTimeOffset now)
     {
-        ValidateDocument(doc);
-        ArgumentNullException.ThrowIfNull(grant);
-        if (grant.DocumentId != doc.DocumentId ||
-            grant.RevisionId != doc.RevisionId || grant.UserId != doc.UserId)
-            throw new UnauthorizedAccessException("Грант не относится к выбранному документу.");
+        ValidateGrant(doc, grant, now);
         // JSON PascalCase keys follow MS-WOPI CheckFileInfo.
         // Do not claim ability to update/lock until the gateway implements it.
         return JsonSerializer.Serialize(new
@@ -113,13 +109,9 @@ public static class WopiReadOnlySessionService
         });
     }
 
-    public static WopiGetFilePlan PlanGetFile(WopiDocument doc, WopiReadOnlyGrant grant)
+    public static WopiGetFilePlan PlanGetFile(WopiDocument doc, WopiReadOnlyGrant grant, DateTimeOffset now)
     {
-        ValidateDocument(doc);
-        ArgumentNullException.ThrowIfNull(grant);
-        if (doc.DocumentId != grant.DocumentId ||
-            doc.RevisionId != grant.RevisionId || doc.UserId != grant.UserId)
-            throw new UnauthorizedAccessException("WOPI GetFile: нет доступа к данной редакции.");
+        ValidateGrant(doc, grant, now);
         return new WopiGetFilePlan(doc.DocumentId, doc.RevisionId, doc.FileSize);
     }
 
@@ -129,6 +121,17 @@ public static class WopiReadOnlySessionService
         throw new NotSupportedException(
             "Запись через WOPI/PutFile запрещена до реализации серверных ACL, " +
             "блокировок и сохранения новой редакции.");
+    }
+
+    private static void ValidateGrant(WopiDocument doc, WopiReadOnlyGrant grant, DateTimeOffset now)
+    {
+        ValidateDocument(doc);
+        ArgumentNullException.ThrowIfNull(grant);
+        if (grant.DocumentId != doc.DocumentId ||
+            grant.RevisionId != doc.RevisionId || grant.UserId != doc.UserId ||
+            grant.ExpiresAtUnixSeconds <= now.ToUnixTimeSeconds())
+            throw new UnauthorizedAccessException(
+                "WOPI: право чтения истекло либо не относится к данной редакции.");
     }
 
     private static void ValidateDocument(WopiDocument? d)
