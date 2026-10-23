@@ -18,5 +18,6 @@
     <ProjectReference Include="../GetDocument.Core/GetDocument.Core.csproj" />
     <ProjectReference Include="../GetDocument.Office/GetDocument.Office.csproj" />
     <ProjectReference Include="../GetDocument.Images/GetDocument.Images.csproj" />
+    <ProjectReference Include="../GetDocument.Revisions/GetDocument.Revisions.csproj" />
   </ItemGroup>
 </Project>
