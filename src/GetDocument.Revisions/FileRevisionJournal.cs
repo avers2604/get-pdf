@@ -154,7 +154,7 @@ public sealed class FileRevisionJournal
             if (json.Length > MaxEventBytes)
                 throw new InvalidDataException("Событие слишком велико.");
             using (var output = new FileStream(staging, FileMode.CreateNew,
-                FileAccess.Write, FileShare.None, bufferSize: 4096, FileOptions.WriteThrough))
+                FileAccess.Write, FileShare.None, bufferSize: 4096, options: FileOptions.WriteThrough))
             {
                 output.Write(json);
                 output.Flush(flushToDisk: true);
