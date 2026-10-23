@@ -27,6 +27,7 @@ public interface ITrustedWopiDocumentStore
 /// </summary>
 public sealed record WopiAuthorizedContent(
     WopiDocument Metadata,
+    string ExpectedSha256,
     Func<CancellationToken, ValueTask<Stream>> OpenReadAsync);
 
 /// <summary>Safe fallback: absent enterprise identity/ACL integration, serve no files.</summary>
@@ -73,7 +74,7 @@ public sealed class WopiGatewaySecurity
 /// </summary>
 public static class WopiHttpGateway
 {
-    private const long MaximumBytes = 256L * 1024 * 1024;
+    private const long MaximumBytes = 32L * 1024 * 1024;
 
     public static IEndpointRouteBuilder MapReadOnlyWopi(this IEndpointRouteBuilder routes)
     {
@@ -155,34 +156,66 @@ public static class WopiHttpGateway
             context.Response.StatusCode = StatusCodes.Status412PreconditionFailed;
             return;
         }
-        Stream stream;
-        try
+        if (source.ExpectedSha256.Length != 64 ||
+            !source.ExpectedSha256.All(Uri.IsHexDigit))
         {
-            stream = await source.OpenReadAsync(context.RequestAborted);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
             return;
         }
-        await using (stream)
+
+        // A bounded snapshot is validated in full before the first byte
+        // enters the HTTP response. Live SMB streams cannot be trusted to
+        // remain unchanged during a response copy.
+        byte[] content;
+        try
         {
-            // The repository must supply version-pinned seekable snapshots, not
-            // a mutable file. Validate the size BEFORE sending response headers.
-            if (!stream.CanRead || !stream.CanSeek || stream.Length != plan.ExpectedSize)
+            await using var input = await source.OpenReadAsync(context.RequestAborted);
+            if (!input.CanRead || !input.CanSeek || input.Length != plan.ExpectedSize)
             {
                 context.Response.StatusCode = StatusCodes.Status409Conflict;
                 return;
             }
-            stream.Position = 0;
-            context.Response.StatusCode = StatusCodes.Status200OK;
-            context.Response.Headers["Cache-Control"] = "no-store";
-            context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-            context.Response.Headers["X-WOPI-ItemVersion"] = source.Metadata.RevisionId;
-            context.Response.ContentType = "application/octet-stream";
-            context.Response.ContentLength = plan.ExpectedSize;
-            await stream.CopyToAsync(context.Response.Body, 64 * 1024, context.RequestAborted);
+            input.Position = 0;
+            content = new byte[checked((int)plan.ExpectedSize)];
+            int filled = 0;
+            while (filled < content.Length)
+            {
+                int count = await input.ReadAsync(
+                    content.AsMemory(filled), context.RequestAborted);
+                if (count == 0)
+                {
+                    context.Response.StatusCode = StatusCodes.Status409Conflict;
+                    return;
+                }
+                filled += count;
+            }
+            if (!string.Equals(Convert.ToHexString(SHA256.HashData(content)),
+                    source.ExpectedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.StatusCode = StatusCodes.Status409Conflict;
+                return;
+            }
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            return;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                                   NotSupportedException or ArgumentException)
+        {
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            return;
+        }
+
+        // All content is already checked and local to this bounded buffer.
+        context.Response.StatusCode = StatusCodes.Status200OK;
+        context.Response.Headers["Cache-Control"] = "no-store";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["X-WOPI-ItemVersion"] = source.Metadata.RevisionId;
+        context.Response.ContentType = "application/octet-stream";
+        context.Response.ContentLength = content.Length;
+        await context.Response.Body.WriteAsync(content, context.RequestAborted);
     }
 
     private static async ValueTask<(WopiAuthorizedContent? Source, WopiReadOnlyGrant? Grant, int Status)>
