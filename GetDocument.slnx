@@ -3,6 +3,8 @@
   <Project Path="src/GetDocument.Office/GetDocument.Office.csproj" />
   <Project Path="src/GetDocument.Images/GetDocument.Images.csproj" />
   <Project Path="src/GetDocument.Revisions/GetDocument.Revisions.csproj" />
+  <Project Path="src/GetDocument.Collaboration/GetDocument.Collaboration.csproj" />
+  <Project Path="tests/GetDocument.Collaboration.Tests/GetDocument.Collaboration.Tests.csproj" />
   <Project Path="tests/GetDocument.Revisions.Tests/GetDocument.Revisions.Tests.csproj" />
   <Project Path="tests/GetDocument.Office.Tests/GetDocument.Office.Tests.csproj" />
   <Project Path="tests/GetDocument.Images.Tests/GetDocument.Images.Tests.csproj" />
