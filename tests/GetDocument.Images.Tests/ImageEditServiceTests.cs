@@ -41,6 +41,44 @@ public sealed class ImageEditServiceTests
         Assert.IsFalse(File.Exists(target));
     }
 
+    [TestMethod]
+    public void RotatesAndCropsRealPngAndKeepsOriginalByteIdentical()
+    {
+        using var sandbox = TempDirectory.Create();
+        string original = Path.Combine(sandbox.Path, "input.png");
+        string output = Path.Combine(sandbox.Path, "revision.png");
+        // Four by three RGB PNG generated specifically for this regression test.
+        File.WriteAllBytes(original, Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAGElEQVR4nGNkYJAzYmCAIBaGKAY4QOEAACQwAXJRPwcJAAAAAElFTkSuQmCC"));
+        byte[] before = File.ReadAllBytes(original);
+        string sha = ImageEditService.FingerprintSource(original);
+        ImageEditService.SaveNewRevision(original, output,
+            new ImageEditPlan(ClockwiseQuarterTurns: 1,
+                Crop: new ImageCrop(1, 1, 2, 3)), expectedSha256: sha);
+
+        CollectionAssert.AreEqual(before, File.ReadAllBytes(original));
+        using var actual = NetVips.Image.NewFromFile(output);
+        Assert.AreEqual(2, actual.Width);
+        Assert.AreEqual(3, actual.Height);
+    }
+
+    [TestMethod]
+    public void RefusesImageEditedAfterCapture()
+    {
+        using var sandbox = TempDirectory.Create();
+        string original = Path.Combine(sandbox.Path, "input.png");
+        string output = Path.Combine(sandbox.Path, "revision.png");
+        File.WriteAllBytes(original, Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAGElEQVR4nGNkYJAzYmCAIBaGKAY4QOEAACQwAXJRPwcJAAAAAElFTkSuQmCC"));
+        string sha = ImageEditService.FingerprintSource(original);
+        using (var stream = new FileStream(original, FileMode.Append, FileAccess.Write))
+            stream.WriteByte(0); // Intentional change to hash.
+        Assert.ThrowsExactly<IOException>(() =>
+            ImageEditService.SaveNewRevision(original, output,
+                new ImageEditPlan(ClockwiseQuarterTurns: 1), expectedSha256: sha));
+        Assert.IsFalse(File.Exists(output));
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public string Path { get; }
