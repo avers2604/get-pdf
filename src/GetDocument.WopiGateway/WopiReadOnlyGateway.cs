@@ -139,7 +139,10 @@ public static class WopiReadOnlyGateway
             return Results.BadRequest();
 
         var values = context.Request.Query["access_token"];
-        if (values.Count != 1 || values[0] is not { Length: > 0 and <= 16384 } token)
+        if (values.Count != 1)
+            return Results.Unauthorized();
+        string? token = values[0];
+        if (string.IsNullOrWhiteSpace(token) || token.Length > 16384)
             return Results.Unauthorized();
 
         JsonElement payload;
