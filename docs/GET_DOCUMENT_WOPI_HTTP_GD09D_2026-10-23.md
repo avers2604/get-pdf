@@ -88,7 +88,7 @@ Collabora в своей вкладке.
 
 ## Тесты
 
-`GetDocument.WopiGateway.Tests` содержит **9 написанных HTTP тестов**:
+`GetDocument.WopiGateway.Tests` содержит **11 написанных HTTP тестов**:
 успешный CheckFileInfo/GetFile через фиктивный авторизованный store,
 подпись proof, запрет подмены/неавторизованного пользователя, ACL deny,
 получение неправильной редакции, просроченный JWT, неверный origin,
