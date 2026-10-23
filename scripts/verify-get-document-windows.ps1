@@ -11,6 +11,7 @@ $commands = @(
   @('build','GetDocument.slnx','-c','Release','--no-restore'),
   @('test','tests/GetDocument.Core.Tests/GetDocument.Core.Tests.csproj','-c','Release','--no-restore'),
   @('test','tests/GetDocument.Office.Tests/GetDocument.Office.Tests.csproj','-c','Release','--no-restore'),
+  @('test','tests/GetDocument.Images.Tests/GetDocument.Images.Tests.csproj','-c','Release','--no-restore'),
   @('build','GetPdf.slnx','-c','Release'),
   @('test','tests/GetPdf.Tests/GetPdf.Tests.csproj','-c','Release','--no-restore')
 )
