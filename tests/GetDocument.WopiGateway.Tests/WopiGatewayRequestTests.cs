@@ -4,6 +4,7 @@ using System.Text.Json;
 using GetDocument.Collaboration;
 using GetDocument.WopiGateway;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace GetDocument.WopiGateway.Tests;
@@ -166,6 +167,8 @@ public sealed class WopiGatewayRequestTests
             if (tokenMode == "missing") token = "";
             var context = new DefaultHttpContext();
             context.Response.Body = new MemoryStream();
+            using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+            context.RequestServices = services;
             context.Request.Scheme = scheme;
             context.Request.Host = new HostString(host);
             context.Request.Path = path ?? (contents

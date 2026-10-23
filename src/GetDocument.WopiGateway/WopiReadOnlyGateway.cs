@@ -213,6 +213,7 @@ public static class WopiReadOnlyGateway
             revision.Sha256.Length != 64)
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
 
+        context.Response.Headers["X-WOPI-ItemVersion"] = revision.RevisionId;
         var doc = new WopiDocument(
             revision.DocumentId, revision.RevisionId, revision.FileName,
             revision.OwnerId, user.UserId, user.DisplayName, revision.Size,
