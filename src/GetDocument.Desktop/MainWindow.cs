@@ -68,6 +68,14 @@ public sealed class MainWindow : Window
         root.Children.Add(_tabs);
         Content = root;
         KeyDown += OnKeyDown;
+        Closing += (_, args) =>
+        {
+            if (_views.Values.Any(t => t.Content is SimpleDocxEditorPane { HasUnsavedChanges: true }))
+            {
+                args.Cancel = true;
+                _status.Text = "Есть несохранённые правки DOCX. Сохраните новую редакцию или отмените изменения.";
+            }
+        };
     }
 
     private Control BuildHeader()
