@@ -19,7 +19,10 @@ if bash "$script" relative-path > /dev/null 2>&1; then
   echo 'FAIL: accepted relative executable path' >&2
   exit 1
 fi
-if bash "$script" "$tmp/evil%F" > /dev/null 2>&1; then
+bad="$tmp/bin/evil%F"
+cp "$exe" "$bad"
+chmod +x "$bad"
+if bash "$script" "$bad" > /dev/null 2>&1; then
   echo 'FAIL: accepted invalid executable path' >&2
   exit 1
 fi
