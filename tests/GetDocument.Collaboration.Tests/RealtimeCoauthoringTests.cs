@@ -117,11 +117,26 @@ public sealed class RealtimeCoauthoringTests
     }
 
     [TestMethod]
+    public void LongShiftSessionIsValidForTenHoursNotFifteenMinutes()
+    {
+        var document = File();
+        var session = RealtimeCoauthoring.Issue(document, Secret, Now,
+            TimeSpan.FromHours(10), editingGatewayReady: true);
+        Assert.AreEqual(Now.AddHours(10).ToUnixTimeMilliseconds(), session.AccessTokenTtl);
+        var afterSixHours = RealtimeCoauthoring.Authorize(
+            session.AccessToken, Secret, document, Now.AddHours(6));
+        Assert.IsTrue(afterSixHours.CanEdit);
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
+            RealtimeCoauthoring.Authorize(
+                session.AccessToken, Secret, document, Now.AddHours(10)));
+    }
+
+    [TestMethod]
     public void InvalidLifetimeOrChangedPermissionsRejectAccess()
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
             RealtimeCoauthoring.Issue(File(), Secret, Now,
-                TimeSpan.FromHours(1), editingGatewayReady: true));
+                TimeSpan.FromHours(11), editingGatewayReady: true));
         var doc = File();
         var session = RealtimeCoauthoring.Issue(doc, Secret, Now,
             TimeSpan.FromMinutes(5), editingGatewayReady: true);
