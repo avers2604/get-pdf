@@ -203,6 +203,70 @@ public sealed class WopiRealtimeHttpGatewayTests
         Assert.AreEqual(0, _store.CommitCount);
     }
 
+    [TestMethod]
+    public async Task SignedCollaboraPostWithoutOverrideIsAcceptedWhenTimestampMatches()
+    {
+        var ctx = Context("alice", "/wopi/files/doc-42/contents",
+            content: Encoding.UTF8.GetBytes("COLLABORA POST"));
+        // Collabora's WOPI-like PutFile uses POST /contents; unlike the
+        // Microsoft WOPI profile, X-WOPI-Override may be omitted.
+        ctx.Request.Headers["X-COOL-WOPI-Timestamp"] = _initial.LastModifiedUtc.ToString("O");
+        await WopiLiveHttpGateway.HandlePutFileAsync(ctx, "doc-42",
+            _store, _security, new FixedClock(Now));
+        Assert.AreEqual(200, ctx.Response.StatusCode);
+        Assert.AreEqual("COLLABORA POST",
+            File.ReadAllText(_store.Revisions.ReadCurrent("doc-42").FilePath));
+    }
+
+    [TestMethod]
+    public async Task ChunkedUploadWithoutContentLengthIsBoundedAndCanSave()
+    {
+        var ctx = Context("bob", "/wopi/files/doc-42/contents",
+            content: Encoding.UTF8.GetBytes("CHUNKED COMPLETE"));
+        ctx.Request.ContentLength = null;
+        ctx.Request.Headers["X-COOL-WOPI-Timestamp"] = _initial.LastModifiedUtc.ToString("O");
+        await WopiLiveHttpGateway.HandlePutFileAsync(ctx, "doc-42",
+            _store, _security, new FixedClock(Now));
+        Assert.AreEqual(200, ctx.Response.StatusCode);
+        Assert.AreEqual("CHUNKED COMPLETE",
+            File.ReadAllText(_store.Revisions.ReadCurrent("doc-42").FilePath));
+    }
+
+    [TestMethod]
+    public async Task DefaultDenyAllRealtimeStoreNeverExposesDocument()
+    {
+        var ctx = Context("alice", "/wopi/files/doc-42");
+        await WopiLiveHttpGateway.HandleCheckFileInfoAsync(ctx, "doc-42",
+            new DenyAllRealtimeWopiDocumentStore(), _security, new FixedClock(Now));
+        Assert.AreEqual(404, ctx.Response.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task RevokingEditPermissionAfterTokenIssueBlocksSave()
+    {
+        var ctx = Context("alice", "/wopi/files/doc-42/contents",
+            content: Encoding.UTF8.GetBytes("REVOKED"));
+        _store.AllowEdit = false;
+        ctx.Request.Headers["X-WOPI-Override"] = "PUT";
+        ctx.Request.Headers["X-COOL-WOPI-Timestamp"] = _initial.LastModifiedUtc.ToString("O");
+        await WopiLiveHttpGateway.HandlePutFileAsync(ctx, "doc-42",
+            _store, _security, new FixedClock(Now));
+        Assert.AreNotEqual(200, ctx.Response.StatusCode);
+        Assert.AreEqual(0, _store.CommitCount);
+        Assert.AreEqual(_initial.RevisionId, _store.Revisions.ReadCurrent("doc-42").RevisionId);
+    }
+
+    [TestMethod]
+    public async Task SameLengthTamperedSnapshotIsNotServed()
+    {
+        _store.TamperRead = true;
+        var ctx = Context("alice", "/wopi/files/doc-42/contents");
+        await WopiLiveHttpGateway.HandleGetFileAsync(ctx, "doc-42",
+            _store, _security, new FixedClock(Now));
+        Assert.AreEqual(409, ctx.Response.StatusCode);
+        Assert.AreEqual(0, ((MemoryStream)ctx.Response.Body).Length);
+    }
+
     private DefaultHttpContext Context(string user, string path,
         byte[]? content = null, DateTimeOffset? issuedAt = null)
     {
@@ -245,12 +309,14 @@ public sealed class WopiRealtimeHttpGatewayTests
         public int CommitCount { get; private set; }
         public bool AllowAccess { get; set; } = true;
         public bool IsWorm { get; set; }
+        public bool AllowEdit { get; set; } = true;
+        public bool TamperRead { get; set; }
 
         public WopiDocument Metadata(string user)
         {
             var current = store.ReadCurrent("doc-42");
             return new WopiDocument("doc-42", "session-base-r1", "Приказ.docx",
-                "get", user, user, current.Length, true, IsWorm);
+                "get", user, user, current.Length, AllowEdit, IsWorm);
         }
 
         public ValueTask<WopiRealtimeAuthorizedContent?> ResolveForSessionAsync(
@@ -264,7 +330,15 @@ public sealed class WopiRealtimeHttpGatewayTests
             var doc = Metadata(userId);
             return ValueTask.FromResult<WopiRealtimeAuthorizedContent?>(new(
                 doc, revision,
-                _ => ValueTask.FromResult<Stream>(File.OpenRead(revision.FilePath))));
+                _ =>
+                {
+                    if (!TamperRead) return ValueTask.FromResult<Stream>(
+                        File.OpenRead(revision.FilePath));
+                    byte[] bytes = File.ReadAllBytes(revision.FilePath);
+                    bytes[0] ^= 0x01;
+                    return ValueTask.FromResult<Stream>(
+                        new MemoryStream(bytes, writable: false));
+                }));
         }
 
         public async ValueTask<StoredOfficeRevision> CommitNewRevisionAsync(
