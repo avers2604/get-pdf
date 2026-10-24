@@ -365,6 +365,33 @@ public sealed class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Opens trusted local/SMB paths within the current tab strip. The caller
+    /// has only local OS-user IPC permissions, never GUP-2 credentials.
+    /// Actual parsers must still inspect the bytes and enforce limits.
+    /// </summary>
+    public void OpenFromLaunch(IReadOnlyList<string> files)
+    {
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
+
+        foreach (string path in files)
+        {
+            try { AddDocument(_workspace.OpenExisting(path)); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                ArgumentException or NotSupportedException)
+            {
+                // No paths in log/IPC errors: failures are shown only to
+                // the user who initiated the local launch.
+                _status.Text = "Не удалось открыть переданный файл: " + ex.Message;
+            }
+        }
+    }
+
+    public void ReportRejectedLaunch() =>
+        _status.Text = "Неверные параметры запуска: допустимы только локальные файлы поддерживаемых форматов.";
+
     private async Task OpenFilesAsync()
     {
         IReadOnlyList<IStorageFile> files;
