@@ -43,6 +43,13 @@ dotnet run --project .\src\GetDocument.Desktop\GetDocument.Desktop.csproj
 .\packaging\register-get-document-capabilities.ps1 -ExePath "C:\Program Files\GET Document\GetDocument.Desktop.exe" -OpenSettings
 ```
 
+Для Linux (Astra/ALT/РЕД и другие desktop-системы) предусмотрена регистрация в пользовательском каталоге приложений **без изменения MIME по умолчанию**:
+```bash
+bash packaging/register-get-document-linux.sh /opt/get-document/GetDocument.Desktop
+bash packaging/test-register-get-document-linux.sh
+```
+Скрипт требует существующий исполняемый файл и добавляет `get-document.desktop` только для текущего пользователя. Shell smoke-тест выполняется в изолированном временном `XDG_DATA_HOME`. Упаковку и цифровую подпись дистрибутивов выполнить отдельно.
+
 Регистрация не является установщиком, не развёртывает сервер и не включает реальное совместное редактирование. До подписанного релиза сохраняются прежние пользовательские ассоциации и legacy-приложение.
 
 План завершения с критериями приёмки: [GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md](docs/GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md). Исходное описание ГЭТ PDF: [LEGACY_GET_PDF_README_2026-10-24.md](docs/LEGACY_GET_PDF_README_2026-10-24.md).
