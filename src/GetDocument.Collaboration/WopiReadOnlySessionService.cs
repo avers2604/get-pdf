@@ -104,6 +104,7 @@ public static class WopiReadOnlySessionService
             ReadOnly = true,
             SupportsUpdate = false,
             SupportsLocks = false,
+            UserCanNotWriteRelative = true,
             DisablePrint = true,
             DisableBrowserCachingOfUserContent = true
         });
