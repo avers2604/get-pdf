@@ -2,6 +2,7 @@
 # Offline-first project acceptance runner for Linux. No GitHub Actions.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+bash packaging/test-register-get-document-linux.sh
 if ! command -v dotnet >/dev/null 2>&1; then
   echo "ERROR: .NET 10 SDK is required locally; install it before testing." >&2
   exit 127
