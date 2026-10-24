@@ -25,9 +25,12 @@ public static class WopiDiscoveryCatalog
         var document = XDocument.Load(reader);
         var matches = document.Descendants("app")
             .Where(app => string.Equals((string?)app.Attribute("name"), extension,
-                StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase) || app.Elements("action").Any(a =>
+                string.Equals((string?)a.Attribute("ext"), extension, StringComparison.OrdinalIgnoreCase)))
             .Elements("action")
-            .Where(action => (string?)action.Attribute("name") == "view")
+            .Where(action => (string?)action.Attribute("name") == "view" &&
+                ((string?)action.Attribute("ext") is null ||
+                 string.Equals((string?)action.Attribute("ext"), extension, StringComparison.OrdinalIgnoreCase)))
             .Select(action => (string?)action.Attribute("urlsrc"))
             .Where(url => !string.IsNullOrWhiteSpace(url)).ToArray();
         if (matches.Length != 1 ||
