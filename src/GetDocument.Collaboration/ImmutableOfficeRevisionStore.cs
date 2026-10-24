@@ -102,8 +102,10 @@ public sealed class ImmutableOfficeRevisionStore
         StoredOfficeRevisionState state;
         try
         {
+            using var stream = new FileStream(manifest, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
             state = JsonSerializer.Deserialize<StoredOfficeRevisionState>(
-                File.ReadAllText(manifest)) ?? throw new InvalidDataException("Пустой индекс.");
+                stream) ?? throw new InvalidDataException("Пустой индекс.");
         }
         catch (JsonException ex)
         {
@@ -113,7 +115,7 @@ public sealed class ImmutableOfficeRevisionStore
         if (state.DocumentId != documentId ||
             !IsRevisionId(state.RevisionId) ||
             state.Extension != ValidateExtension(state.Extension) ||
-            state.Sha256.Length != 64 ||
+            state.Sha256 is null || state.Sha256.Length != 64 ||
             state.Length is <= 0 or > MaxContentBytes)
             throw new InvalidDataException("Индекс редакций содержит недопустимые сведения.");
 
