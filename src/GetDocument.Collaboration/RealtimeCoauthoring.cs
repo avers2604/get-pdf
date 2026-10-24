@@ -130,6 +130,7 @@ public static class RealtimeCoauthoring
             // Collabora's WOPI-like integration relies on LastModifiedTime,
             // not the Microsoft 365 web WOPI Lock/RefreshLock operations.
             SupportsLocks = false,
+            UserCanNotWriteRelative = true,
             LastModifiedTime = lastModifiedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
             DisablePrint = true,
             DisableBrowserCachingOfUserContent = true
@@ -159,6 +160,7 @@ public static class RealtimeCoauthoring
             ReadOnly = !editable,
             SupportsUpdate = editable,
             SupportsLocks = false,
+            UserCanNotWriteRelative = true,
             LastModifiedTime = stored.LastModifiedUtc.ToUniversalTime()
                 .ToString("O", CultureInfo.InvariantCulture),
             DisablePrint = true,

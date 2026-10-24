@@ -39,6 +39,9 @@ builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 // No actual user/AD permissions resolver is connected yet. This is intentional:
 // HTTP routes are implemented but cannot serve any corporate document by default.
 builder.Services.AddSingleton<ITrustedWopiDocumentStore, DenyAllWopiDocumentStore>();
+// Fail-closed even if the operator selects live mode: until GUP-2/AD ACL
+// is installed, NO real files can be read and NO edits can be saved.
+builder.Services.AddSingleton<ITrustedRealtimeWopiDocumentStore, DenyAllRealtimeWopiDocumentStore>();
 
 var app = builder.Build();
 app.Use(async (context, next) =>
@@ -50,5 +53,12 @@ app.Use(async (context, next) =>
     }
     await next();
 });
-app.MapReadOnlyWopi();
+// Route sets overlap. Do NOT map both. Read-only remains the default.
+string mode = Environment.GetEnvironmentVariable("GET_WOPI_HTTP_MODE") ?? "read-only";
+if (string.Equals(mode, "live", StringComparison.OrdinalIgnoreCase))
+    app.MapRealtimeWopi();
+else if (string.Equals(mode, "read-only", StringComparison.OrdinalIgnoreCase))
+    app.MapReadOnlyWopi();
+else
+    throw new InvalidOperationException("GET_WOPI_HTTP_MODE: допустимы live/read-only.");
 app.Run();
