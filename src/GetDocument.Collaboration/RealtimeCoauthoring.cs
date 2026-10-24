@@ -134,6 +134,36 @@ public static class RealtimeCoauthoring
         });
     }
 
+    public static string CheckFileInfo(
+        WopiDocument document, RealtimeCoauthoringGrant grant,
+        DateTimeOffset now, StoredOfficeRevision stored)
+    {
+        ArgumentNullException.ThrowIfNull(stored);
+        ValidateGrant(document, grant, now);
+        if (stored.DocumentId != document.DocumentId ||
+            stored.Extension != Path.GetExtension(document.FileName).ToLowerInvariant())
+            throw new UnauthorizedAccessException("Хранимая редакция не принадлежит документу.");
+
+        bool editable = grant.CanEdit && document.CanEdit && !document.IsWormOriginal;
+        return JsonSerializer.Serialize(new
+        {
+            BaseFileName = document.FileName,
+            OwnerId = document.OwnerId,
+            Size = stored.Length,
+            Version = stored.RevisionId,
+            UserId = document.UserId,
+            UserFriendlyName = document.UserFriendlyName,
+            UserCanWrite = editable,
+            ReadOnly = !editable,
+            SupportsUpdate = editable,
+            SupportsLocks = false,
+            LastModifiedTime = stored.LastModifiedUtc.ToUniversalTime()
+                .ToString("O", CultureInfo.InvariantCulture),
+            DisablePrint = true,
+            DisableBrowserCachingOfUserContent = true
+        });
+    }
+
     public static WopiNewRevisionPlan PlanNewRevision(
         WopiDocument document, RealtimeCoauthoringGrant grant,
         DateTimeOffset now, DateTimeOffset currentLastModifiedUtc,
