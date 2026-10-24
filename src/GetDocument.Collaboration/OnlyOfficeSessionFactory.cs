@@ -72,6 +72,10 @@ public static class OnlyOfficeSessionFactory
             {
                 callbackUrl = options.CallbackUrl.AbsoluteUri,
                 mode = edit ? "edit" : "view",
+                // ONLYOFFICE Fast propagates remote edits/cursors immediately.
+                // Strict mode delays visibility until Save, so do not offer it.
+                coEditing = new { mode = "fast", change = false },
+                customization = new { autosave = true },
                 lang = "ru",
                 user = new { id = userId, name = userName }
             }

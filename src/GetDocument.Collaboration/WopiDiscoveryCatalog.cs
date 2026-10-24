@@ -6,7 +6,13 @@ namespace GetDocument.Collaboration;
 /// <summary>Parses authenticated Collabora discovery XML; never fetches untrusted URLs.</summary>
 public static class WopiDiscoveryCatalog
 {
-    public static Uri SelectViewAction(string xml, string extension, Uri officeOrigin)
+    public static Uri SelectViewAction(string xml, string extension, Uri officeOrigin) =>
+        SelectAction(xml, extension, officeOrigin, "view");
+
+    public static Uri SelectEditAction(string xml, string extension, Uri officeOrigin) =>
+        SelectAction(xml, extension, officeOrigin, "edit");
+
+    private static Uri SelectAction(string xml, string extension, Uri officeOrigin, string actionName)
     {
         OnlyOfficeUriPolicy.RequireHttpsOrigin(officeOrigin);
         if (string.IsNullOrWhiteSpace(xml) || xml.Length > 1024 * 1024)
@@ -28,7 +34,7 @@ public static class WopiDiscoveryCatalog
                 StringComparison.OrdinalIgnoreCase) || app.Elements("action").Any(a =>
                 string.Equals((string?)a.Attribute("ext"), extension, StringComparison.OrdinalIgnoreCase)))
             .Elements("action")
-            .Where(action => (string?)action.Attribute("name") == "view" &&
+            .Where(action => (string?)action.Attribute("name") == actionName &&
                 ((string?)action.Attribute("ext") is null ||
                  string.Equals((string?)action.Attribute("ext"), extension, StringComparison.OrdinalIgnoreCase)))
             .Select(action => (string?)action.Attribute("urlsrc"))
