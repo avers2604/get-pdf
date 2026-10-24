@@ -11,6 +11,7 @@ namespace GetDocument.Collaboration;
 /// The actual real-time document/operation synchronization is Collabora Online.
 /// </summary>
 public sealed record RealtimeCoauthoringTicket(
+    string DocumentId, string RevisionId,
     string DocumentKey, string AccessToken, long AccessTokenTtl, bool CanEdit);
 
 public sealed record RealtimeCoauthoringGrant(
@@ -71,7 +72,8 @@ public static class RealtimeCoauthoring
             exp = expires
         }, secret);
         return new RealtimeCoauthoringTicket(
-            documentKey, token, now.Add(lifetime).ToUnixTimeMilliseconds(), canEdit);
+            document.DocumentId, document.RevisionId, documentKey, token,
+            now.Add(lifetime).ToUnixTimeMilliseconds(), canEdit);
     }
 
     public static RealtimeCoauthoringGrant Authorize(

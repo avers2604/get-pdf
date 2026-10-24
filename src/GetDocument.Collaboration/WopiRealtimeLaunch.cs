@@ -17,8 +17,11 @@ public static class WopiRealtimeLaunch
     {
         ArgumentNullException.ThrowIfNull(ticket);
         OnlyOfficeUriPolicy.RequireTrustedUrl(wopiSource, wopiHostOrigin);
-        if (!wopiSource.AbsolutePath.StartsWith("/wopi/files/", StringComparison.Ordinal) ||
-            !string.IsNullOrEmpty(wopiSource.Query))
+        string expectedPath = "/wopi/files/" + Uri.EscapeDataString(ticket.DocumentId);
+        if (!string.Equals(wopiSource.AbsolutePath, expectedPath, StringComparison.Ordinal))
+            throw new UnauthorizedAccessException(
+                "WOPISrc does not match the document in the signed room ticket.");
+        if (!string.IsNullOrEmpty(wopiSource.Query))
             throw new ArgumentException(
                 "WOPISrc must be a stable document endpoint, without a user token.");
         if (string.IsNullOrWhiteSpace(ticket.AccessToken) ||
