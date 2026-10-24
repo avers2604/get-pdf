@@ -44,7 +44,7 @@ public sealed class WopiVersionConflictException : IOException
 public static class RealtimeCoauthoring
 {
     private const string Audience = "get-document-wopi-live";
-    private static readonly TimeSpan MaxLifetime = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan MaxLifetime = TimeSpan.FromHours(10);
     private static readonly TimeSpan MinLifetime = TimeSpan.FromMinutes(1);
 
     public static RealtimeCoauthoringTicket Issue(
@@ -54,7 +54,7 @@ public static class RealtimeCoauthoring
         ValidateDocument(document);
         if (lifetime < MinLifetime || lifetime > MaxLifetime)
             throw new ArgumentOutOfRangeException(nameof(lifetime),
-                "Срок доступа к совместной сессии должен быть от 1 до 15 минут.");
+                "Срок доступа к совместной сессии должен быть от 1 минуты до 10 часов.");
         bool canEdit = document.CanEdit && !document.IsWormOriginal && editingGatewayReady;
         string documentKey = RoomKey(document.DocumentId, document.RevisionId);
         long issued = now.ToUnixTimeSeconds();
@@ -98,7 +98,7 @@ public static class RealtimeCoauthoring
                 room != RoomKey(document.DocumentId, document.RevisionId) ||
                 (mode != "edit" && mode != "view") ||
                 nbf > nowSeconds || exp <= nowSeconds ||
-                exp - nbf is < 60 or > 900 ||
+                exp - nbf is < 60 or > 36000 ||
                 (edit && (!document.CanEdit || document.IsWormOriginal)))
                 throw new UnauthorizedAccessException(
                     "Права участника или срок совместной сессии не подтверждены.");

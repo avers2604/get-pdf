@@ -368,7 +368,7 @@ public static class WopiLiveHttpGateway
                 string.IsNullOrWhiteSpace(user) ||
                 jwt.GetProperty("aud").GetString() != "get-document-wopi-live" ||
                 (mode != "edit" && mode != "view") ||
-                nbf > unixNow || exp <= unixNow || exp - nbf is < 60 or > 900)
+                nbf > unixNow || exp <= unixNow || exp - nbf is < 60 or > 36000)
                 return (null, null, StatusCodes.Status401Unauthorized);
 
             WopiRealtimeAuthorizedContent? content = await store.ResolveForSessionAsync(
