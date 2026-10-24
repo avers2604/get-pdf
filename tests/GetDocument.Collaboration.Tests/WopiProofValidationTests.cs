@@ -60,6 +60,15 @@ public sealed class WopiProofValidationTests
     }
 
     [TestMethod]
+    public void TimestampIsBigEndianMatchingOfficialWopiVectors()
+    {
+        byte[] proof = WopiProofValidator.BuildExpectedProof("a",
+            new Uri("https://get-files.intra.example/wopi/files/42"), 0x0102030405060708L);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 },
+            proof[^8..]);
+    }
+
+    [TestMethod]
     public void ProofBytesIncludeUppercaseUrlAndBinaryTimestamp()
     {
         var bytes = WopiProofValidator.BuildExpectedProof(
