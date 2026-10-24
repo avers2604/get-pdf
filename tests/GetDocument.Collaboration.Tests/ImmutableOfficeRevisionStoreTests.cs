@@ -95,6 +95,55 @@ public sealed class ImmutableOfficeRevisionStoreTests
     }
 
     [TestMethod]
+    public async Task ConcurrentSavesOfSameRevisionPublishExactlyOneWinner()
+    {
+        using var dir = new TempDirectory();
+        var store = new ImmutableOfficeRevisionStore(dir.PathValue);
+        await using var starting = Bytes("shared version");
+        var original = await store.InitializeAsync("shared-doc", ".docx", starting);
+
+        async Task<StoredOfficeRevision?> TrySaveAsync(int number)
+        {
+            await using var bytes = Bytes("save-" + number);
+            try { return await store.AppendAsync("shared-doc", original.RevisionId, bytes); }
+            catch (OfficeRevisionConflictException) { return null; }
+        }
+
+        var results = await Task.WhenAll(
+            Enumerable.Range(0, 8).Select(n => Task.Run(() => TrySaveAsync(n))));
+        Assert.AreEqual(1, results.Count(r => r is not null));
+        var winner = results.Single(r => r is not null)!;
+        Assert.AreEqual(winner.RevisionId, store.ReadCurrent("shared-doc").RevisionId);
+        Assert.AreEqual("shared version", File.ReadAllText(original.FilePath));
+    }
+
+    [TestMethod]
+    public async Task BriefExistingFilesystemLockWaitsBeforeRecheckingRevision()
+    {
+        using var dir = new TempDirectory();
+        var store = new ImmutableOfficeRevisionStore(dir.PathValue);
+        await using var starting = Bytes("beginning");
+        var initial = await store.InitializeAsync("locked-doc", ".xlsx", starting);
+        string key = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                Encoding.UTF8.GetBytes("locked-doc"))).ToLowerInvariant();
+        string lockPath = Path.Combine(dir.PathValue, key + ".lock");
+        await using var edit = Bytes("new edit");
+
+        Task<StoredOfficeRevision> saveTask;
+        using (var exclusive = new FileStream(lockPath, FileMode.OpenOrCreate,
+            FileAccess.ReadWrite, FileShare.None))
+        {
+            saveTask = store.AppendAsync("locked-doc", initial.RevisionId, edit);
+            await Task.Delay(60);
+            Assert.IsFalse(saveTask.IsCompleted, "Expected a bounded retry, not immediate IOException.");
+        }
+        var saved = await saveTask;
+        Assert.AreNotEqual(initial.RevisionId, saved.RevisionId);
+        Assert.AreEqual("beginning", File.ReadAllText(initial.FilePath));
+    }
+
+    [TestMethod]
     public async Task RejectsEmptyPayload()
     {
         using var dir = new TempDirectory();
