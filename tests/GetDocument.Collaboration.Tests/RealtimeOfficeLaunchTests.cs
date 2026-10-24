@@ -80,6 +80,18 @@ public sealed class RealtimeOfficeLaunchTests
     }
 
     [TestMethod]
+    public void CannotAttachAuthorizedTicketToAnotherWopiDocumentPath()
+    {
+        var doc = new WopiDocument("doc-one", "r1", "Test.docx",
+            "owner", "alice", "Alice", 100, true, false);
+        var ticket = RealtimeCoauthoring.Issue(doc, Key, Now, TimeSpan.FromMinutes(5), true);
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() => WopiRealtimeLaunch.Build(
+            Discovery, "docx", new Uri("https://office.get.test/"),
+            new Uri("https://files.get.test/wopi/files/doc-two"),
+            new Uri("https://files.get.test/"), ticket));
+    }
+
+    [TestMethod]
     public void OnlyOfficeFastModeDoesNotPermitStrictSwitch()
     {
         var opts = new OnlyOfficeSessionOptions("doc", "r1", "Text.docx",
