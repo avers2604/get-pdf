@@ -213,8 +213,11 @@ public static class WopiLiveHttpGateway
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
         }
-        if (!string.Equals(context.Request.Headers["X-WOPI-Override"].ToString(),
-                "PUT", StringComparison.OrdinalIgnoreCase))
+        // Collabora's WOPI-like PutFile can omit the MS-WOPI override
+        // header. A nonempty operation must still explicitly be PUT.
+        string overrideOperation = context.Request.Headers["X-WOPI-Override"].ToString();
+        if (overrideOperation.Length != 0 &&
+            !string.Equals(overrideOperation, "PUT", StringComparison.OrdinalIgnoreCase))
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
@@ -232,48 +235,44 @@ public static class WopiLiveHttpGateway
             await WriteConflictAsync(context);
             return;
         }
-        if (context.Request.ContentLength is null)
-        {
-            context.Response.StatusCode = StatusCodes.Status411LengthRequired;
-            return;
-        }
-        long count = context.Request.ContentLength.Value;
-        if (count > MaximumBytes)
+        if (context.Request.ContentLength > MaximumBytes)
         {
             context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
             return;
         }
-        if (count <= 0)
+        if (context.Request.ContentLength is 0)
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
 
-        byte[] payload = new byte[checked((int)count)];
+        // A bounded stream also supports HTTP chunked transfer without
+        // Content-Length. Never trust a declared size without counting bytes.
         try
         {
-            int readTotal = 0;
-            while (readTotal < payload.Length)
+            await using var verifiedPayload = new MemoryStream();
+            byte[] buffer = new byte[64 * 1024];
+            while (true)
             {
                 int read = await context.Request.Body.ReadAsync(
-                    payload.AsMemory(readTotal), context.RequestAborted);
-                if (read == 0)
+                    buffer.AsMemory(), context.RequestAborted);
+                if (read == 0) break;
+                if (verifiedPayload.Length + read > MaximumBytes)
                 {
-                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                    context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
                     return;
                 }
-                readTotal += read;
+                await verifiedPayload.WriteAsync(
+                    buffer.AsMemory(0, read), context.RequestAborted);
             }
-            // Reject malformed stream with bytes beyond the declared size
-            // when the transport exposes them.
-            byte[] extra = new byte[1];
-            if (await context.Request.Body.ReadAsync(extra, context.RequestAborted) != 0)
+            if (verifiedPayload.Length == 0 ||
+                (context.Request.ContentLength is { } declared &&
+                 verifiedPayload.Length != declared))
             {
                 context.Response.StatusCode = StatusCodes.Status400BadRequest;
                 return;
             }
-
-            await using var verifiedPayload = new MemoryStream(payload, writable: false);
+            verifiedPayload.Position = 0;
             StoredOfficeRevision saved = await store.CommitNewRevisionAsync(
                 source, grant, timestamp, verifiedPayload, context.RequestAborted);
             if (saved.DocumentId != fileId || saved.RevisionId == source.CurrentRevision.RevisionId)
