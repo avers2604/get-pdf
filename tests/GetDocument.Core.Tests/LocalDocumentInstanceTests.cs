@@ -24,7 +24,7 @@ public sealed class LocalDocumentInstanceTests
             Assert.ThrowsExactly<ArgumentException>(() =>
                 LocalDocumentInstance.ValidateFiles([path + ".exe"]));
             Assert.ThrowsExactly<FileNotFoundException>(() =>
-                LocalDocumentInstance.ValidateFiles([path + "-missing"]));
+                LocalDocumentInstance.ValidateFiles([path + "-missing.docx"]));
         }
         finally { File.Delete(path); }
     }
