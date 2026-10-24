@@ -57,7 +57,7 @@ public sealed class ImmutableOfficeRevisionStore
 
         // FileShare.None lock is effective across local processes and typical
         // SMB shares, but clustered storage requires a transactional server.
-        using var exclusive = TakeLock(key);
+        await using var exclusive = await TakeLockAsync(key, cancellationToken);
         var manifest = StatePath(key);
         if (File.Exists(manifest))
         {
@@ -80,7 +80,7 @@ public sealed class ImmutableOfficeRevisionStore
         if (!edited.CanRead)
             throw new ArgumentException("Входящий поток не поддерживает чтение.", nameof(edited));
 
-        using var exclusive = TakeLock(key);
+        await using var exclusive = await TakeLockAsync(key, cancellationToken);
         var current = ReadCurrent(documentId);
         if (!string.Equals(current.RevisionId, expectedRevisionId, StringComparison.Ordinal))
             throw new OfficeRevisionConflictException(
@@ -202,9 +202,28 @@ public sealed class ImmutableOfficeRevisionStore
         }
     }
 
-    private FileStream TakeLock(string key) =>
-        new(Path.Combine(_root, key + ".lock"), FileMode.OpenOrCreate,
-            FileAccess.ReadWrite, FileShare.None);
+    private async Task<FileStream> TakeLockAsync(
+        string key, CancellationToken cancellationToken)
+    {
+        string path = Path.Combine(_root, key + ".lock");
+        // A second employee may save while the first write is finishing.
+        // Bounded retries turn harmless transient SMB sharing violations
+        // into a deterministic CAS conflict rather than a false server error.
+        for (int attempt = 0; attempt < 100; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (attempt < 99)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(20), cancellationToken);
+            }
+        }
+        throw new IOException("Не удалось получить блокировку редакции.");
+    }
 
     private string StatePath(string key) => Path.Combine(_root, key + ".state.json");
 
