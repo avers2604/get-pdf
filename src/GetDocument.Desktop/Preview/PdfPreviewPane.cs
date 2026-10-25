@@ -5,6 +5,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using GetDocument.Core.Preview;
+using GetDocument.Desktop.Printing;
 using PDFtoImage;
 
 namespace GetDocument.Desktop.Preview;
@@ -15,7 +16,6 @@ namespace GetDocument.Desktop.Preview;
 /// </summary>
 internal sealed class PdfPreviewPane : DockPanel, IDisposable
 {
-    private static readonly SemaphoreSlim NativeRenderGate = new(1, 1);
     private readonly string _path;
     private readonly Image _pageImage = new()
     {
@@ -306,7 +306,7 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         var length = new FileInfo(path).Length;
         PdfPreviewPlan.ValidateInputLength(length);
 
-        NativeRenderGate.Wait(token);
+        PdfNativeGate.Instance.Wait(token);
         try
         {
             using var source = File.OpenRead(path);
@@ -324,7 +324,7 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
             token.ThrowIfCancellationRequested();
             return (output.ToArray(), count);
         }
-        finally { NativeRenderGate.Release(); }
+        finally { PdfNativeGate.Instance.Release(); }
     }
 
     public void Dispose()
