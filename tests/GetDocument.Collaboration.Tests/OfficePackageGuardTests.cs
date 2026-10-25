@@ -108,7 +108,7 @@ public sealed class OfficePackageGuardTests
     [TestMethod]
     public void RejectsDisguisedActiveCode()
     {
-        foreach (var part in new[] { "word/vbaProject.bin", "word/activeX/activeX1.bin" })
+        foreach (var part in new[] { "word/vbaProject.bin", "vbaProject.bin", "word/activeX/activeX1.bin" })
         {
             using var stream = new MemoryStream(MakeZip(
                 ("[Content_Types].xml", Types),
