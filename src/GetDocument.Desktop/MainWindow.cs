@@ -716,6 +716,27 @@ public sealed class MainWindow : Window
                 activePdf.FocusSearch();
                 return;
             }
+            if ((e.KeyModifiers & KeyModifiers.Control) != 0)
+            {
+                if (e.Key == Key.Add || e.Key == Key.OemPlus)
+                {
+                    e.Handled = true;
+                    activePdf.ChangeZoom(1);
+                    return;
+                }
+                if (e.Key == Key.Subtract || e.Key == Key.OemMinus)
+                {
+                    e.Handled = true;
+                    activePdf.ChangeZoom(-1);
+                    return;
+                }
+                if (e.Key == Key.D0 || e.Key == Key.NumPad0)
+                {
+                    e.Handled = true;
+                    activePdf.ResetZoom();
+                    return;
+                }
+            }
         }
         if ((e.KeyModifiers & KeyModifiers.Control) == 0) return;
         if (e.Key == Key.O) { e.Handled = true; await OpenFilesAsync(); }
