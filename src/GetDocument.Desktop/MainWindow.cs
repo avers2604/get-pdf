@@ -19,6 +19,7 @@ using GetDocument.Desktop.Collaboration;
 using GetDocument.Office;
 using GetDocument.Core.Integration;
 using GetDocument.Desktop.Integration;
+using GetDocument.Desktop.Printing;
 
 namespace GetDocument.Desktop;
 
@@ -42,6 +43,7 @@ public sealed class MainWindow : Window
     private readonly Dictionary<string, TabItem> _collaborationTabs = new(StringComparer.Ordinal);
     private readonly OfficeReturnPolicy _officeReturnPolicy = OfficeReturnPolicy.LoadLocal();
     private TabItem? _officeReturnTab;
+    private TabItem? _printTab;
 
     public MainWindow()
     {
@@ -85,6 +87,7 @@ public sealed class MainWindow : Window
         {
             if (_filesTab?.Content is IDisposable files) files.Dispose();
             if (_officeReturnTab?.Content is IDisposable officeReturn) officeReturn.Dispose();
+            if (_printTab?.Content is IDisposable printWizard) printWizard.Dispose();
             foreach (var view in _views.Values)
                 if (view.Content is IDisposable document) document.Dispose();
             foreach (var history in _revisionTabs.Values)
@@ -157,8 +160,7 @@ public sealed class MainWindow : Window
         home.Click += (_, _) => _tabs.SelectedIndex = 0;
         bar.Children.Add(home);
         var print = new Button { Content = "Печать" };
-        print.Click += (_, _) => _status.Text =
-            "Печать в новом интерфейсе пока не подключена; действующий WPF-просмотрщик не изменён.";
+        print.Click += (_, _) => ShowPrintWizard();
         bar.Children.Add(print);
         return bar;
     }
@@ -447,6 +449,56 @@ public sealed class MainWindow : Window
         if (_officeReturnTab.Content is IDisposable pane) pane.Dispose();
         _items.Remove(_officeReturnTab);
         _officeReturnTab = null;
+        _tabs.SelectedIndex = 0;
+    }
+
+    private void ShowPrintWizard()
+    {
+        if (_tabs.SelectedItem is TabItem { Tag: Guid id })
+        {
+            var document = _workspace.Tabs.FirstOrDefault(x => x.Id == id);
+            if (document?.FilePath is not { } path ||
+                !string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                _status.Text = "Мастер печати пока поддерживает только сохранённые PDF. " +
+                    "Печать DOCX/XLSX/PPTX требует подключённого офисного движка.";
+                return;
+            }
+            ClosePrintWizard();
+            var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
+            heading.Children.Add(new TextBlock
+            {
+                Text = "Печать: " + Path.GetFileName(path),
+                MaxWidth = 220, TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
+            close.Click += (_, _) => ClosePrintWizard();
+            heading.Children.Add(close);
+            _printTab = new TabItem
+            {
+                Header = heading,
+                Content = new PrintWizardPane(path, ClosePrintWizard)
+            };
+            _items.Add(_printTab);
+            _tabs.SelectedItem = _printTab;
+            _status.Text = "Открыт мастер печати ГЭТ. Параметры задаются без системного диалога.";
+            return;
+        }
+        if (_printTab is not null)
+        {
+            _tabs.SelectedItem = _printTab;
+            return;
+        }
+        _status.Text = "Выберите вкладку сохранённого PDF перед печатью.";
+    }
+
+    private void ClosePrintWizard()
+    {
+        if (_printTab is null) return;
+        if (_printTab.Content is IDisposable pane) pane.Dispose();
+        _items.Remove(_printTab);
+        _printTab = null;
         _tabs.SelectedIndex = 0;
     }
 
@@ -740,6 +792,7 @@ public sealed class MainWindow : Window
         }
         if ((e.KeyModifiers & KeyModifiers.Control) == 0) return;
         if (e.Key == Key.O) { e.Handled = true; await OpenFilesAsync(); }
+        else if (e.Key == Key.P) { e.Handled = true; ShowPrintWizard(); }
         else if (e.Key == Key.G && _tabs.SelectedItem is TabItem { Content: PdfPreviewPane pdf })
         { e.Handled = true; pdf.FocusPageNumber(); }
         else if (e.Key == Key.T)
@@ -755,6 +808,8 @@ public sealed class MainWindow : Window
         { e.Handled = true; CloseCorporateTemplates(); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _officeReturnTab))
         { e.Handled = true; CloseOfficeReturn(); }
+        else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _printTab))
+        { e.Handled = true; ClosePrintWizard(); }
         else if (e.Key == Key.W)
         {
             var pair = _revisionTabs.FirstOrDefault(kv => ReferenceEquals(kv.Value, _tabs.SelectedItem));
