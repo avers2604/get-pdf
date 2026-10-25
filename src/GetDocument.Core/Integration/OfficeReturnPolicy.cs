@@ -15,7 +15,7 @@ public sealed record OfficeReturnPolicy(bool Enabled, Uri? DocumentsUri, long Ma
 
     public Uri Destination()
     {
-        if (!Enabled || !IsTrustedDocumentsUri(DocumentsUri) ||
+        if (!Enabled || DocumentsUri is null || !IsTrustedDocumentsUri(DocumentsUri) ||
             MaxUploadBytes <= 0 || MaxUploadBytes > AbsoluteMaxUploadBytes)
             throw new InvalidOperationException("Возврат в GUP-2 запрещён политикой ИТ.");
         return new Uri(DocumentsUri, "getdocument/office-return/");
