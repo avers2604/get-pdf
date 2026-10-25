@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace GetDocument.Core.Preview;
@@ -18,7 +19,8 @@ public static class PdfTextSearchPlan
         ArgumentNullException.ThrowIfNull(query);
         string normalized = query.Trim();
         if (normalized.Length is < 1 or > MaxQueryLength ||
-            normalized.Any(char.IsControl))
+            normalized.Any(c => char.IsControl(c) ||
+                CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.Format))
             throw new ArgumentException("Поисковая строка должна содержать от 1 до 128 символов без управляющих знаков.",
                 nameof(query));
         return normalized;
@@ -29,7 +31,8 @@ public static class PdfTextSearchPlan
         if (pageIndex is < 0 or >= PdfPreviewPlan.MaxPages)
             throw new ArgumentOutOfRangeException(nameof(pageIndex));
         if (string.IsNullOrWhiteSpace(normalizedQuery) ||
-            normalizedQuery.Length > MaxQueryLength || normalizedQuery.Any(char.IsControl))
+            normalizedQuery.Length > MaxQueryLength || normalizedQuery.Any(c =>
+                char.IsControl(c) || CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.Format))
             throw new ArgumentException("Недопустимая строка поиска.", nameof(normalizedQuery));
         if (string.IsNullOrEmpty(pageText)) return null;
 
@@ -56,7 +59,8 @@ public static class PdfTextSearchPlan
         for (int i = start; i < start + excerptLength; i++)
         {
             char ch = pageText[i];
-            clean.Append(char.IsControl(ch) || char.IsWhiteSpace(ch) ? ' ' : ch);
+            clean.Append(char.IsControl(ch) || char.IsWhiteSpace(ch) ||
+                CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.Format ? ' ' : ch);
         }
 
         return new PdfTextPageMatch(pageIndex, count, clean.ToString().Trim(),
