@@ -178,7 +178,8 @@ public static class OfficePackageGuard
 
     private static bool ContainsActiveCode(string path)
     {
-        return path.EndsWith("/vbaProject.bin", StringComparison.OrdinalIgnoreCase) ||
+        return path.Equals("vbaProject.bin", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith("/vbaProject.bin", StringComparison.OrdinalIgnoreCase) ||
             path.Contains("/activeX/", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("activeX/", StringComparison.OrdinalIgnoreCase);
     }
