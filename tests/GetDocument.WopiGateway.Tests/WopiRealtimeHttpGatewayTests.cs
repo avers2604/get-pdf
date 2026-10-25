@@ -192,6 +192,21 @@ public sealed class WopiRealtimeHttpGatewayTests
     }
 
     [TestMethod]
+    public async Task RevokingAclWhileUploadingFailsBeforeCommit()
+    {
+        var bytes = Encoding.UTF8.GetBytes("NOW FORBIDDEN");
+        var ctx = Context("alice", "/wopi/files/doc-42/contents", content: bytes);
+        ctx.Request.Headers["X-WOPI-Override"] = "PUT";
+        ctx.Request.Headers["X-COOL-WOPI-Timestamp"] = _initial.LastModifiedUtc.ToString("O");
+        ctx.Request.Body = new RevokeOnFirstReadStream(bytes, () => _store.AllowAccess = false);
+        await WopiLiveHttpGateway.HandlePutFileAsync(ctx, "doc-42",
+            _store, _security, new FixedClock(Now));
+        Assert.AreEqual(404, ctx.Response.StatusCode);
+        Assert.AreEqual(0, _store.CommitCount);
+        Assert.AreEqual(_initial.RevisionId, _store.Revisions.ReadCurrent("doc-42").RevisionId);
+    }
+
+    [TestMethod]
     public async Task WrongWopiOperationDoesNotSave()
     {
         var ctx = Context("alice", "/wopi/files/doc-42/contents", content: Encoding.UTF8.GetBytes("BAD"));
@@ -290,6 +305,23 @@ public sealed class WopiRealtimeHttpGatewayTests
         ctx.Request.ContentLength = content?.Length;
         ctx.Response.Body = new MemoryStream();
         return ctx;
+    }
+
+    private sealed class RevokeOnFirstReadStream(byte[] bytes, Action revoke)
+        : MemoryStream(bytes, writable: false)
+    {
+        private bool _revoked;
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (!_revoked)
+            {
+                _revoked = true;
+                revoke();
+            }
+            return base.ReadAsync(buffer, cancellationToken);
+        }
     }
 
     private static MemoryStream Data(string text) => new(Encoding.UTF8.GetBytes(text));
