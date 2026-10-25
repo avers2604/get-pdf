@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -23,8 +24,12 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
     };
     private readonly TextBlock _pageLabel = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _message = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly Button _first = new() { Content = "⇤", IsEnabled = false };
     private readonly Button _previous = new() { Content = "←", IsEnabled = false };
     private readonly Button _next = new() { Content = "→", IsEnabled = false };
+    private readonly Button _last = new() { Content = "⇥", IsEnabled = false };
+    private readonly TextBox _pageInput = new() { Width = 64, Watermark = "Стр." };
+    private readonly Button _jump = new() { Content = "Перейти", IsEnabled = false };
     private readonly CancellationTokenSource _lifetime = new();
     private Bitmap? _currentBitmap;
     private bool _initialized;
@@ -42,7 +47,7 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
             Orientation = Orientation.Horizontal,
             Spacing = 12,
             Margin = new Thickness(16),
-            Children = { _previous, _pageLabel, _next, _message }
+            Children = { _first, _previous, _pageLabel, _next, _last, _pageInput, _jump, _message }
         };
         DockPanel.SetDock(buttons, Dock.Top);
         Children.Add(buttons);
@@ -56,8 +61,17 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
             }
         });
 
-        _previous.Click += (_, _) => _ = ShowPageAsync(_currentPage - 1);
-        _next.Click += (_, _) => _ = ShowPageAsync(_currentPage + 1);
+        _first.Click += (_, _) => _ = ShowPageAsync(0);
+        _previous.Click += (_, _) => _ = ShowPageAsync(PdfPageNavigation.Move(_currentPage, -1, _pageCount));
+        _next.Click += (_, _) => _ = ShowPageAsync(PdfPageNavigation.Move(_currentPage, 1, _pageCount));
+        _last.Click += (_, _) => _ = ShowPageAsync(_pageCount - 1);
+        _jump.Click += (_, _) => JumpToPage();
+        _pageInput.KeyDown += (_, args) =>
+        {
+            if (args.Key != Key.Enter) return;
+            args.Handled = true;
+            JumpToPage();
+        };
         AttachedToVisualTree += (_, _) =>
         {
             if (_initialized) return;
@@ -66,12 +80,23 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         };
     }
 
+    private void JumpToPage()
+    {
+        if (_disposed || _pageCount < 1) return;
+        if (!PdfPageNavigation.TryParsePage(_pageInput.Text, _pageCount, out var target))
+        {
+            _message.Text = $"Номер страницы должен быть от 1 до {_pageCount}.";
+            return;
+        }
+        _ = ShowPageAsync(target);
+    }
+
     private async Task ShowPageAsync(int index)
     {
         if (_disposed || index < 0 || _pageCount > 0 && index >= _pageCount) return;
         long generation = Interlocked.Increment(ref _generation);
         _message.Text = "Загрузка страницы…";
-        _previous.IsEnabled = _next.IsEnabled = false;
+        _first.IsEnabled = _previous.IsEnabled = _next.IsEnabled = _last.IsEnabled = _jump.IsEnabled = false;
         try
         {
             var result = await Task.Run(
@@ -87,17 +112,20 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
             _currentPage = index;
             _pageCount = result.Count;
             _pageLabel.Text = $"Страница {index + 1} из {_pageCount}";
+            _pageInput.Text = (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
             _message.Text = "Только просмотр";
-            _previous.IsEnabled = index > 0;
-            _next.IsEnabled = index + 1 < _pageCount;
+            _first.IsEnabled = _previous.IsEnabled = index > 0;
+            _next.IsEnabled = _last.IsEnabled = index + 1 < _pageCount;
+            _jump.IsEnabled = true;
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (Exception ex)
         {
             if (_disposed || generation != Interlocked.Read(ref _generation)) return;
             _message.Text = "PDF не удалось отобразить: " + ex.Message;
-            _previous.IsEnabled = _currentPage > 0;
-            _next.IsEnabled = _pageCount > 0 && _currentPage + 1 < _pageCount;
+            _first.IsEnabled = _previous.IsEnabled = _currentPage > 0;
+            _next.IsEnabled = _last.IsEnabled = _pageCount > 0 && _currentPage + 1 < _pageCount;
+            _jump.IsEnabled = _pageCount > 0;
         }
     }
 
