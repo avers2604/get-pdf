@@ -13,7 +13,7 @@ namespace GetDocument.Desktop.Integration;
 public sealed class OfficeTabBindPane : UserControl
 {
     public OfficeTabBindPane(string path, OfficeTabBindingPolicy policy,
-        Action<OfficeTabBindingReceipt> onBound)
+        Func<OfficeTabBindingReceipt, bool> onBound)
     {
         var secret = new TextBox
         {
@@ -55,7 +55,11 @@ public sealed class OfficeTabBindPane : UserControl
             try
             {
                 var receipt = await OfficeTabBindingClient.BindAsync(path, code, policy);
-                onBound(receipt);
+                if (!onBound(receipt))
+                {
+                    status.Text = "Исходная вкладка закрыта. Привязка не сохранена.";
+                    return;
+                }
                 status.Text = "Связано с карточкой №" + receipt.RegistrationNumber +
                               " (версия " + receipt.EditVersion +
                               "). Привязка сохраняется только до изменения файла или закрытия окна.";
