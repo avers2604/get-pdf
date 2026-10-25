@@ -119,7 +119,7 @@ internal static class Program
         public override bool IsPageCountValid => true;
         public override int PageCount => _pages.Count;
         public override Size PageSize { get => _pageSize; set => _pageSize = value; }
-        public override IDocumentPaginatorSource? Source => null;
+        public override IDocumentPaginatorSource Source => null!;
 
         public override DocumentPage GetPage(int pageNumber)
         {
