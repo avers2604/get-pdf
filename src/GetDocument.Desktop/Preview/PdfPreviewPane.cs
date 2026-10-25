@@ -30,6 +30,14 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
     private readonly Button _last = new() { Content = "⇥", IsEnabled = false };
     private readonly TextBox _pageInput = new() { Width = 64, Watermark = "Стр." };
     private readonly Button _jump = new() { Content = "Перейти", IsEnabled = false };
+    private readonly TextBox _searchInput = new() { Width = 220, Watermark = "Найти текст в PDF" };
+    private readonly Button _search = new() { Content = "Найти" };
+    private readonly Button _previousHit = new() { Content = "↑", IsEnabled = false };
+    private readonly Button _nextHit = new() { Content = "↓", IsEnabled = false };
+    private readonly TextBlock _searchStatus = new() { VerticalAlignment = VerticalAlignment.Center };
+    private CancellationTokenSource? _activeSearch;
+    private IReadOnlyList<PdfTextPageMatch> _matches = [];
+    private int _activeMatchIndex = -1;
     private readonly CancellationTokenSource _lifetime = new();
     private Bitmap? _currentBitmap;
     private bool _initialized;
@@ -42,15 +50,27 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
     {
         _path = path;
         _message.Text = "Подготовка просмотра PDF…";
-        var buttons = new StackPanel
+        var pageButtons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 12,
-            Margin = new Thickness(16),
             Children = { _first, _previous, _pageLabel, _next, _last, _pageInput, _jump, _message }
         };
-        DockPanel.SetDock(buttons, Dock.Top);
-        Children.Add(buttons);
+        var searchButtons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
+            Children = { _searchInput, _search, _previousHit, _nextHit, _searchStatus }
+        };
+        var toolbar = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Spacing = 8,
+            Margin = new Thickness(16),
+            Children = { pageButtons, searchButtons }
+        };
+        DockPanel.SetDock(toolbar, Dock.Top);
+        Children.Add(toolbar);
         Children.Add(new ScrollViewer
         {
             Content = new Border
@@ -66,6 +86,15 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         _next.Click += (_, _) => _ = ShowPageAsync(PdfPageNavigation.Move(_currentPage, 1, _pageCount));
         _last.Click += (_, _) => _ = ShowPageAsync(_pageCount - 1);
         _jump.Click += (_, _) => JumpToPage();
+        _search.Click += async (_, _) => await SearchTextAsync();
+        _searchInput.KeyDown += async (_, args) =>
+        {
+            if (args.Key != Key.Enter) return;
+            args.Handled = true;
+            await SearchTextAsync();
+        };
+        _previousHit.Click += (_, _) => FindNext(reverse: true);
+        _nextHit.Click += (_, _) => FindNext(reverse: false);
         _pageInput.KeyDown += (_, args) =>
         {
             if (args.Key != Key.Enter) return;
@@ -85,6 +114,95 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         if (_disposed || _pageCount < 1) return;
         _pageInput.Focus();
         _pageInput.SelectAll();
+    }
+
+    public void FocusSearch()
+    {
+        if (_disposed) return;
+        _searchInput.Focus();
+        _searchInput.SelectAll();
+    }
+
+    public void FindNext(bool reverse)
+    {
+        if (_disposed) return;
+        if (_matches.Count == 0)
+        {
+            FocusSearch();
+            return;
+        }
+
+        _activeMatchIndex = (_activeMatchIndex + (reverse ? _matches.Count - 1 : 1))
+            % _matches.Count;
+        var hit = _matches[_activeMatchIndex];
+        _searchStatus.Text = $"Найдено на стр. {hit.PageIndex + 1}; " +
+            $"страница {_activeMatchIndex + 1} из {_matches.Count}. " +
+            "Подсветка текста пока не поддерживается.";
+        _ = ShowPageAsync(hit.PageIndex);
+    }
+
+    private async Task SearchTextAsync()
+    {
+        if (_disposed) return;
+        string query;
+        try { query = PdfTextSearchPlan.NormalizeQuery(_searchInput.Text); }
+        catch (ArgumentException)
+        {
+            _searchStatus.Text = "Введите от 1 до 128 символов без переноса строки.";
+            return;
+        }
+
+        _activeSearch?.Cancel();
+        var current = new CancellationTokenSource();
+        _activeSearch = current;
+        _matches = [];
+        _activeMatchIndex = -1;
+        _previousHit.IsEnabled = _nextHit.IsEnabled = false;
+        _searchStatus.Text = "Поиск по текстовому слою…";
+        _search.IsEnabled = false;
+        try
+        {
+            var result = await Task.Run(
+                () => PdfTextSearchService.Search(_path, query, current.Token), current.Token);
+            if (_disposed || current.IsCancellationRequested || !ReferenceEquals(_activeSearch, current))
+                return;
+
+            _matches = result.Pages;
+            _previousHit.IsEnabled = _nextHit.IsEnabled = _matches.Count > 0;
+            if (_matches.Count == 0)
+            {
+                _searchStatus.Text = result.PagesWithoutTextLayer == result.InspectedPages
+                    ? "Текстового слоя нет: для сканов нужен OCR."
+                    : "Совпадений не найдено в доступном текстовом слое.";
+                if (result.PartialPages > 0)
+                    _searchStatus.Text += " Часть длинных страниц проверена не полностью.";
+                return;
+            }
+
+            _activeMatchIndex = 0;
+            var first = _matches[0];
+            _searchStatus.Text = $"Найдено страниц: {_matches.Count}. " +
+                $"Первое совпадение на стр. {first.PageIndex + 1}. " +
+                "Без подсветки текста.";
+            if (result.PartialPages > 0)
+                _searchStatus.Text += " Часть длинных страниц проверена не полностью.";
+            _ = ShowPageAsync(first.PageIndex);
+        }
+        catch (OperationCanceledException) when (current.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            if (!_disposed && ReferenceEquals(_activeSearch, current))
+                _searchStatus.Text = "Не удалось прочитать текст PDF (возможно, файл защищён или повреждён).";
+        }
+        finally
+        {
+            if (ReferenceEquals(_activeSearch, current))
+            {
+                _activeSearch = null;
+                if (!_disposed) _search.IsEnabled = true;
+            }
+            current.Dispose();
+        }
     }
 
     private void JumpToPage()
@@ -168,6 +286,7 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         if (_disposed) return;
         _disposed = true;
         _lifetime.Cancel();
+        _activeSearch?.Cancel();
         _pageImage.Source = null;
         _currentBitmap?.Dispose();
         // Do not dispose CTS while a running render still observes its token.
