@@ -16,7 +16,7 @@ public sealed class OfficeReturnPane : UserControl
 {
     private readonly Window _owner;
     private readonly OfficeReturnPolicy _policy;
-    private readonly TextBox _code = new() { PasswordChar = '●', Watermark = "Одноразовый код из GUP-2", Width = 440 };
+    private readonly TextBox _code = new() { PasswordChar = '●', PlaceholderText = "Одноразовый код из GUP-2", Width = 440 };
     private readonly TextBlock _selected = new() { Text = "Файл не выбран" };
     private readonly TextBlock _status = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
     private string? _filePath;
