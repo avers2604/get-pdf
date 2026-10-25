@@ -45,6 +45,15 @@ public sealed class OfficeReturnClientTests
     }
 
     [TestMethod]
+    public void EvenManuallyConstructedPolicyCannotBypassHttps()
+    {
+        var hostile = new OfficeReturnPolicy(
+            true, new Uri("http://untrusted.invalid/documents/"),
+            OfficeReturnPolicy.DefaultMaxUploadBytes);
+        Assert.ThrowsExactly<InvalidOperationException>(() => hostile.Destination());
+    }
+
+    [TestMethod]
     public void StrictOneUseCodeAndWorkingCopyValidation()
     {
         Assert.IsTrue(OfficeReturnClient.IsValidCode(new string('A', 43)));
