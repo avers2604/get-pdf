@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Security.Cryptography;
 
 namespace GetDocument.Core.Integration;
 
@@ -53,6 +54,11 @@ public static class OfficeReturnClient
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(12) };
         await using var file = new FileStream(absolute, FileMode.Open, FileAccess.Read,
             FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        if (!IsAllowedSize(file.Length, policy.MaxUploadBytes) || file.Length != information.Length)
+            throw new InvalidDataException("Рабочая копия изменилась перед отправкой.");
+        string sourceSha256 = Convert.ToHexString(
+            await SHA256.HashDataAsync(file, cancellationToken).ConfigureAwait(false));
+        file.Position = 0;
         using var body = new MultipartFormDataContent();
         using var content = new StreamContent(file);
         content.Headers.ContentType = new MediaTypeHeaderValue(
@@ -100,6 +106,8 @@ public static class OfficeReturnClient
             !IsSha256(sha.GetString()))
             throw new InvalidDataException("GUP-2 не подтвердил сохранение рабочей копии.");
 
+        if (!string.Equals(sourceSha256, sha.GetString(), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Контрольная сумма сохранённой копии не совпала с отправленной.");
         return new OfficeReturnReceipt(newVersion, sha.GetString()!);
     }
 
