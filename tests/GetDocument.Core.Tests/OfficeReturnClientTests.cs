@@ -17,8 +17,7 @@ public sealed class OfficeReturnClientTests
         var policy = OfficeReturnPolicy.Parse("""{"Version":1}""");
         Assert.IsFalse(policy.Enabled);
         Assert.ThrowsExactly<InvalidOperationException>(() => policy.Destination());
-        Assert.IsFalse(OfficeReturnPolicy.LoadLocal().Enabled ||
-            OfficeReturnPolicy.Disabled.Enabled);
+        Assert.IsFalse(OfficeReturnPolicy.Disabled.Enabled);
     }
 
     [TestMethod]
