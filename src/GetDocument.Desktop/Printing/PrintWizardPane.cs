@@ -90,6 +90,9 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         columns.Children.Add(side);
         Content = new ScrollViewer { Content = new Border
             { Padding = new Thickness(28), Child = columns } };
+        SizeChanged += (_, eventArgs) =>
+            columns.Orientation = eventArgs.NewSize.Width < 1080
+                ? Orientation.Vertical : Orientation.Horizontal;
 
         _back.Click += (_, _) => { if (_step > 1 && !_busy) { _step--; RenderStage(); } };
         _next.Click += async (_, _) => await AdvanceAsync();
