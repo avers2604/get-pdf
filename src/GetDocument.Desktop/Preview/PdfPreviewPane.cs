@@ -34,7 +34,8 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
     private readonly Button _search = new() { Content = "Найти" };
     private readonly Button _previousHit = new() { Content = "↑", IsEnabled = false };
     private readonly Button _nextHit = new() { Content = "↓", IsEnabled = false };
-    private readonly TextBlock _searchStatus = new() { VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock _searchStatus = new() { VerticalAlignment = VerticalAlignment.Center,
+        MaxWidth = 450, TextWrapping = TextWrapping.Wrap };
     private CancellationTokenSource? _activeSearch;
     private IReadOnlyList<PdfTextPageMatch> _matches = [];
     private int _activeMatchIndex = -1;
@@ -148,6 +149,12 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         try { query = PdfTextSearchPlan.NormalizeQuery(_searchInput.Text); }
         catch (ArgumentException)
         {
+            _activeSearch?.Cancel();
+            _activeSearch = null;
+            _matches = [];
+            _activeMatchIndex = -1;
+            _previousHit.IsEnabled = _nextHit.IsEnabled = false;
+            _search.IsEnabled = true;
             _searchStatus.Text = "Введите от 1 до 128 символов без переноса строки.";
             return;
         }
