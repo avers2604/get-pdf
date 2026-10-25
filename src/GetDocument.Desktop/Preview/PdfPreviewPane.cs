@@ -30,6 +30,9 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
     private readonly Button _last = new() { Content = "⇥", IsEnabled = false };
     private readonly TextBox _pageInput = new() { Width = 64, Watermark = "Стр." };
     private readonly Button _jump = new() { Content = "Перейти", IsEnabled = false };
+    private readonly Button _zoomOut = new() { Content = "−" };
+    private readonly Button _zoomIn = new() { Content = "+" };
+    private readonly TextBlock _zoomLabel = new() { Text = "100%", VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBox _searchInput = new() { Width = 220, Watermark = "Найти текст в PDF" };
     private readonly Button _search = new() { Content = "Найти" };
     private readonly Button _previousHit = new() { Content = "↑", IsEnabled = false };
@@ -45,6 +48,9 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
     private bool _disposed;
     private int _currentPage;
     private int _pageCount;
+    private int _zoomStep = PdfViewScale.DefaultStep;
+    private int _rasterWidth;
+    private int _rasterHeight;
     private long _generation;
 
     public PdfPreviewPane(string path)
@@ -55,7 +61,8 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         {
             Orientation = Orientation.Horizontal,
             Spacing = 12,
-            Children = { _first, _previous, _pageLabel, _next, _last, _pageInput, _jump, _message }
+            Children = { _first, _previous, _pageLabel, _next, _last, _pageInput, _jump,
+                _zoomOut, _zoomLabel, _zoomIn, _message }
         };
         var searchButtons = new StackPanel
         {
@@ -87,6 +94,10 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         _next.Click += (_, _) => _ = ShowPageAsync(PdfPageNavigation.Move(_currentPage, 1, _pageCount));
         _last.Click += (_, _) => _ = ShowPageAsync(_pageCount - 1);
         _jump.Click += (_, _) => JumpToPage();
+        ToolTip.SetTip(_zoomOut, "Уменьшить масштаб");
+        ToolTip.SetTip(_zoomIn, "Увеличить масштаб");
+        _zoomOut.Click += (_, _) => ChangeZoom(-1);
+        _zoomIn.Click += (_, _) => ChangeZoom(1);
         _search.Click += async (_, _) => await SearchTextAsync();
         _searchInput.KeyDown += async (_, args) =>
         {
@@ -115,6 +126,31 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         if (_disposed || _pageCount < 1) return;
         _pageInput.Focus();
         _pageInput.SelectAll();
+    }
+
+    public void ChangeZoom(int delta)
+    {
+        if (_disposed) return;
+        _zoomStep = PdfViewScale.Move(_zoomStep, delta);
+        ApplyDisplayScale();
+    }
+
+    public void ResetZoom()
+    {
+        if (_disposed) return;
+        _zoomStep = PdfViewScale.DefaultStep;
+        ApplyDisplayScale();
+    }
+
+    private void ApplyDisplayScale()
+    {
+        _zoomLabel.Text = PdfViewScale.Percent(_zoomStep) + "%";
+        _zoomOut.IsEnabled = _zoomStep > 0;
+        _zoomIn.IsEnabled = _zoomStep + 1 < PdfViewScale.StepCount;
+        if (_rasterWidth < 1 || _rasterHeight < 1) return;
+        var size = PdfViewScale.GetDisplaySize(_rasterWidth, _rasterHeight, _zoomStep);
+        _pageImage.Width = size.Width;
+        _pageImage.Height = size.Height;
     }
 
     public void FocusSearch()
@@ -240,6 +276,9 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
             var previous = _currentBitmap;
             _currentBitmap = bitmap;
             _pageImage.Source = bitmap;
+            _rasterWidth = bitmap.PixelSize.Width;
+            _rasterHeight = bitmap.PixelSize.Height;
+            ApplyDisplayScale();
             previous?.Dispose();
             _currentPage = index;
             _pageCount = result.Count;
