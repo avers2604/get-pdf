@@ -15,10 +15,20 @@ public sealed record OfficeReturnPolicy(bool Enabled, Uri? DocumentsUri, long Ma
 
     public Uri Destination()
     {
-        if (!Enabled || DocumentsUri is null)
+        if (!Enabled || !IsTrustedDocumentsUri(DocumentsUri) ||
+            MaxUploadBytes <= 0 || MaxUploadBytes > AbsoluteMaxUploadBytes)
             throw new InvalidOperationException("Возврат в GUP-2 запрещён политикой ИТ.");
         return new Uri(DocumentsUri, "getdocument/office-return/");
     }
+
+    private static bool IsTrustedDocumentsUri(Uri? uri) =>
+        uri is { IsAbsoluteUri: true } &&
+        uri.Scheme == Uri.UriSchemeHttps &&
+        !string.IsNullOrWhiteSpace(uri.Host) &&
+        uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0 &&
+        uri.AbsolutePath.EndsWith("/documents/", StringComparison.Ordinal) &&
+        !uri.AbsolutePath.Contains('%') &&
+        !uri.AbsolutePath.Contains("//", StringComparison.Ordinal);
 
     public static OfficeReturnPolicy Parse(string json)
     {
@@ -40,10 +50,7 @@ public sealed record OfficeReturnPolicy(bool Enabled, Uri? DocumentsUri, long Ma
 
         string address = destination.GetString() ?? "";
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) ||
-            uri.Scheme != Uri.UriSchemeHttps || string.IsNullOrWhiteSpace(uri.Host) ||
-            uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||
-            !uri.AbsolutePath.EndsWith("/documents/", StringComparison.Ordinal) ||
-            uri.AbsolutePath.Contains('%') || uri.AbsolutePath.Contains("//", StringComparison.Ordinal))
+            !IsTrustedDocumentsUri(uri))
             throw new InvalidDataException("Для интеграции требуется разрешённый HTTPS-адрес раздела документов.");
 
         long limit = DefaultMaxUploadBytes;
