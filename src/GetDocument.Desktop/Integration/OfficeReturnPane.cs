@@ -12,7 +12,7 @@ namespace GetDocument.Desktop.Integration;
 /// The destination is read only from an IT-managed local policy, not from a
 /// text box, and credentials never persist beyond the upload request.
 /// </summary>
-public sealed class OfficeReturnPane : UserControl
+public sealed class OfficeReturnPane : UserControl, IDisposable
 {
     private readonly Window _owner;
     private readonly OfficeReturnPolicy _policy;
@@ -20,6 +20,9 @@ public sealed class OfficeReturnPane : UserControl
     private readonly TextBlock _selected = new() { Text = "Файл не выбран" };
     private readonly TextBlock _status = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
     private string? _filePath;
+    private readonly CancellationTokenSource _lifetime = new();
+    private bool _disposed;
+    private bool _uploading;
 
     public OfficeReturnPane(Window owner, OfficeReturnPolicy policy)
     {
@@ -84,6 +87,7 @@ public sealed class OfficeReturnPane : UserControl
         var send = new Button { Content = "Отправить рабочую копию в GUP-2" };
         send.Click += async (_, _) =>
         {
+            if (_disposed || _uploading) return;
             if (_filePath is null)
             {
                 _status.Text = "Сначала выберите сохранённый DOCX/XLSX.";
@@ -91,13 +95,15 @@ public sealed class OfficeReturnPane : UserControl
             }
             string code = _code.Text?.Trim() ?? "";
             _code.Text = string.Empty; // do not keep capability in the control
+            _uploading = true;
             send.IsEnabled = false;
             choose.IsEnabled = false;
             _status.Text = "Проверяется приём рабочей копии сервером GUP-2…";
             try
             {
                 OfficeReturnReceipt receipt =
-                    await OfficeReturnClient.UploadAsync(_filePath, code, _policy);
+                    await OfficeReturnClient.UploadAsync(_filePath, code, _policy, _lifetime.Token);
+                if (_disposed) return;
                 _filePath = null;
                 _selected.Text = "Файл не выбран";
                 _status.Text = "Рабочая копия сохранена в GUP-2. Версия карточки: " +
@@ -108,17 +114,32 @@ public sealed class OfficeReturnPane : UserControl
                 OperationCanceledException or InvalidOperationException or JsonException)
             {
                 // Never echo the secret, body, URL or local document paths.
-                _status.Text = "Возврат не подтверждён. Проверьте доступ, код, " +
-                               "подключение и версию карточки; для повтора получите новый код.";
+                if (!_disposed)
+                    _status.Text = "Возврат не подтверждён. Проверьте доступ, код, " +
+                                   "подключение и версию карточки; для повтора получите новый код.";
             }
             finally
             {
-                send.IsEnabled = true;
-                choose.IsEnabled = true;
+                _uploading = false;
+                if (!_disposed)
+                {
+                    send.IsEnabled = true;
+                    choose.IsEnabled = true;
+                }
+                else _lifetime.Dispose();
             }
         };
         content.Children.Add(send);
         content.Children.Add(_status);
         Content = new ScrollViewer { Content = content };
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _code.Text = string.Empty;
+        _lifetime.Cancel();
+        if (!_uploading) _lifetime.Dispose();
     }
 }
