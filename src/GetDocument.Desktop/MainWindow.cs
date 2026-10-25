@@ -39,6 +39,9 @@ public sealed class MainWindow : Window
     private readonly Dictionary<Guid, TabItem> _revisionTabs = [];
     private readonly OfficeReturnPolicy _officeReturnPolicy = OfficeReturnPolicy.LoadLocal();
     private TabItem? _officeReturnTab;
+    private readonly OfficeTabBindingPolicy _tabBindPolicy = OfficeTabBindingPolicy.LoadLocal();
+    private readonly OfficeBoundTabRegistry _boundTabs = new();
+    private TabItem? _tabBindPane;
 
     public MainWindow()
     {
@@ -70,10 +73,23 @@ public sealed class MainWindow : Window
         });
         _tabs.ItemsSource = _items;
         _tabs.SelectedIndex = 0;
-        _tabs.SelectionChanged += (_, _) =>
+        _tabs.SelectionChanged += async (_, _) =>
         {
             if (_tabs.SelectedItem is TabItem tab && tab.Tag is Guid id)
+            {
                 _workspace.Select(id);
+                if (_boundTabs.Get(id) is not null)
+                {
+                    var verified = await _boundTabs.RevalidateAsync(id);
+                    UpdateLinkedHeader(id, verified);
+                    if (ReferenceEquals(_tabs.SelectedItem, tab))
+                        _status.Text = verified is null
+                            ? "Локальный файл изменился: привязка к GUP-2 сброшена."
+                            : "GUP-2: " + verified.RegistrationNumber +
+                              ", версия " + verified.EditVersion +
+                              ". Для сохранения изменений требуется отдельный код возврата.";
+                }
+            }
         };
         root.Children.Add(_tabs);
         Content = root;
@@ -138,6 +154,12 @@ public sealed class MainWindow : Window
             var officeReturn = new Button { Content = "Отправить в GUP-2" };
             officeReturn.Click += (_, _) => ShowOfficeReturn();
             bar.Children.Add(officeReturn);
+        }
+        if (_tabBindPolicy.Enabled)
+        {
+            var bindTab = new Button { Content = "Связать вкладку с GUP-2" };
+            bindTab.Click += (_, _) => ShowTabBinding();
+            bar.Children.Add(bindTab);
         }
         var templates = new Button { Content = "Шаблоны" };
         templates.Click += (_, _) => ShowCorporateTemplates();
@@ -364,6 +386,7 @@ public sealed class MainWindow : Window
             return;
         }
         _views.Remove(id);
+        _boundTabs.Remove(id);
         _workspace.Close(id);
         if (view.Content is IDisposable disposable) disposable.Dispose();
         _items.Remove(view);
@@ -401,6 +424,57 @@ public sealed class MainWindow : Window
 
     public void ReportRejectedLaunch() =>
         _status.Text = "Неверные параметры запуска: допустимы только локальные файлы поддерживаемых форматов.";
+
+    private void UpdateLinkedHeader(Guid id, OfficeTabBindingReceipt? receipt)
+    {
+        if (!_views.TryGetValue(id, out var view) || view.Header is not StackPanel header)
+            return;
+        if (header.Children.Count > 2)
+            header.Children.RemoveAt(2);
+        if (receipt is not null)
+            header.Children.Add(new TextBlock
+            {
+                Text = "· GUP-2 №" + receipt.RegistrationNumber,
+                VerticalAlignment = VerticalAlignment.Center,
+                MaxWidth = 165, TextTrimming = TextTrimming.CharacterEllipsis,
+            });
+    }
+
+    private void ShowTabBinding()
+    {
+        if (!_tabBindPolicy.Enabled) return;
+        if (_tabs.SelectedItem is not TabItem tab || tab.Tag is not Guid id)
+        {
+            _status.Text = "Сначала выберите вкладку открытого DOCX или XLSX.";
+            return;
+        }
+        var item = _workspace.Tabs.FirstOrDefault(x => x.Id == id);
+        if (item?.FilePath is not string path || !OfficeTabBindingClient.IsOfficeFile(path))
+        {
+            _status.Text = "Для привязки сначала откройте сохранённый DOCX/XLSX.";
+            return;
+        }
+        if (_tabBindPane is not null)
+            _items.Remove(_tabBindPane);
+        _tabBindPane = new TabItem
+        {
+            Header = "Привязка GUP-2",
+            Content = new OfficeTabBindPane(path, _tabBindPolicy, receipt =>
+            {
+                // The selected source tab may have been closed while a network
+                // request was pending. Never bind a new tab to the old ID.
+                if (!_views.ContainsKey(id) ||
+                    _workspace.Tabs.All(x => x.Id != id || x.FilePath != path))
+                    return false;
+                _boundTabs.Set(id, path, receipt);
+                UpdateLinkedHeader(id, receipt);
+                _tabs.SelectedItem = _views[id];
+                return true;
+            }),
+        };
+        _items.Add(_tabBindPane);
+        _tabs.SelectedItem = _tabBindPane;
+    }
 
     private void ShowOfficeReturn()
     {
