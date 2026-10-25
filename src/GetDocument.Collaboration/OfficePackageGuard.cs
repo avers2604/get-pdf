@@ -87,7 +87,7 @@ public static class OfficePackageGuard
                 if (unixFileType == 0xA000)
                     throw new RejectedOfficePackageException("Символическая ссылка внутри OOXML запрещена.");
 
-                bool directory = path.EndsWith('/', StringComparison.Ordinal);
+                bool directory = path.EndsWith("/", StringComparison.Ordinal);
                 if (directory)
                 {
                     if (entry.Length != 0)
