@@ -27,7 +27,7 @@ public sealed record OfficeReturnPolicy(bool Enabled, Uri? DocumentsUri, long Ma
         if (root.ValueKind != JsonValueKind.Object ||
             !root.TryGetProperty("Version", out var version) ||
             version.ValueKind != JsonValueKind.Number ||
-            version.GetInt32() != 1)
+            !version.TryGetInt32(out int policyVersion) || policyVersion != 1)
             throw new InvalidDataException("Неподдерживаемая корпоративная политика.");
 
         bool enabled = root.TryGetProperty("AllowGup2OfficeReturn", out var flag) &&
