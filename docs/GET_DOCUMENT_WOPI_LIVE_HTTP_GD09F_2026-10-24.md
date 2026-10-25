@@ -1,6 +1,6 @@
 # GD-09F — HTTP WOPI-шлюз для совместного редактирования в реальном времени
 
-Дата: 24 октября 2026. Статус: **Draft / исходный код подготовлен;
+Дата: 24–25 октября 2026. Статус: **Draft / исходный код подготовлен;
 не запущен на корпоративном сервере**.
 
 ## Связь с существующими PR
@@ -57,13 +57,26 @@
 
 ### Корпоративная безопасность
 
-HTTP сервер **по умолчанию остаётся read-only**. Переменная
-`GET_WOPI_HTTP_MODE=live` включает только альтернативную таблицу
-маршрутов, но **НЕ открывает никакие документы**:
-в DI зарегистрирован `DenyAllRealtimeWopiDocumentStore`.
-`ITrustedRealtimeWopiDocumentStore` — единственное место для
-подключения реального ACL-провайдера, stable documentId, read snapshot
-и безопасного server-side CAS revision sink.
+HTTP сервер **по умолчанию остаётся read-only**. Попытка запустить
+`GET_WOPI_HTTP_MODE=live` **отклоняется при старте приложения**,
+пока сервер не связан с явно утверждённым корпоративным ACL/SSO +
+immutable revision backend. `WopiHostMode.Resolve` проверяет
+конфигурацию; присвоение одной переменной окружения не открывает
+маршруты записи. Read-only хост остаётся с `DenyAllWopiDocumentStore`.
+
+Добавлен `RevisionBackedWopiDocumentStore`, переиспользующий существующий
+`ImmutableOfficeRevisionStore` и абстракцию
+`IEnterpriseDocumentPolicy`. Доверенная политика должна вернуть
+**стабильные** documentId/sessionRevisionId и пользователя, имя файла,
+CanEdit/IsWormOriginal; никакие абсолютные пути от HTTP-клиента
+не принимаются. Перед `CommitNewRevisionAsync` политика спрашивается
+заново, а HTTP-шлюз повторно проверяет ACL ещё и после загрузки body.
+Используется optimistic CAS: новая редакция не перезаписывает оригинал.
+
+`DenyAllEnterpriseDocumentPolicy` запрещает любую выдачу по умолчанию.
+**Реального провайдера AD/GUP-2 нет**, и `Program.cs` НЕ объявляет
+этот адаптер корпоративно готовым: включение real-time сервера требует
+явного подключения и приёмки, а не флага окружения.
 
 Сервер должен на **каждом запросе** проверять права через AD/SSO/GUP-2;
 для сохранения права нужно проверить повторно непосредственно перед
@@ -100,11 +113,17 @@ CAS. Не выдавать права по факту доступности SMB
 ## Сценарии локальных тестов (НАПИСАНЫ, НО НЕ ЗАПУЩЕНЫ)
 
 - 13 тестов read-only HTTP WOPI унаследованы из PR #24.
-- 15 новых тестов `WopiRealtimeHttpGatewayTests`: два участника,
+- 16 тестов `WopiRealtimeHttpGatewayTests`: два участника,
   текущая редакция и хеш, подписанный GetFile, POST success,
   stale-save 409/1010, WORM read-only, ограничение размера,
   отсутствие timestamp, Collabora без override, chunked, deny-all,
-  отзыв прав и proof-failure.
+  отзыв прав и proof-failure; включая **отзыв ACL непосредственно
+  во время загрузки файла**.
+- 5 тестов `RevisionBackedWopiDocumentStoreTests`: доверенная политика,
+  повторная проверка AD/ACL перед commit, запрет чужого документа,
+  immutable snapshot, конфликт при устаревшей версии.
+- 3 теста `WopiHostModeTests`: read-only по умолчанию и запрет
+  старта live-режима до подключения реального ACL backend.
 - 2 теста concurrent/CAS в `ImmutableOfficeRevisionStoreTests`,
   включая уже занятый файл на файловой системе.
 - 1 тест 10-часового live-сеанса и истечения срока.
