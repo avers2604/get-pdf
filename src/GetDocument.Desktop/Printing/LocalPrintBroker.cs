@@ -15,7 +15,18 @@ internal static class LocalPrintBroker
     {
         if (OperatingSystem.IsLinux())
         {
-            string output = await RunAsync("lpstat", ["-e"], null, ct);
+            string output;
+            try { output = await RunAsync("lpstat", ["-e"], null, ct); }
+            catch (IOException)
+            {
+                // Older local CUPS installations may lack lpstat -e.
+                output = await RunAsync("lpstat", ["-p"], null, ct);
+                return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Where(x => x.StartsWith("printer ", StringComparison.Ordinal))
+                    .Select(x => x["printer ".Length..].Split(' ', 2)[0])
+                    .Where(ValidQueueName)
+                    .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+            }
             return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim())
                 .Where(ValidQueueName)
@@ -81,7 +92,8 @@ internal static class LocalPrintBroker
         string? stdin, CancellationToken cancel)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-        timeout.CancelAfter(stdin is null ? TimeSpan.FromSeconds(20) : TimeSpan.FromMinutes(5));
+        bool isPrintJob = (argv.Count > 0 && (argv[0] == "-d" || argv[0] == "print"));
+        timeout.CancelAfter(isPrintJob ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(20));
         var start = new ProcessStartInfo(program)
         {
             UseShellExecute = false,
@@ -91,6 +103,8 @@ internal static class LocalPrintBroker
             CreateNoWindow = true
         };
         foreach (string arg in argv) start.ArgumentList.Add(arg);
+        if (OperatingSystem.IsLinux() && program == "lpstat")
+            start.Environment["LC_ALL"] = "C"; // predictable fallback parsing across locales
         using var process = Process.Start(start) ??
             throw new IOException("Не удалось запустить локальную службу печати.");
         try
