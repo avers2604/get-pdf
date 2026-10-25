@@ -81,4 +81,14 @@ public sealed class OfficeReturnClientTests
         Assert.ThrowsExactly<InvalidOperationException>(() => OfficeReturnClient.UploadAsync(
             "draft.docx", new string('A', 43), OfficeReturnPolicy.Disabled).GetAwaiter().GetResult());
     }
+    [TestMethod]
+    public void ConflictingRevisionIsNotMistakenForGenericTransportError()
+    {
+        Assert.ThrowsExactly<OfficeReturnConflictException>(() =>
+            OfficeReturnClient.EnsureSuccessfulUploadStatus(System.Net.HttpStatusCode.Conflict));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            OfficeReturnClient.EnsureSuccessfulUploadStatus(System.Net.HttpStatusCode.Forbidden));
+        OfficeReturnClient.EnsureSuccessfulUploadStatus(System.Net.HttpStatusCode.Created);
+    }
+
 }

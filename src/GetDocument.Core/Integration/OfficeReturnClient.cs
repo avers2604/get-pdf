@@ -26,6 +26,14 @@ public static class OfficeReturnClient
         maxBytes > 0 && maxBytes <= OfficeReturnPolicy.AbsoluteMaxUploadBytes &&
         length > 0 && length <= maxBytes;
 
+    public static void EnsureSuccessfulUploadStatus(HttpStatusCode status)
+    {
+        if (status == HttpStatusCode.Conflict)
+            throw new OfficeReturnConflictException("Новая редакция уже сохранена в GUP-2.");
+        if (status != HttpStatusCode.Created)
+            throw new InvalidOperationException("Сохранение в GUP-2 не подтверждено.");
+    }
+
     public static async Task<OfficeReturnReceipt> UploadAsync(
         string savedPath, string oneTimeCode, OfficeReturnPolicy policy,
         CancellationToken cancellationToken = default)
@@ -73,9 +81,7 @@ public static class OfficeReturnClient
         using var response = await client.SendAsync(
             request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
-        if (response.StatusCode != HttpStatusCode.Created)
-            throw new InvalidOperationException(
-                "GUP-2 отклонил редакцию. Проверьте права и версию документа, затем получите новый код.");
+        EnsureSuccessfulUploadStatus(response.StatusCode);
 
         // Even a compromised/misconfigured endpoint cannot claim success
         // through a redirect or unlimited response payload.
@@ -117,3 +123,8 @@ public static class OfficeReturnClient
 }
 
 public sealed record OfficeReturnReceipt(int EditVersion, string Sha256);
+
+public sealed class OfficeReturnConflictException : InvalidOperationException
+{
+    public OfficeReturnConflictException(string message) : base(message) { }
+}
