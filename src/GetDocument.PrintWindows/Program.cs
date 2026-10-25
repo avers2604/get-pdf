@@ -80,7 +80,6 @@ internal static class Program
             var ticket = new PrintTicket
             {
                 CopyCount = plan.Copies,
-                Collation = Collation.Collated,
                 Duplexing = duplex,
                 PageMediaSize = new PageMediaSize(paper)
             };
@@ -130,7 +129,7 @@ internal static class Program
             int index = _pages[pageNumber] - 1;
             _source.Position = 0;
             var points = Conversion.GetPageSize(_source, page: index, leaveOpen: true);
-            var raster = PdfPreviewPlan.GetRasterSize(points.Width, points.Height, 2048);
+            var raster = PdfPrintRasterPlan.GetRasterSize(points.Width, points.Height);
             _source.Position = 0;
             using var png = new MemoryStream();
             Conversion.SavePng(png, _source, page: index, leaveOpen: true,
