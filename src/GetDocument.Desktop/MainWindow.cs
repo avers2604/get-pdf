@@ -15,6 +15,8 @@ using GetDocument.Desktop.Files;
 using GetDocument.Desktop.Templates;
 using GetDocument.Desktop.Revisions;
 using GetDocument.Office;
+using GetDocument.Core.Integration;
+using GetDocument.Desktop.Integration;
 
 namespace GetDocument.Desktop;
 
@@ -35,6 +37,8 @@ public sealed class MainWindow : Window
     private TabItem? _filesTab;
     private TabItem? _templatesTab;
     private readonly Dictionary<Guid, TabItem> _revisionTabs = [];
+    private readonly OfficeReturnPolicy _officeReturnPolicy = OfficeReturnPolicy.LoadLocal();
+    private TabItem? _officeReturnTab;
 
     public MainWindow()
     {
@@ -129,6 +133,12 @@ public sealed class MainWindow : Window
         var getFiles = new Button { Content = "ГЭТ Файлы" };
         getFiles.Click += (_, _) => ShowGetFiles();
         bar.Children.Add(getFiles);
+        if (_officeReturnPolicy.Enabled)
+        {
+            var officeReturn = new Button { Content = "Отправить в GUP-2" };
+            officeReturn.Click += (_, _) => ShowOfficeReturn();
+            bar.Children.Add(officeReturn);
+        }
         var templates = new Button { Content = "Шаблоны" };
         templates.Click += (_, _) => ShowCorporateTemplates();
         bar.Children.Add(templates);
@@ -391,6 +401,23 @@ public sealed class MainWindow : Window
 
     public void ReportRejectedLaunch() =>
         _status.Text = "Неверные параметры запуска: допустимы только локальные файлы поддерживаемых форматов.";
+
+    private void ShowOfficeReturn()
+    {
+        if (_officeReturnTab is not null)
+        {
+            _tabs.SelectedItem = _officeReturnTab;
+            return;
+        }
+        if (!_officeReturnPolicy.Enabled) return;
+        _officeReturnTab = new TabItem
+        {
+            Header = "Возврат GUP-2",
+            Content = new OfficeReturnPane(this, _officeReturnPolicy)
+        };
+        _items.Add(_officeReturnTab);
+        _tabs.SelectedItem = _officeReturnTab;
+    }
 
     private async Task OpenFilesAsync()
     {
