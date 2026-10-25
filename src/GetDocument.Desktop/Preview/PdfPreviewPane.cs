@@ -30,8 +30,8 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
     private readonly Button _last = new() { Content = "⇥", IsEnabled = false };
     private readonly TextBox _pageInput = new() { Width = 64, Watermark = "Стр." };
     private readonly Button _jump = new() { Content = "Перейти", IsEnabled = false };
-    private readonly Button _zoomOut = new() { Content = "−", ToolTip = "Уменьшить" };
-    private readonly Button _zoomIn = new() { Content = "+", ToolTip = "Увеличить" };
+    private readonly Button _zoomOut = new() { Content = "−" };
+    private readonly Button _zoomIn = new() { Content = "+" };
     private readonly TextBlock _zoomLabel = new() { Text = "100%", VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBox _searchInput = new() { Width = 220, Watermark = "Найти текст в PDF" };
     private readonly Button _search = new() { Content = "Найти" };
@@ -94,6 +94,8 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         _next.Click += (_, _) => _ = ShowPageAsync(PdfPageNavigation.Move(_currentPage, 1, _pageCount));
         _last.Click += (_, _) => _ = ShowPageAsync(_pageCount - 1);
         _jump.Click += (_, _) => JumpToPage();
+        ToolTip.SetTip(_zoomOut, "Уменьшить масштаб");
+        ToolTip.SetTip(_zoomIn, "Увеличить масштаб");
         _zoomOut.Click += (_, _) => ChangeZoom(-1);
         _zoomIn.Click += (_, _) => ChangeZoom(1);
         _search.Click += async (_, _) => await SearchTextAsync();
