@@ -105,6 +105,11 @@ public sealed class RevisionBackedWopiDocumentStore : ITrustedRealtimeWopiDocume
             grant.ExpiresAtUnixSeconds <= _clock.GetUtcNow().ToUnixTimeSeconds())
             throw new UnauthorizedAccessException("Изменение документа запрещено текущей ACL.");
 
+        // Validate actual Office ZIP bytes AFTER ACL authorization but BEFORE
+        // the immutable version sink. Never trust filename, compressed size
+        // or ZIP central-directory lengths alone. Restores stream position.
+        OfficePackageGuard.Validate(fullOfficeDocument, authorized.Document.FileName);
+
         // CAS is performed under ImmutableOfficeRevisionStore's interprocess
         // lock, with a second expectedRevisionId check before publishing.
         return await RealtimeRevisionCommit.CommitAsync(
