@@ -11,6 +11,8 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
     <PackageReference Include="PDFtoImage" Version="5.4.0" />
+    <!-- Reuse the exact PdfPig version already carried by the legacy GET PDF project. -->
+    <PackageReference Include="PdfPig" Version="0.1.16" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets/get-mark.png" />
