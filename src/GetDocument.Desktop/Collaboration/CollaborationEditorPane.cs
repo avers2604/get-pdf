@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using GetDocument.Core.Collaboration;
@@ -64,8 +65,27 @@ internal sealed class CollaborationEditorPane : UserControl, IDisposable
         _webView.Source = launch.LaunchPage;
     }
 
-    private void OnEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs args) =>
+    private void OnEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs args)
+    {
         args.EnableDevTools = false;
+
+        // Use ephemeral storage when the operating-system WebView exposes it.
+        // This reduces persistence of server cookies and collaboration state
+        // on a shared workplace. Linux WPE still requires separate testing.
+        switch (args)
+        {
+            case WindowsWebView2EnvironmentRequestedEventArgs windows:
+                windows.IsInPrivateModeEnabled = true;
+                windows.AllowSingleSignOnUsingOSPrimaryAccount = false;
+                break;
+            case GtkWebViewEnvironmentRequestedEventArgs gtk:
+                gtk.EphemeralDataManager = true;
+                break;
+            case AppleWKWebViewEnvironmentRequestedEventArgs apple:
+                apple.NonPersistentDataStore = true;
+                break;
+        }
+    }
 
     private void OnNavigationStarted(object? sender, WebViewNavigationStartingEventArgs args)
     {
