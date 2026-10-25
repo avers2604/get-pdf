@@ -150,7 +150,7 @@ public sealed class RevisionBackedWopiDocumentStoreTests
             foreach (var (name, xml) in new[]
             {
                 ("[Content_Types].xml", "<Types/>"),
-                ("word/document.xml", "<doc>" + value + "</doc>")
+                ("word/document.xml", "<doc>" + System.Security.SecurityElement.Escape(value) + "</doc>")
             })
             {
                 using var writer = new StreamWriter(
