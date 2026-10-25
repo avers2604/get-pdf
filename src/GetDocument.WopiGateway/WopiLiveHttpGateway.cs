@@ -325,6 +325,13 @@ public static class WopiLiveHttpGateway
         {
             await WriteConflictAsync(context);
         }
+        catch (RejectedOfficePackageException)
+        {
+            // The upload is not valid OOXML. No revision was published,
+            // and internal validation details are not sent to the client.
+            SetNoStore(context);
+            context.Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
+        }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
