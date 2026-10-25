@@ -273,8 +273,35 @@ public static class WopiLiveHttpGateway
                 return;
             }
             verifiedPayload.Position = 0;
+            // ACL/revocation must be rechecked after receiving the body, because
+            // the user's edit rights can change while a slow upload is in flight.
+            // The enterprise store must ALSO check ACL inside its commit transaction
+            // to close the final small gap between this check and the CAS write.
+            WopiRealtimeAuthorizedContent? refreshed = await store.ResolveForSessionAsync(
+                fileId, grant.RevisionId, grant.UserId, context.RequestAborted);
+            if (refreshed is null)
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+            if (!refreshed.Document.CanEdit || refreshed.Document.IsWormOriginal)
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+            if (refreshed.Document.DocumentId != source.Document.DocumentId ||
+                refreshed.Document.RevisionId != source.Document.RevisionId ||
+                refreshed.Document.UserId != grant.UserId ||
+                refreshed.CurrentRevision.DocumentId != source.CurrentRevision.DocumentId ||
+                refreshed.CurrentRevision.RevisionId != source.CurrentRevision.RevisionId ||
+                !string.Equals(refreshed.CurrentRevision.Sha256,
+                    source.CurrentRevision.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteConflictAsync(context);
+                return;
+            }
             StoredOfficeRevision saved = await store.CommitNewRevisionAsync(
-                source, grant, timestamp, verifiedPayload, context.RequestAborted);
+                refreshed, grant, timestamp, verifiedPayload, context.RequestAborted);
             if (saved.DocumentId != fileId || saved.RevisionId == source.CurrentRevision.RevisionId)
             {
                 context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
