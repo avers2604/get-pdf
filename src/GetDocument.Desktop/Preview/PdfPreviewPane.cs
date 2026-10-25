@@ -80,6 +80,13 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
         };
     }
 
+    public void FocusPageNumber()
+    {
+        if (_disposed || _pageCount < 1) return;
+        _pageInput.Focus();
+        _pageInput.SelectAll();
+    }
+
     private void JumpToPage()
     {
         if (_disposed || _pageCount < 1) return;
