@@ -91,8 +91,9 @@ public static class OfficeReturnClient
         var root = responseJson.RootElement;
         if (root.ValueKind != JsonValueKind.Object ||
             !root.TryGetProperty("status", out var status) ||
-            status.GetString() != "working_copy_saved" ||
+            status.ValueKind != JsonValueKind.String || status.GetString() != "working_copy_saved" ||
             !root.TryGetProperty("edit_version", out var revision) ||
+            revision.ValueKind != JsonValueKind.Number ||
             !revision.TryGetInt32(out int newVersion) || newVersion < 0 ||
             !root.TryGetProperty("sha256", out var sha) ||
             sha.ValueKind != JsonValueKind.String ||
