@@ -17,6 +17,11 @@
 - Legacy WPF `GetPdf.exe` и `GUP-Scan` не удалены. Сканирующий движок/драйверы остаются в «ГЭТ Сканирование» (отдельный репозиторий).
 - Новый per-user script `packaging/register-get-document-capabilities.ps1` регистрирует только *возможность выбора* обработчика, не меняя Windows UserChoice и существующий `GetPdf.PDF`.
 
+Дополнение GD-12 (25.10.2026): новая ветка поверх консолидированного PR #31
+вводит защищённую проверку OOXML и NativeWebView в той же вкладке.
+Это **не разблокирует** Gate G6 и Gate G8: реальные серверный SSO/broker,
+Collabora, редакторные токены, AV/PKI и Linux WPE privacy gate остаются обязательными.
+
 ## 3. Блокирующие критерии (обязательно до main/release)
 
 | Gate | Что требуется | Состояние на 24.10.2026 |
@@ -26,9 +31,9 @@
 | G3 — Одно окно | 1/2/3 запуска, разные файлы, 2 пользователя Windows, переключение Ctrl+Tab, повтор пути, закрытие несохранённого DOCX/XLSX | не выполнено |
 | G4 — PDF parity | многостраничный просмотр, поиск, выделение, OCR, формы, электронная подпись, печать Windows-драйверы, A4/A3/duplex, сравнение, разделение, аннотации, сохранение копии | **не достигнут:** Avalonia пока рендерит по 1 странице и не подключает полноценную печать/редактирование |
 | G5 — Office parity | реальные DOCX/XLSX/PPTX, формулы, диаграммы, стили, шаблоны, сложные таблицы, совместимость/roundtrip с Microsoft Office на эталонном наборе | **не достигнут:** локально поддержаны простые сценарии |
-| G6 — Real-time | корпоративные Collabora/ONLYOFFICE, HTTPS, pinned discovery, signed POST launch во вкладке, текущее ACL на каждый GetFile/PutFile, 2/5/10 пользователей и конфликты | **не достигнут:** шлюз deny-all по умолчанию, нет trusted enterprise store/сервера |
+| G6 — Real-time | корпоративные Collabora/ONLYOFFICE, HTTPS, pinned discovery, подписанный POST launch во вкладке, ACL/AD на каждый GetFile/PutFile, 2/5/10 пользователей и конфликты | **не достигнут**: GD-12 добавил NativeWebView внутри вкладки и строгий launch URL; реальный GUP-2 SSO launch broker, выдача WOPI токенов, сервер редактора и multiuser E2E отсутствуют |
 | G7 — GUP-2 | авторизованный handoff без передачи bearer в командной строке, новая версия с CAS/ACL/WORM, audit/revocation, интеграция тестовых карточек | **частично:** скачивание и локальный IPC; полноценный roundtrip незавершён |
-| G8 — Безопасность | DTD/XXE, path traversal, token replay, tampering, zip bombs, 32 MiB bounds, TLS/proxy logs, отказ при сбоях прав, секреты только на сервере, SBOM/licenses | требует локального аудита и испытаний |
+| G8 — Безопасность | DTD/XXE, path traversal, token replay, tampering, zip bombs, лимиты 32 МиБ, TLS/proxy logs, отказ при сбоях прав, секреты только на сервере, SBOM/licenses | **частично**: GD-12 добавил пакетный ZIP/XML guard на collaborative PutFile, HTTP 422 и запрет внешней навигации WebView; AV/OOXML schema, server storage, клиентский профиль WPE, корпоративный egress и локальная ИБ-проверка остаются |
 | G9 — Упаковка | Windows installer, Linux packages, фирменное название и иконка, ассоциации *по согласию*, миграция профиля и rollback; работа со SMB Windows/Linux | не выполнено |
 | G10 — Корпоративная эксплуатация | офлайн-репозиторий NuGet, 5–6-летние ПК, 2 монитора/DPI, проверка UI/UX по брендбуку, руководство и проверка ИБ | не выполнено |
 
