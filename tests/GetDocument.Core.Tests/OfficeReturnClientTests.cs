@@ -82,6 +82,16 @@ public sealed class OfficeReturnClientTests
     }
 
     [TestMethod]
+    public void ConflictingWorkingRevisionDoesNotLookLikeGenericTransportFailure()
+    {
+        Assert.ThrowsExactly<OfficeReturnConflictException>(() =>
+            OfficeReturnClient.EnsureSuccessfulUploadStatus(System.Net.HttpStatusCode.Conflict));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            OfficeReturnClient.EnsureSuccessfulUploadStatus(System.Net.HttpStatusCode.Forbidden));
+        OfficeReturnClient.EnsureSuccessfulUploadStatus(System.Net.HttpStatusCode.Created);
+    }
+
+    [TestMethod]
     public void InvalidArgumentsFailBeforeAnyNetwork()
     {
         var policy = OfficeReturnPolicy.Parse(Trusted);
