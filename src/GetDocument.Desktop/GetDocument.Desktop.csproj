@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
     <PackageReference Include="PDFtoImage" Version="5.4.0" />
   </ItemGroup>
   <ItemGroup>

@@ -192,6 +192,21 @@ public sealed class WopiRealtimeHttpGatewayTests
     }
 
     [TestMethod]
+    public async Task RevokingAclWhileUploadingFailsBeforeCommit()
+    {
+        var bytes = Encoding.UTF8.GetBytes("NOW FORBIDDEN");
+        var ctx = Context("alice", "/wopi/files/doc-42/contents", content: bytes);
+        ctx.Request.Headers["X-WOPI-Override"] = "PUT";
+        ctx.Request.Headers["X-COOL-WOPI-Timestamp"] = _initial.LastModifiedUtc.ToString("O");
+        ctx.Request.Body = new RevokeOnFirstReadStream(bytes, () => _store.AllowAccess = false);
+        await WopiLiveHttpGateway.HandlePutFileAsync(ctx, "doc-42",
+            _store, _security, new FixedClock(Now));
+        Assert.AreEqual(404, ctx.Response.StatusCode);
+        Assert.AreEqual(0, _store.CommitCount);
+        Assert.AreEqual(_initial.RevisionId, _store.Revisions.ReadCurrent("doc-42").RevisionId);
+    }
+
+    [TestMethod]
     public async Task WrongWopiOperationDoesNotSave()
     {
         var ctx = Context("alice", "/wopi/files/doc-42/contents", content: Encoding.UTF8.GetBytes("BAD"));
@@ -257,6 +272,21 @@ public sealed class WopiRealtimeHttpGatewayTests
     }
 
     [TestMethod]
+    public async Task RejectedOfficePackageReturns422AndDoesNotClaimSavedRevision()
+    {
+        _store.RejectOfficeZip = true;
+        var ctx = Context("alice", "/wopi/files/doc-42/contents",
+            content: Encoding.UTF8.GetBytes("fake office document"));
+        ctx.Request.Headers["X-COOL-WOPI-Timestamp"] = _initial.LastModifiedUtc.ToString("O");
+        await WopiLiveHttpGateway.HandlePutFileAsync(ctx, "doc-42",
+            _store, _security, new FixedClock(Now));
+        Assert.AreEqual(422, ctx.Response.StatusCode);
+        Assert.AreEqual(_initial.RevisionId,
+            _store.Revisions.ReadCurrent("doc-42").RevisionId);
+        Assert.IsFalse(ctx.Response.Headers.ContainsKey("X-WOPI-ItemVersion"));
+    }
+
+    [TestMethod]
     public async Task SameLengthTamperedSnapshotIsNotServed()
     {
         _store.TamperRead = true;
@@ -292,6 +322,23 @@ public sealed class WopiRealtimeHttpGatewayTests
         return ctx;
     }
 
+    private sealed class RevokeOnFirstReadStream(byte[] bytes, Action revoke)
+        : MemoryStream(bytes, writable: false)
+    {
+        private bool _revoked;
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (!_revoked)
+            {
+                _revoked = true;
+                revoke();
+            }
+            return base.ReadAsync(buffer, cancellationToken);
+        }
+    }
+
     private static MemoryStream Data(string text) => new(Encoding.UTF8.GetBytes(text));
     private static string Response(DefaultHttpContext ctx) =>
         Encoding.UTF8.GetString(((MemoryStream)ctx.Response.Body).ToArray());
@@ -311,6 +358,7 @@ public sealed class WopiRealtimeHttpGatewayTests
         public bool IsWorm { get; set; }
         public bool AllowEdit { get; set; } = true;
         public bool TamperRead { get; set; }
+        public bool RejectOfficeZip { get; set; }
 
         public WopiDocument Metadata(string user)
         {
@@ -346,6 +394,8 @@ public sealed class WopiRealtimeHttpGatewayTests
             string? timestamp, Stream content, CancellationToken ct)
         {
             CommitCount++;
+            if (RejectOfficeZip)
+                throw new RejectedOfficePackageException("Недопустимый OOXML пакет.");
             return await RealtimeRevisionCommit.CommitAsync(store,
                 authorized.Document, grant, now, timestamp, content, ct);
         }

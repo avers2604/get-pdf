@@ -10,10 +10,12 @@ using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using GetDocument.Core.EasterEgg;
 using GetDocument.Core.Workspace;
+using GetDocument.Core.Collaboration;
 using GetDocument.Desktop.Preview;
 using GetDocument.Desktop.Files;
 using GetDocument.Desktop.Templates;
 using GetDocument.Desktop.Revisions;
+using GetDocument.Desktop.Collaboration;
 using GetDocument.Office;
 
 namespace GetDocument.Desktop;
@@ -35,6 +37,7 @@ public sealed class MainWindow : Window
     private TabItem? _filesTab;
     private TabItem? _templatesTab;
     private readonly Dictionary<Guid, TabItem> _revisionTabs = [];
+    private readonly Dictionary<string, TabItem> _collaborationTabs = new(StringComparer.Ordinal);
 
     public MainWindow()
     {
@@ -79,6 +82,8 @@ public sealed class MainWindow : Window
             if (_filesTab?.Content is IDisposable files) files.Dispose();
             foreach (var history in _revisionTabs.Values)
                 if (history.Content is IDisposable pane) pane.Dispose();
+            foreach (var editTab in _collaborationTabs.Values)
+                if (editTab.Content is IDisposable editor) editor.Dispose();
         };
         Closing += (_, args) =>
         {
@@ -179,6 +184,11 @@ public sealed class MainWindow : Window
             ShowGetFiles));
         actions.Children.Add(CreateAction("Шаблоны документов", "Записка, акт, письмо",
             ShowCorporateTemplates));
+        actions.Children.Add(CreateAction("Совместное редактирование",
+            "Доступно после подключения сервера",
+            () => OpenPlaceholder("Совместная работа",
+                "Серверные сеансы Collabora/ONLYOFFICE подключаются через защищённый запуск GUP-2. " +
+                "Сейчас доступ не настроен: редактор и права пользователей не эмулируются.")));
         actions.Children.Add(CreateAction("ГЭТ Сканирование", "Подключение позднее",
             () => OpenPlaceholder("ГЭТ Сканирование",
                 "Интеграция с отдельным приложением ГЭТ Сканирование предусмотрена, но пока не подключена.")));
@@ -422,6 +432,53 @@ public sealed class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Call ONLY from a trusted, authenticated GUP-2/SSO handoff after
+    /// the enterprise launch broker has approved a short-lived session.
+    /// This API is internal: raw local paths / CLI / IPC do not grant access.
+    /// The same NativeWebView occupies an ordinary document tab.
+    /// </summary>
+    internal void OpenCollaborationSession(CollaborationLaunchDescriptor launch)
+    {
+        ArgumentNullException.ThrowIfNull(launch);
+        string key = launch.LaunchPage.AbsoluteUri;
+        if (_collaborationTabs.TryGetValue(key, out var existing))
+        {
+            _tabs.SelectedItem = existing;
+            return;
+        }
+        var pane = new CollaborationEditorPane(launch);
+        var heading = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6
+        };
+        heading.Children.Add(new TextBlock
+        {
+            Text = "Совместно: " + launch.DisplayName,
+            MaxWidth = 220,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
+        close.Click += (_, _) => CloseCollaborationSession(key);
+        heading.Children.Add(close);
+        var view = new TabItem { Header = heading, Content = pane };
+        _collaborationTabs.Add(key, view);
+        _items.Add(view);
+        _tabs.SelectedItem = view;
+        _status.Text = "Открыта внутренняя совместная вкладка. Подтверждение сохранения выдаёт сервер.";
+    }
+
+    private void CloseCollaborationSession(string key)
+    {
+        if (!_collaborationTabs.Remove(key, out var tab)) return;
+        if (tab.Content is IDisposable editor) editor.Dispose();
+        _items.Remove(tab);
+        _tabs.SelectedIndex = 0;
+        _status.Text = "Вкладка закрыта. Убедитесь, что сервер подтвердил сохранение изменений.";
+    }
+
     private void OpenPlaceholder(string title, string explanation)
     {
         var tab = new TabItem
@@ -617,6 +674,14 @@ public sealed class MainWindow : Window
             {
                 e.Handled = true;
                 CloseRevisionHistory(pair.Key);
+                return;
+            }
+            var collaborative = _collaborationTabs.FirstOrDefault(
+                kv => ReferenceEquals(kv.Value, _tabs.SelectedItem));
+            if (collaborative.Value is not null)
+            {
+                e.Handled = true;
+                CloseCollaborationSession(collaborative.Key);
             }
         }
     }

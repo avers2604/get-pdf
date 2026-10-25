@@ -53,12 +53,14 @@ app.Use(async (context, next) =>
     }
     await next();
 });
-// Route sets overlap. Do NOT map both. Read-only remains the default.
-string mode = Environment.GetEnvironmentVariable("GET_WOPI_HTTP_MODE") ?? "read-only";
-if (string.Equals(mode, "live", StringComparison.OrdinalIgnoreCase))
+// Route sets overlap: do NOT map both. Default is read-only.
+// Live mode stays locked until the enterprise GUP-2/AD ACL + revision backend
+// replaces the deny-all registration above and passes an integration gate.
+bool enterpriseBackendConnected = false;
+var mode = WopiHostMode.Resolve(
+    Environment.GetEnvironmentVariable("GET_WOPI_HTTP_MODE"), enterpriseBackendConnected);
+if (mode == WopiServerMode.Realtime)
     app.MapRealtimeWopi();
-else if (string.Equals(mode, "read-only", StringComparison.OrdinalIgnoreCase))
-    app.MapReadOnlyWopi();
 else
-    throw new InvalidOperationException("GET_WOPI_HTTP_MODE: допустимы live/read-only.");
+    app.MapReadOnlyWopi();
 app.Run();
