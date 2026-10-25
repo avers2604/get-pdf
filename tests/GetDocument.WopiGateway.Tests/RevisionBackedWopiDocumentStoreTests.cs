@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text;
 using GetDocument.Collaboration;
 using GetDocument.WopiGateway;
@@ -87,17 +88,42 @@ public sealed class RevisionBackedWopiDocumentStoreTests
         var token = RealtimeCoauthoring.Issue(allowed.Document, Secret, Now,
             TimeSpan.FromMinutes(5), true);
         var grant = RealtimeCoauthoring.Authorize(token.AccessToken, Secret, allowed.Document, Now);
-        await using var edited = Data("alice & bob final");
+        byte[] expected = OfficeBytes("alice & bob final");
+        await using var edited = new MemoryStream(expected);
         var next = await adapter.CommitNewRevisionAsync(allowed, grant,
             first.LastModifiedUtc.ToString("O"), edited, CancellationToken.None);
         Assert.AreEqual("first version", File.ReadAllText(first.FilePath));
-        Assert.AreEqual("alice & bob final", File.ReadAllText(next.FilePath));
+        CollectionAssert.AreEqual(expected, File.ReadAllBytes(next.FilePath));
         Assert.AreNotEqual(first.RevisionId, next.RevisionId);
-        await using var second = Data("old contents");
+        await using var second = new MemoryStream(OfficeBytes("old contents"));
         await Assert.ThrowsExactlyAsync<WopiVersionConflictException>(() =>
             adapter.CommitNewRevisionAsync(allowed, grant,
                 first.LastModifiedUtc.ToString("O"), second, CancellationToken.None).AsTask());
         Assert.AreEqual(next.RevisionId, revisions.ReadCurrent("doc-42").RevisionId);
+    }
+
+    [TestMethod]
+    public async Task InvalidOfficePackageDoesNotPublishANewRevision()
+    {
+        using var temp = new TestFolder();
+        var revisions = new ImmutableOfficeRevisionStore(temp.Root);
+        await using var original = Data("trusted starter");
+        var first = await revisions.InitializeAsync("doc-42", ".docx", original);
+        var adapter = new RevisionBackedWopiDocumentStore(
+            revisions, new FakePolicy(Approved()), new FixedClock(Now));
+        var allowed = await adapter.ResolveForSessionAsync(
+            "doc-42", "room-1", "alice", CancellationToken.None);
+        Assert.IsNotNull(allowed);
+        var token = RealtimeCoauthoring.Issue(allowed.Document, Secret, Now,
+            TimeSpan.FromMinutes(5), true);
+        var grant = RealtimeCoauthoring.Authorize(token.AccessToken,
+            Secret, allowed.Document, Now);
+        await using var bad = Data("this is not an OOXML container");
+        await Assert.ThrowsExactlyAsync<RejectedOfficePackageException>(() =>
+            adapter.CommitNewRevisionAsync(allowed, grant,
+                first.LastModifiedUtc.ToString("O"), bad, CancellationToken.None).AsTask());
+        Assert.AreEqual(first.RevisionId, revisions.ReadCurrent("doc-42").RevisionId);
+        Assert.AreEqual("trusted starter", File.ReadAllText(first.FilePath));
     }
 
     [TestMethod]
@@ -114,6 +140,25 @@ public sealed class RevisionBackedWopiDocumentStoreTests
         policy.Current = Approved() with { UserId = "bob" };
         Assert.IsNull(await adapter.ResolveForSessionAsync(
             "doc-42", "room-1", "alice", CancellationToken.None));
+    }
+
+    private static byte[] OfficeBytes(string value)
+    {
+        using var stream = new MemoryStream();
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (name, xml) in new[]
+            {
+                ("[Content_Types].xml", "<Types/>"),
+                ("word/document.xml", "<doc>" + value + "</doc>")
+            })
+            {
+                using var writer = new StreamWriter(
+                    zip.CreateEntry(name, CompressionLevel.Optimal).Open(), new UTF8Encoding(false));
+                writer.Write(xml);
+            }
+        }
+        return stream.ToArray();
     }
 
     private static MemoryStream Data(string text) => new(Encoding.UTF8.GetBytes(text));
