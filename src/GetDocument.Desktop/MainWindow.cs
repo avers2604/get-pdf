@@ -465,10 +465,11 @@ public sealed class MainWindow : Window
                 // request was pending. Never bind a new tab to the old ID.
                 if (!_views.ContainsKey(id) ||
                     _workspace.Tabs.All(x => x.Id != id || x.FilePath != path))
-                    return;
+                    return false;
                 _boundTabs.Set(id, path, receipt);
                 UpdateLinkedHeader(id, receipt);
                 _tabs.SelectedItem = _views[id];
+                return true;
             }),
         };
         _items.Add(_tabBindPane);
