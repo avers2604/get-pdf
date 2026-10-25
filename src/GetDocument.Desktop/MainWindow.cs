@@ -702,6 +702,21 @@ public sealed class MainWindow : Window
 
     private async void OnKeyDown(object? sender, KeyEventArgs e)
     {
+        if (_tabs.SelectedItem is TabItem { Content: PdfPreviewPane activePdf })
+        {
+            if (e.Key == Key.F3)
+            {
+                e.Handled = true;
+                activePdf.FindNext(reverse: (e.KeyModifiers & KeyModifiers.Shift) != 0);
+                return;
+            }
+            if (e.Key == Key.F && (e.KeyModifiers & KeyModifiers.Control) != 0)
+            {
+                e.Handled = true;
+                activePdf.FocusSearch();
+                return;
+            }
+        }
         if ((e.KeyModifiers & KeyModifiers.Control) == 0) return;
         if (e.Key == Key.O) { e.Handled = true; await OpenFilesAsync(); }
         else if (e.Key == Key.G && _tabs.SelectedItem is TabItem { Content: PdfPreviewPane pdf })
