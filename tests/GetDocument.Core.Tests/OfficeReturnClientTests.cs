@@ -71,6 +71,17 @@ public sealed class OfficeReturnClientTests
     }
 
     [TestMethod]
+    public void CancellationShortCircuitsOfficeReturnBeforeFileOrNetwork()
+    {
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        var policy = OfficeReturnPolicy.Parse(Trusted);
+        Assert.ThrowsExactly<OperationCanceledException>(() =>
+            OfficeReturnClient.UploadAsync("missing.docx", new string('A', 43),
+                policy, cancelled.Token).GetAwaiter().GetResult());
+    }
+
+    [TestMethod]
     public void InvalidArgumentsFailBeforeAnyNetwork()
     {
         var policy = OfficeReturnPolicy.Parse(Trusted);
