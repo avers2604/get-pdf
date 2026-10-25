@@ -31,8 +31,8 @@ public static class PdfViewScale
         int rasterWidth, int rasterHeight, int step)
     {
         int percent = Percent(step);
-        if (rasterWidth is < 1 or > PdfPreviewPlan.DefaultLongSide * 2 ||
-            rasterHeight is < 1 or > PdfPreviewPlan.DefaultLongSide * 2)
+        if (rasterWidth is < 1 or > 2048 ||
+            rasterHeight is < 1 or > 2048)
             throw new ArgumentOutOfRangeException(nameof(rasterWidth));
         double factor = BaseFitFactor * percent / 100;
         return (Math.Max(1, (int)Math.Round(rasterWidth * factor)),
