@@ -14,7 +14,7 @@ public sealed class LocalDocumentInstanceTests
         {
             File.WriteAllBytes(path, [1, 2, 3]);
             CollectionAssert.AreEqual(new[] { Path.GetFullPath(path) },
-                LocalDocumentInstance.ValidateFiles([path, path]));
+                LocalDocumentInstance.ValidateFiles([path, path]).ToArray());
             Assert.ThrowsExactly<ArgumentException>(() =>
                 LocalDocumentInstance.ValidateFiles(["https://test.internal/file.docx"]));
             Assert.ThrowsExactly<ArgumentException>(() =>

@@ -1,3 +1,4 @@
+using System.IO;
 using System.Printing;
 using System.Text.Json;
 using System.Windows;
@@ -73,16 +74,21 @@ internal static class Program
             };
             PageMediaSizeName paper = plan.Paper == PrintPaper.A3
                 ? PageMediaSizeName.ISOA3 : PageMediaSizeName.ISOA4;
-            if (!capabilities.DuplexingCapability.Contains(duplex) ||
+            // Drivers without a duplex unit (Microsoft Print to PDF, XPS Writer, many
+            // single-sided printers) report an EMPTY duplexing list: one-sided is still
+            // the only thing they do. Two-sided must be advertised explicitly.
+            bool duplexSupported = PrintCapabilityPolicy.SupportsDuplexing(
+                capabilities.DuplexingCapability.Select(x => x.ToString()).ToArray(), duplex.ToString());
+            if (!duplexSupported ||
                 !capabilities.PageMediaSizeCapability.Any(x => x.PageMediaSizeName == paper))
                 return 4; // Unsupported by the actual driver; never silently downgrade.
 
             var ticket = new PrintTicket
             {
                 CopyCount = plan.Copies,
-                Duplexing = duplex,
                 PageMediaSize = new PageMediaSize(paper)
             };
+            if (capabilities.DuplexingCapability.Count > 0) ticket.Duplexing = duplex;
             // Read raster pages lazily. Do not decode a 1,000 page job into RAM.
             double width = plan.Paper == PrintPaper.A3 ? 1122.52 : 793.70;
             double height = plan.Paper == PrintPaper.A3 ? 1587.40 : 1122.52;
@@ -133,7 +139,7 @@ internal static class Program
             _source.Position = 0;
             using var png = new MemoryStream();
             Conversion.SavePng(png, _source, page: index, leaveOpen: true,
-                options: new RenderOptions(Width: raster.Width, Height: raster.Height,
+                options: new PDFtoImage.RenderOptions(Width: raster.Width, Height: raster.Height,
                     WithAnnotations: true, WithFormFill: true));
             png.Position = 0;
             var bitmap = new BitmapImage();
@@ -145,12 +151,19 @@ internal static class Program
 
             const double margin = 18; // WPF DIP, reserved for physical print margins.
             var surface = new FixedPage { Width = _pageSize.Width, Height = _pageSize.Height };
+            double areaWidth = Math.Max(1, _pageSize.Width - margin * 2);
+            double areaHeight = Math.Max(1, _pageSize.Height - margin * 2);
+            // A landscape page on portrait paper (or vice versa) is turned 90° to fill the
+            // sheet instead of printing shrunk to a strip.
+            bool rotate = PdfPrintRasterPlan.ShouldRotate(
+                points.Width, points.Height, _pageSize.Width, _pageSize.Height);
             var image = new Image
             {
                 Source = bitmap,
-                Width = Math.Max(1, _pageSize.Width - margin * 2),
-                Height = Math.Max(1, _pageSize.Height - margin * 2),
-                Stretch = Stretch.Uniform
+                Width = rotate ? areaHeight : areaWidth,
+                Height = rotate ? areaWidth : areaHeight,
+                Stretch = Stretch.Uniform,
+                LayoutTransform = rotate ? new RotateTransform(90) : Transform.Identity
             };
             FixedPage.SetLeft(image, margin);
             FixedPage.SetTop(image, margin);

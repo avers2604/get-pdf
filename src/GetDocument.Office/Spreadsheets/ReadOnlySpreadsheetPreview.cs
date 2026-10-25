@@ -56,17 +56,30 @@ public static class ReadOnlySpreadsheetPreview
             LeaveOpen = false
         });
         cancellationToken.ThrowIfCancellationRequested();
-        int fields = reader.FieldCount;
-        int columns = Math.Min(maxColumns, Math.Max(0, fields));
+        // In SinglePassMode FieldCount before the first Read() comes from the sheet's
+        // <dimension> hint, which many generators omit or leave stale ("A1"); a row can be
+        // wider. Take the width of every row actually read and pad rows to the widest one.
+        int fields = 0;
         var rows = new List<string[]>(Math.Min(maxRows, 100));
         while (rows.Count < maxRows && reader.Read())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var values = new string[columns];
-            for (int column = 0; column < columns; column++)
+            fields = Math.Max(fields, reader.FieldCount);
+            int width = Math.Min(maxColumns, Math.Max(0, reader.FieldCount));
+            var values = new string[width];
+            for (int column = 0; column < width; column++)
                 values[column] = FormatCell(reader.GetValue(column));
             rows.Add(values);
         }
+        int columns = Math.Min(maxColumns, fields);
+        for (int i = 0; i < rows.Count; i++)
+            if (rows[i].Length < columns)
+            {
+                var padded = new string[columns];
+                Array.Fill(padded, "");
+                rows[i].CopyTo(padded, 0);
+                rows[i] = padded;
+            }
         bool moreRows = reader.Read();
         cancellationToken.ThrowIfCancellationRequested();
         bool truncated = moreRows || fields > maxColumns || reader.ResultsCount > 1;

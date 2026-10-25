@@ -41,6 +41,30 @@ public sealed class ReadOnlySpreadsheetPreviewTests
     }
 
     [TestMethod]
+    public void RowsWiderThanTheFirstOneKeepAllColumnsAndArePadded()
+    {
+        using var folder = TemporaryFolder.Create();
+        string path = Path.Combine(folder.Path, "ведомость.xlsx");
+        OfficeDocumentFactory.CreateNew(WorkspaceDocumentKind.Spreadsheet, path);
+        using (var workbook = SpreadsheetDocument.Open(path, true))
+        {
+            var worksheet = workbook.WorkbookPart!.WorksheetParts.Single().Worksheet;
+            var data = worksheet.GetFirstChild<SheetData>()!;
+            var first = new Row { RowIndex = 1U };
+            first.Append(new Cell { CellReference = "A1", CellValue = new CellValue("1"), DataType = CellValues.Number });
+            var second = new Row { RowIndex = 2U };
+            second.Append(new Cell { CellReference = "A2", CellValue = new CellValue("2"), DataType = CellValues.Number });
+            second.Append(new Cell { CellReference = "C2", CellValue = new CellValue("3"), DataType = CellValues.Number });
+            data.Append(first, second);
+            worksheet.Save();
+        }
+        var preview = ReadOnlySpreadsheetPreview.Read(path);
+        Assert.AreEqual(3, preview.VisibleColumns);
+        CollectionAssert.AreEqual(new[] { "1", "", "" }, preview.Rows[0]);
+        CollectionAssert.AreEqual(new[] { "2", "", "3" }, preview.Rows[1]);
+    }
+
+    [TestMethod]
     public void BlankWorkbookHasNoPreviewRows()
     {
         using var folder = TemporaryFolder.Create();

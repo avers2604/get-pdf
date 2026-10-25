@@ -23,7 +23,7 @@ public sealed record OfficePackageLimits(
 /// Unsupported, oversized, malformed or potentially active Office ZIP payload.
 /// The HTTP layer must return an appropriate 4xx, not accept a revision.
 /// </summary>
-public sealed class RejectedOfficePackageException : InvalidDataException
+public sealed class RejectedOfficePackageException : Exception
 {
     public RejectedOfficePackageException(string message) : base(message) { }
     public RejectedOfficePackageException(string message, Exception inner) : base(message, inner) { }

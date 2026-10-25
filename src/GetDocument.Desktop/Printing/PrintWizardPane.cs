@@ -302,7 +302,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             source.Position = 0;
             using var output = new MemoryStream();
             Conversion.SavePng(output, source, page: 0, leaveOpen: true,
-                options: new RenderOptions(Width: raster.Width, Height: raster.Height,
+                options: new PDFtoImage.RenderOptions(Width: raster.Width, Height: raster.Height,
                     WithAnnotations: true, WithFormFill: true));
             cancel.ThrowIfCancellationRequested();
             return (pages, output.ToArray());

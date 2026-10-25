@@ -49,10 +49,12 @@ public sealed class WopiHttpGatewayTests
             _store, _security, TimeProviderForTest());
         Assert.AreEqual(200, ctx.Response.StatusCode);
         Assert.IsTrue(ctx.Response.ContentType?.StartsWith("application/json", StringComparison.Ordinal) ?? false);
-        string payload = Encoding.UTF8.GetString(((MemoryStream)ctx.Response.Body).ToArray());
-        StringAssert.Contains(payload, "\"BaseFileName\":\"Приказ.docx\"");
-        StringAssert.Contains(payload, "\"UserCanWrite\":false");
-        StringAssert.Contains(payload, "\"UserCanNotWriteRelative\":true");
+        // Compare parsed values: System.Text.Json escapes Cyrillic as \uXXXX, which is valid JSON.
+        using var payload = System.Text.Json.JsonDocument.Parse(((MemoryStream)ctx.Response.Body).ToArray());
+        var info = payload.RootElement;
+        Assert.AreEqual("Приказ.docx", info.GetProperty("BaseFileName").GetString());
+        Assert.IsFalse(info.GetProperty("UserCanWrite").GetBoolean());
+        Assert.IsTrue(info.GetProperty("UserCanNotWriteRelative").GetBoolean());
         Assert.AreEqual(1, _store.ResolveCount);
         Assert.AreEqual(0, _store.OpenCount);
     }

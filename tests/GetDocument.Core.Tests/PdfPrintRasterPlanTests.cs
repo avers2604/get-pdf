@@ -28,6 +28,29 @@ public sealed class PdfPrintRasterPlanTests
     }
 
     [TestMethod]
+    public void LandscapePagesAreTurnedToFillPortraitPaperAndViceVersa()
+    {
+        const double a4W = 793.70, a4H = 1122.52; // WPF DIP, portrait sheet
+        Assert.IsTrue(PdfPrintRasterPlan.ShouldRotate(1191, 842, a4W, a4H));   // A3 landscape page
+        Assert.IsFalse(PdfPrintRasterPlan.ShouldRotate(595, 842, a4W, a4H));   // A4 portrait page
+        Assert.IsTrue(PdfPrintRasterPlan.ShouldRotate(595, 842, a4H, a4W));    // portrait page, landscape sheet
+        Assert.IsFalse(PdfPrintRasterPlan.ShouldRotate(600, 600, a4W, a4H));   // square stays upright
+        Assert.IsFalse(PdfPrintRasterPlan.ShouldRotate(605, 600, a4W, a4H));   // near-square stays upright
+        Assert.IsFalse(PdfPrintRasterPlan.ShouldRotate(double.NaN, 600, a4W, a4H));
+    }
+
+    [TestMethod]
+    public void DriversWithoutDuplexUnitStillPrintOneSided()
+    {
+        // Microsoft Print to PDF and XPS Document Writer report no duplexing modes at all.
+        Assert.IsTrue(PrintCapabilityPolicy.SupportsDuplexing([], "OneSided"));
+        Assert.IsFalse(PrintCapabilityPolicy.SupportsDuplexing([], "TwoSidedLongEdge"));
+        string[] duplexUnit = ["OneSided", "TwoSidedLongEdge", "TwoSidedShortEdge"];
+        Assert.IsTrue(PrintCapabilityPolicy.SupportsDuplexing(duplexUnit, "TwoSidedShortEdge"));
+        Assert.IsFalse(PrintCapabilityPolicy.SupportsDuplexing(["OneSided"], "TwoSidedLongEdge"));
+    }
+
+    [TestMethod]
     public void InvalidDimensionsNeverReachPdfium()
     {
         foreach (var value in new[] { -1, 0, double.NaN, double.PositiveInfinity, 20001d })

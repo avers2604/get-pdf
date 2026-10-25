@@ -27,4 +27,36 @@ public static class PdfPrintRasterPlan
         }
         return (width, height);
     }
+
+    /// <summary>
+    /// True when the page and the paper have different orientation (landscape page,
+    /// portrait sheet or the reverse). Square or near-square pages are never turned.
+    /// </summary>
+    public static bool ShouldRotate(double pageWidth, double pageHeight, double paperWidth, double paperHeight)
+    {
+        if (!double.IsFinite(pageWidth) || !double.IsFinite(pageHeight) ||
+            !double.IsFinite(paperWidth) || !double.IsFinite(paperHeight) ||
+            pageWidth <= 0 || pageHeight <= 0 || paperWidth <= 0 || paperHeight <= 0)
+            return false;
+        const double squareTolerance = 1.02;
+        bool pageLandscape = pageWidth > pageHeight * squareTolerance;
+        bool pagePortrait = pageHeight > pageWidth * squareTolerance;
+        bool paperLandscape = paperWidth > paperHeight;
+        return paperLandscape ? pagePortrait : pageLandscape;
+    }
+}
+
+/// <summary>Platform-neutral check of what an installed Windows print driver advertises.</summary>
+public static class PrintCapabilityPolicy
+{
+    /// <param name="advertised">Driver's duplexing list as names ("OneSided", "TwoSidedLongEdge"…).</param>
+    /// <param name="requested">Requested mode name.</param>
+    public static bool SupportsDuplexing(IReadOnlyCollection<string> advertised, string requested)
+    {
+        ArgumentNullException.ThrowIfNull(advertised);
+        ArgumentException.ThrowIfNullOrWhiteSpace(requested);
+        // An empty list means the driver has no duplex unit: one-sided only.
+        if (advertised.Count == 0) return requested == "OneSided";
+        return advertised.Contains(requested, StringComparer.Ordinal);
+    }
 }

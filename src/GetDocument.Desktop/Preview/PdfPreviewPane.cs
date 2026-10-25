@@ -319,7 +319,7 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
             token.ThrowIfCancellationRequested();
             using var output = new MemoryStream();
             PDFtoImage.Conversion.SavePng(output, source, page: index, leaveOpen: true,
-                options: new RenderOptions(Width: raster.Width, Height: raster.Height,
+                options: new PDFtoImage.RenderOptions(Width: raster.Width, Height: raster.Height,
                     WithAnnotations: true, WithFormFill: true));
             token.ThrowIfCancellationRequested();
             return (output.ToArray(), count);
