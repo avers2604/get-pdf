@@ -69,6 +69,18 @@ public sealed class PdfTextSearchPlanTests
     }
 
     [TestMethod]
+    public void BidirectionalUnicodeControlsCannotHideSearchTerms()
+    {
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            PdfTextSearchPlan.NormalizeQuery("word\u202E"));
+        var match = PdfTextSearchPlan.FindInPage(0,
+            "перед\u202E словом трамвай\u202C после", "трамвай");
+        Assert.IsNotNull(match);
+        Assert.IsFalse(match.Excerpt.Contains('\u202E'));
+        Assert.IsFalse(match.Excerpt.Contains('\u202C'));
+    }
+
+    [TestMethod]
     public void InvalidPagesAndInvalidNormalizedQueriesFailClosed()
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
