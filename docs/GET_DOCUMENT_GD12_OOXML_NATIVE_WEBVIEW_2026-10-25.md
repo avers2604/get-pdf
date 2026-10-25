@@ -95,6 +95,14 @@ https://docs.avaloniaui.net/docs/app-development/embedding-web-content
   совместимого с дистрибутивом и его лицензированную offline-поставку.
   **Не заменять** на отдельное browser window, потому что
   требование — одно окно. Если WPE недоступен, показывать ошибку/placeholder.
+- Профили WebView: на Windows WebView2 включён `InPrivate`,
+  на GTK — `EphemeralDataManager`, на macOS — `NonPersistentDataStore`.
+  **Linux WPE пока не подтверждает полностью эфемерное хранилище**
+  в доступном публичном API. До проверки очистки WPE cache/cookies
+  и политики ИБ не разрешать реальные конфиденциальные редакции.
+  `NavigationStarted` ограничивает top-level URL, но не является
+  полноценным межсетевым экраном для subresources: egress должен
+  контролироваться в закрытом корпоративном сегменте.
 - Серверы Collabora/ONLYOFFICE работают внутри закрытой сети.
   Никакой публичной CDN, telemetry или внешнего доступа.
 
