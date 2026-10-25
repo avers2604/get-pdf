@@ -84,6 +84,9 @@ public sealed class MainWindow : Window
         Closed += (_, _) =>
         {
             if (_filesTab?.Content is IDisposable files) files.Dispose();
+            if (_officeReturnTab?.Content is IDisposable officeReturn) officeReturn.Dispose();
+            foreach (var view in _views.Values)
+                if (view.Content is IDisposable document) document.Dispose();
             foreach (var history in _revisionTabs.Values)
                 if (history.Content is IDisposable pane) pane.Dispose();
             foreach (var editTab in _collaborationTabs.Values)
@@ -420,13 +423,31 @@ public sealed class MainWindow : Window
             return;
         }
         if (!_officeReturnPolicy.Enabled) return;
+        var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        heading.Children.Add(new TextBlock
+        {
+            Text = "Возврат GUP-2",
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
+        close.Click += (_, _) => CloseOfficeReturn();
+        heading.Children.Add(close);
         _officeReturnTab = new TabItem
         {
-            Header = "Возврат GUP-2",
+            Header = heading,
             Content = new OfficeReturnPane(this, _officeReturnPolicy)
         };
         _items.Add(_officeReturnTab);
         _tabs.SelectedItem = _officeReturnTab;
+    }
+
+    private void CloseOfficeReturn()
+    {
+        if (_officeReturnTab is null) return;
+        if (_officeReturnTab.Content is IDisposable pane) pane.Dispose();
+        _items.Remove(_officeReturnTab);
+        _officeReturnTab = null;
+        _tabs.SelectedIndex = 0;
     }
 
     private async Task OpenFilesAsync()
@@ -683,6 +704,8 @@ public sealed class MainWindow : Window
     {
         if ((e.KeyModifiers & KeyModifiers.Control) == 0) return;
         if (e.Key == Key.O) { e.Handled = true; await OpenFilesAsync(); }
+        else if (e.Key == Key.G && _tabs.SelectedItem is TabItem { Content: PdfPreviewPane pdf })
+        { e.Handled = true; pdf.FocusPageNumber(); }
         else if (e.Key == Key.T)
         {
             e.Handled = true;
@@ -694,6 +717,8 @@ public sealed class MainWindow : Window
         { e.Handled = true; CloseGetFiles(); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _templatesTab))
         { e.Handled = true; CloseCorporateTemplates(); }
+        else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _officeReturnTab))
+        { e.Handled = true; CloseOfficeReturn(); }
         else if (e.Key == Key.W)
         {
             var pair = _revisionTabs.FirstOrDefault(kv => ReferenceEquals(kv.Value, _tabs.SelectedItem));
