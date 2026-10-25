@@ -103,6 +103,12 @@ public sealed class OfficeReturnPane : UserControl
                 _status.Text = "Рабочая копия сохранена в GUP-2. Версия карточки: " +
                                receipt.EditVersion + ". Проверьте результат в GUP-2.";
             }
+            catch (OfficeReturnConflictException)
+            {
+                _status.Text = "Конфликт редакций: другой сотрудник уже изменил " +
+                               "рабочую копию в GUP-2. Ничего не перезаписано. " +
+                               "Обновите карточку, сравните изменения и получите новый код.";
+            }
             catch (Exception ex) when (ex is ArgumentException or InvalidDataException or
                 IOException or UnauthorizedAccessException or HttpRequestException or
                 OperationCanceledException or InvalidOperationException or JsonException)
