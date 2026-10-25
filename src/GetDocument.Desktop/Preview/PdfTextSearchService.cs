@@ -1,5 +1,6 @@
 using GetDocument.Core.Preview;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
 namespace GetDocument.Desktop.Preview;
 
@@ -30,7 +31,8 @@ internal static class PdfTextSearchService
         for (int page = 0; page < pages; page++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string text = document.GetPage(page + 1).Text;
+            // Use content-order extraction; raw Page.Text may be out of reading order.
+            string text = ContentOrderTextExtractor.GetText(document.GetPage(page + 1));
             if (string.IsNullOrWhiteSpace(text))
             {
                 withoutTextLayer++;
