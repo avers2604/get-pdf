@@ -14,6 +14,6 @@ if [ "$major" -lt 10 ]; then
   exit 1
 fi
 dotnet restore tests/GetDocument.Printing.Tests/GetDocument.Printing.Tests.csproj
-dotnet test tests/GetDocument.Printing.Tests/GetDocument.Printing.Tests.csproj \
+dotnet test --project tests/GetDocument.Printing.Tests/GetDocument.Printing.Tests.csproj \
   -c Release --no-restore
 echo "PASS: local .NET print transport integration tests. No physical printer used."
