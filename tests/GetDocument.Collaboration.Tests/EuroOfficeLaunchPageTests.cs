@@ -130,6 +130,34 @@ public sealed class EuroOfficeLaunchPageTests
     }
 
     [TestMethod]
+    public async Task ResolverRejectsGrantReturnedForAnotherGup2Employee()
+    {
+        var foreign = Grant() with
+        {
+            Session = Grant().Session with { UserId = "other-employee" }
+        };
+        var store = new SingleUseStore(foreign);
+        var page = await EuroOfficeLaunchResolver.ResolveAsync(
+            EuroOfficeLaunchId.New(), AuthenticatedUser(), store, OfficeOrigin,
+            Key, Now, CancellationToken.None);
+        Assert.IsNull(page);
+        Assert.AreEqual(1, store.Calls);
+    }
+
+    [TestMethod]
+    public async Task ResolverRejectsAuthenticatedIdentityWithoutImmutableEmployeeId()
+    {
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            new[] { new Claim(ClaimTypes.Name, "ГЭТ сотрудник") }, "trusted-enterprise"));
+        var store = new SingleUseStore(Grant());
+        var page = await EuroOfficeLaunchResolver.ResolveAsync(
+            EuroOfficeLaunchId.New(), principal, store, OfficeOrigin,
+            Key, Now, CancellationToken.None);
+        Assert.IsNull(page);
+        Assert.AreEqual(0, store.Calls);
+    }
+
+    [TestMethod]
     public async Task ResolverRetrievesOnlyOnceForTheAuthenticatedEmployee()
     {
         string launchId = EuroOfficeLaunchId.New();
