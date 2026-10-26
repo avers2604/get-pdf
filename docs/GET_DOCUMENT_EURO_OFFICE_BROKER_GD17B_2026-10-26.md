@@ -80,7 +80,7 @@ dotnet test tests/GetDocument.Collaboration.Tests/GetDocument.Collaboration.Test
 bash -n scripts/verify-euro-office-health.sh
 ```
 
-**Ограничение:** в данной среде нет `.NET 10`, Docker, корпоративных TLS сертификатов, сервера, пользователей AD/GUP-2 и оригиналов Office; сборка, NUnit/MSTest, аппаратные и интеграционные испытания не производились.
+**Ограничение:** в данной среде нет `.NET 10`, Docker, корпоративных TLS сертификатов, сервера, пользователей AD/GUP-2 и оригиналов Office; сборка, MSTest, аппаратные и интеграционные испытания не производились.
 
 ## Официальные источники
 
