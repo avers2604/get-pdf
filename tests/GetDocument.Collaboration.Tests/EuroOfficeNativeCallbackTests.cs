@@ -23,7 +23,7 @@ public sealed class EuroOfficeNativeCallbackTests
             ? new { key, status, url }
             : new { key, status, url = (string?)null };
         return (System.Text.Json.JsonSerializer.Serialize(payload),
-                Hs256Jwt.Sign(payload, Key));
+                Hs256Jwt.Sign(new { operation = "callback", payload }, Key));
     }
 
     [DataTestMethod]
@@ -94,19 +94,31 @@ public sealed class EuroOfficeNativeCallbackTests
     }
 
     [TestMethod]
-    public void RejectsUnsignedCallbackAndLegacyWrappedJwt()
+    public void RejectsCorruptedJwtAndLegacyTopLevelClaims()
     {
         var (body, jwt) = Event(2);
         Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
             EuroOfficeNativeCallback.Plan(body, jwt + "a", DocumentKey, Server, Key));
-        string wrappedJwt = Hs256Jwt.Sign(new {
-            operation = "callback", payload = new {
+        string legacy = Hs256Jwt.Sign(new {
+            key = DocumentKey, status = 2,
+            url = "https://office.intra.get.test/cache/files/new.docx"
+        }, Key);
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
+            EuroOfficeNativeCallback.Plan(body, legacy, DocumentKey, Server, Key));
+    }
+
+    [TestMethod]
+    public void RejectsIncorrectSignedCallbackOperation()
+    {
+        var (body, _) = Event(2);
+        var token = Hs256Jwt.Sign(new {
+            operation = "download", payload = new {
                 key = DocumentKey, status = 2,
                 url = "https://office.intra.get.test/cache/files/new.docx"
             }
         }, Key);
         Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
-            EuroOfficeNativeCallback.Plan(body, wrappedJwt, DocumentKey, Server, Key));
+            EuroOfficeNativeCallback.Plan(body, token, DocumentKey, Server, Key));
     }
 
     [TestMethod]
