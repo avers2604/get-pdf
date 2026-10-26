@@ -39,7 +39,8 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         control.CornerRadius = new CornerRadius(9);
     }
 
-    private readonly string _pdfPath;
+    private string _pdfPath;
+    private PrintFileSnapshot? _printSnapshot;
     private readonly Action _closeTab;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly ComboBox _printer = new() { Width = 350 };
@@ -338,8 +339,15 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         _status.Text = "Задание передаётся в выбранную очередь печати…";
         try
         {
+            if (_printSnapshot is not { } snapshot ||
+                !await snapshot.VerifyAsync(_lifetime.Token))
+            {
+                if (!_disposed)
+                    _status.Text = "Подготовленная PDF-копия изменилась. Печать отменена; откройте мастер заново.";
+                return;
+            }
             string confirmation = await LocalPrintBroker.SubmitPdfAsync(
-                _pdfPath, plan!, _lifetime.Token);
+                snapshot.Path, plan!, _lifetime.Token, snapshot.Sha256Hex);
             if (!_disposed)
             {
                 _status.Text = confirmation;
@@ -535,8 +543,18 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         if (_disposed) return;
         try
         {
+            // Freeze exactly the PDF revision currently selected for printing,
+            // including unsaved Office/PDF edits exported into a temporary PDF.
+            var snapshot = await PrintFileSnapshot.CreateAsync(_pdfPath, _lifetime.Token);
+            if (_disposed)
+            {
+                snapshot.Dispose();
+                return;
+            }
+            _printSnapshot = snapshot;
+            _pdfPath = snapshot.Path;
             var info = await Task.Run(() => RenderPreviewPages(
-                _pdfPath, _lifetime.Token), _lifetime.Token);
+                snapshot.Path, _lifetime.Token), _lifetime.Token);
             if (_disposed) return;
             _pageCount = info.Pages;
             for (int i = 0; i < info.PreviewPngs.Count; i++)
@@ -666,6 +684,8 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         _disposed = true;
         _lifetime.Cancel();
         _sheetLoad?.Cancel();
+        _printSnapshot?.Dispose();
+        _printSnapshot = null;
         _sheetPreview.Children.Clear();
         foreach (Bitmap image in _previewPages.Values) image.Dispose();
         _previewPages.Clear();
