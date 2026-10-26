@@ -54,9 +54,31 @@ public sealed class EuroOfficePrimaryEngineTests
     }
 
     [TestMethod]
+    public void DefaultEuroOfficeSessionIsReadOnlyUntilImmutableRevisionSinkIsReady()
+    {
+        var bootstrap = OfficeServerEnginePolicy.Create(Session(), SigningKey);
+        using var json = JsonDocument.Parse(bootstrap.ConfigurationJson);
+        Assert.AreEqual("view", json.RootElement.GetProperty("editorConfig")
+            .GetProperty("mode").GetString());
+        Assert.IsFalse(json.RootElement.GetProperty("document")
+            .GetProperty("permissions").GetProperty("edit").GetBoolean());
+    }
+
+    [TestMethod]
+    public void ExplicitlyReadyImmutableRevisionSinkAllowsCollaborativeEditing()
+    {
+        var bootstrap = OfficeServerEnginePolicy.Create(
+            Session(), SigningKey, immutableRevisionSinkReady: true);
+        using var json = JsonDocument.Parse(bootstrap.ConfigurationJson);
+        Assert.AreEqual("edit", json.RootElement.GetProperty("editorConfig")
+            .GetProperty("mode").GetString());
+    }
+
+    [TestMethod]
     public void EuroOfficeCannotModifyWormOriginal()
     {
-        var bootstrap = OfficeServerEnginePolicy.Create(Session(worm: true), SigningKey);
+        var bootstrap = OfficeServerEnginePolicy.Create(
+            Session(worm: true), SigningKey, immutableRevisionSinkReady: true);
         using var json = JsonDocument.Parse(bootstrap.ConfigurationJson);
         var root = json.RootElement;
         Assert.AreEqual("view", root.GetProperty("editorConfig").GetProperty("mode").GetString());
@@ -71,7 +93,12 @@ public sealed class EuroOfficePrimaryEngineTests
         var legacy = OfficeServerEnginePolicy.Create(
             Session(), SigningKey, OfficeServerEngine.OnlyOfficeLegacy);
         Assert.AreEqual(primary.DocumentKey, legacy.DocumentKey);
-        Assert.AreEqual(primary.ConfigurationJson, legacy.ConfigurationJson);
+        using var primaryJson = JsonDocument.Parse(primary.ConfigurationJson);
+        using var legacyJson = JsonDocument.Parse(legacy.ConfigurationJson);
+        Assert.AreEqual("view", primaryJson.RootElement.GetProperty("editorConfig")
+            .GetProperty("mode").GetString());
+        Assert.AreEqual("edit", legacyJson.RootElement.GetProperty("editorConfig")
+            .GetProperty("mode").GetString());
     }
 
     [TestMethod]
