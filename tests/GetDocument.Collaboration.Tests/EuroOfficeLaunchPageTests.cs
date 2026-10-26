@@ -98,7 +98,7 @@ public sealed class EuroOfficeLaunchPageTests
         var b = EuroOfficeLaunchId.New();
         Assert.IsTrue(EuroOfficeLaunchId.IsValid(a));
         Assert.IsTrue(EuroOfficeLaunchId.IsValid(b));
-        Assert.HasCount(32, a);
+        Assert.AreEqual(32, a.Length);
         Assert.AreNotEqual(a, b);
         Assert.IsFalse(EuroOfficeLaunchId.IsValid(a.ToUpperInvariant()));
     }
