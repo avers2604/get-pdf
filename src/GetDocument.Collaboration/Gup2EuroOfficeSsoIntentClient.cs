@@ -14,7 +14,12 @@ namespace GetDocument.Collaboration;
 /// </summary>
 public sealed record Gup2EuroOfficeSsoRedemption(
     Guid DocumentId, string UserId, int EditVersion, string DocumentKey,
-    string Sha256, string Extension, string ServerSaveGrant);
+    string Sha256, string Extension, string ServerSaveGrant)
+{
+    // Never reveal the server-only save secret through a record logger.
+    public override string ToString() =>
+        $"Gup2EuroOfficeSsoRedemption(DocumentId={DocumentId}, UserId={UserId}, EditVersion={EditVersion}, SaveGrant=[REDACTED])";
+}
 
 /// <summary>
 /// Redeems a separate GUP-2 SSO browser intent over a HMAC-authenticated
@@ -130,7 +135,7 @@ public static class Gup2EuroOfficeSsoIntentClient
             gup2Origin, browserIntent, trustedSsoEmployeeId, internalHmacKey, now);
         using var handler = new HttpClientHandler
         {
-            UseCookies = false, AllowAutoRedirect = false,
+            UseCookies = false, UseProxy = false, AllowAutoRedirect = false,
             UseDefaultCredentials = false, PreAuthenticate = false,
         };
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
