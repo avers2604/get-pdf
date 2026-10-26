@@ -13,6 +13,8 @@
 
 > **GD-17D.2a:** [нативная JWT-проверка callback Euro-Office и denied-by-default commit](GET_DOCUMENT_EUROOFFICE_CALLBACK_GD17D2_2026-10-26.md); GUP-2 [GD-22 PR #177](https://github.com/avers2604/Gup-2/pull/177) проверяет текущие права/ревизию/архив без записи. Реальная запись `services.update_document` через серверный callback по-прежнему отсутствует — только следующий GD-17D.2b после ИБ-аудита.
 
+> **GD-17D.2b:** внутренний `commit_trusted_eurooffice_callback` в GUP-2 уже использует штатные CAS/AV/S3 VersionId/append-only историю, миграции 0041–0042 и replay receipt: [Draft PR #179](https://github.com/avers2604/Gup-2/pull/179). [Интеграционный контракт](GET_DOCUMENT_EUROOFFICE_COMMIT_GD17D2B_2026-10-26.md). В реальном `EuroOfficeHost` остаётся DenyAll, межсерверный write-grant ещё не подключён.
+
 ## 1. Приоритет движков
 
 1. **Euro-Office Document Server** — основной движок для DOCX/XLSX/PPTX в локальной сети и совместного редактирования. Это **не** файловый сервер, не система ACL и не замена ГЭТ Файлы/GUP-2.
