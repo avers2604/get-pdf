@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using System.Security.Cryptography;
@@ -190,8 +191,18 @@ internal static class LocalPrintBroker
         foreach (string arg in argv) start.ArgumentList.Add(arg);
         if (OperatingSystem.IsLinux() && program == "lpstat")
             start.Environment["LC_ALL"] = "C"; // predictable fallback parsing across locales
-        using var process = Process.Start(start) ??
-            throw new IOException("Не удалось запустить локальную службу печати.");
+        Process process;
+        try
+        {
+            process = Process.Start(start) ??
+                throw new IOException("Не удалось запустить локальную службу печати.");
+        }
+        catch (Win32Exception) when (isPrintJob)
+        {
+            throw new PrintSubmissionException(PrintSpoolFailurePolicy.UnavailableBeforeSubmit());
+        }
+        using (process)
+        {
         try
         {
             var stdOut = process.StandardOutput.ReadToEndAsync(timeout.Token);
@@ -205,17 +216,30 @@ internal static class LocalPrintBroker
             string output = await stdOut;
             _ = await stdErr; // Never surface arbitrary driver stderr/paths to end-user.
             if (process.ExitCode != 0)
-                throw new IOException("Служба печати отклонила задание либо недоступна.");
+            {
+                if (isPrintJob)
+                    throw new PrintSubmissionException(argv[0] == "print"
+                        ? PrintSpoolFailurePolicy.FromWindowsWorker(process.ExitCode)
+                        : PrintSpoolFailurePolicy.FromCupsFailure());
+                throw new IOException("Локальная служба печати отклонила запрос.");
+            }
             if (output.Length > 65536)
                 throw new InvalidDataException("Некорректный ответ службы печати.");
             return output;
         }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested && isPrintJob)
+        {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+            catch (Win32Exception) { }
+            throw new PrintSubmissionException(PrintSpoolFailurePolicy.TimedOut());
+        }
         catch
         {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+            catch (Win32Exception) { }
             throw;
         }
+        } // dispose OS worker
     }
 
     private sealed record PrintWorkerRequest(string PdfPath, string PrinterName,
