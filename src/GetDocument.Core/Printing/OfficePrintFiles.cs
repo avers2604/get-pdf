@@ -7,13 +7,53 @@ namespace GetDocument.Core.Printing;
 /// </summary>
 public static class OfficePrintFiles
 {
-    public static string ExportFolder =>
-        Path.GetFullPath(Path.Combine(Path.GetTempPath(), "GET-Document-print"));
+    public static string ExportFolder
+    {
+        get
+        {
+            string root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(root))
+                throw new IOException("Каталог текущего пользователя недоступен.");
+            return Path.GetFullPath(Path.Combine(root, "GET-Document", "OfficePrintExports"));
+        }
+    }
 
     public static string NewExportPath()
     {
-        Directory.CreateDirectory(ExportFolder);
-        return Path.Combine(ExportFolder, "office-" + Guid.NewGuid().ToString("N") + ".pdf");
+        string folder = ExportFolder;
+        Directory.CreateDirectory(folder);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(folder,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        DeleteExpiredExports(folder);
+        return Path.Combine(folder, "office-" + Guid.NewGuid().ToString("N") + ".pdf");
+    }
+
+    public static void HardenExport(string path)
+    {
+        if (!IsOwnedExport(path) || !File.Exists(path))
+            throw new InvalidDataException("Недопустимый временный PDF.");
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+    }
+
+    private static void DeleteExpiredExports(string folder)
+    {
+        foreach (string file in Directory.EnumerateFiles(folder, "office-*.pdf",
+                     SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                if (!IsOwnedExport(file)) continue;
+                var info = new FileInfo(file);
+                if ((info.Attributes & FileAttributes.ReparsePoint) != 0 ||
+                    info.LastWriteTimeUtc > DateTime.UtcNow.AddDays(-7))
+                    continue;
+                info.Delete();
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
     public static bool IsOwnedExport(string? path)
