@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="src/GetDocument.Core/GetDocument.Core.csproj" />
   <Project Path="src/GetDocument.Office/GetDocument.Office.csproj" />
+  <Project Path="src/GetDocument.Pdf/GetDocument.Pdf.csproj" />
   <Project Path="src/GetDocument.Images/GetDocument.Images.csproj" />
   <Project Path="src/GetDocument.Revisions/GetDocument.Revisions.csproj" />
   <Project Path="src/GetDocument.Collaboration/GetDocument.Collaboration.csproj" />

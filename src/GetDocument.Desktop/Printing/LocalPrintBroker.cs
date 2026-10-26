@@ -75,6 +75,30 @@ internal static class LocalPrintBroker
         throw new PlatformNotSupportedException();
     }
 
+    /// <summary>The user's default printer (Windows setting / CUPS default), or null.</summary>
+    public static async Task<string?> DefaultPrinterAsync(CancellationToken ct)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows NT\CurrentVersion\Windows");
+                // "HP DeskJet 5000 series,winspool,Ne01:" — the queue name is before the first comma.
+                return key?.GetValue("Device") is string device && device.Length > 0 ? device.Split(',')[0] : null;
+            }
+            if (OperatingSystem.IsLinux())
+            {
+                string output = await RunAsync("lpstat", ["-d"], null, ct);
+                int colon = output.LastIndexOf(':');
+                string name = colon >= 0 ? output[(colon + 1)..].Trim() : "";
+                return ValidQueueName(name) ? name : null;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException or
+                                   System.ComponentModel.Win32Exception or OperationCanceledException) { }
+        return null;
+    }
+
     private static bool ValidQueueName(string? x) =>
         !string.IsNullOrWhiteSpace(x) && x.Length <= 160 &&
         x[0] != '-' && x.All(c => !char.IsControl(c));

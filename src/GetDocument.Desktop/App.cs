@@ -18,6 +18,9 @@ public sealed class App : Application
     {
         // GET DS 4.1 is a light palette: do not follow a dark Windows theme.
         RequestedThemeVariant = ThemeVariant.Light;
+        // PDFsharp core build: stamps and page numbers use Arial from the Windows font folder.
+        if (OperatingSystem.IsWindows())
+            PdfSharp.Fonts.GlobalFontSettings.UseWindowsFontsUnderWindows = true;
         Styles.Add(new FluentTheme());
         Styles.Add(new StyleInclude(new Uri("avares://GetDocument.Desktop/"))
         {

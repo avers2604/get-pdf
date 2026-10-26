@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>GetDocument.Desktop</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
@@ -22,5 +23,6 @@
     <ProjectReference Include="../GetDocument.Office/GetDocument.Office.csproj" />
     <ProjectReference Include="../GetDocument.Images/GetDocument.Images.csproj" />
     <ProjectReference Include="../GetDocument.Revisions/GetDocument.Revisions.csproj" />
+    <ProjectReference Include="../GetDocument.Pdf/GetDocument.Pdf.csproj" />
   </ItemGroup>
 </Project>

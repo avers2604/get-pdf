@@ -44,6 +44,9 @@ public sealed class MainWindow : Window
     private readonly OfficeReturnPolicy _officeReturnPolicy = OfficeReturnPolicy.LoadLocal();
     private TabItem? _officeReturnTab;
     private TabItem? _printTab;
+    private readonly DocumentHistory _history = new();
+    private readonly StackPanel _homeLists = new() { Spacing = 4 };
+    private bool _closeConfirmed;
 
     public MainWindow()
     {
@@ -78,12 +81,23 @@ public sealed class MainWindow : Window
             Content = CreateHome()
         });
         _tabs.ItemsSource = _items;
+        // Screen readers announce the tab caption (the header is a panel with a close button).
+        _items.CollectionChanged += (_, e) =>
+        {
+            foreach (var tab in e.NewItems?.OfType<TabItem>() ?? [])
+                if (tab.Header is StackPanel { Children: [TextBlock caption, ..] })
+                    Avalonia.Automation.AutomationProperties.SetName(tab, caption.Text);
+        };
         _tabs.SelectedIndex = 0;
         _tabs.SelectionChanged += (_, _) =>
         {
             if (_tabs.SelectedItem is TabItem tab && tab.Tag is Guid id)
                 _workspace.Select(id);
+            if (_tabs.SelectedIndex == 0) RefreshHome();
         };
+        try { _history.ImportFromGetPdfOnce(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        RefreshHome();
         root.Children.Add(_tabs);
         Content = root;
         KeyDown += OnKeyDown;
@@ -99,16 +113,164 @@ public sealed class MainWindow : Window
             foreach (var editTab in _collaborationTabs.Values)
                 if (editTab.Content is IDisposable editor) editor.Dispose();
         };
-        Closing += (_, args) =>
+        Closing += async (_, args) =>
         {
-            if (_views.Values.Any(t => t.Content is SimpleDocxEditorPane { HasUnsavedChanges: true } or
-                SimpleXlsxEditPane { HasUnsavedChanges: true } or
-                ImagePreviewPane { HasUnsavedChanges: true }))
+            if (_closeConfirmed) return;
+            var unsaved = _views.Values.Where(t => HasUnsaved(t.Content)).ToList();
+            if (unsaved.Count == 0) return;
+            args.Cancel = true;
+            string names = string.Join(", ", unsaved.Select(t => (t.Header as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault()?.Text ?? "документ").Take(4));
+            if (await GetDialogs.ConfirmAsync(this, "Закрыть без сохранения?",
+                    $"Есть несохранённые изменения: {names}. Если закрыть программу, они пропадут. Исходные файлы не изменены.",
+                    "Закрыть без сохранения", "Вернуться"))
             {
-                args.Cancel = true;
-                _status.Text = "Есть несохранённые правки документа. Сохраните новую редакцию или отмените изменения.";
+                _closeConfirmed = true;
+                Close();
             }
         };
+    }
+
+    private static bool HasUnsaved(object? content) => content is SimpleDocxEditorPane { HasUnsavedChanges: true } or
+        SimpleXlsxEditPane { HasUnsavedChanges: true } or ImagePreviewPane { HasUnsavedChanges: true } or
+        GetDocument.Desktop.Pdf.PdfWorkspacePane { HasUnsavedChanges: true };
+
+    /// <summary>Favourites and recent documents on the home screen (all formats).</summary>
+    private void RefreshHome()
+    {
+        _homeLists.Children.Clear();
+        IReadOnlyList<string> favorites;
+        IReadOnlyList<RecentDocument> recent;
+        try { favorites = _history.Favorites(); recent = _history.Recent(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; }
+        var favoriteSet = new HashSet<string>(favorites, StringComparer.OrdinalIgnoreCase);
+        if (favorites.Count > 0)
+        {
+            _homeLists.Children.Add(Section("Избранное"));
+            foreach (string path in favorites) _homeLists.Children.Add(HistoryRow(path, null, true, recentRow: false));
+        }
+        var recentHeader = new DockPanel { Margin = new Thickness(0, 18, 0, 2) };
+        if (recent.Count > 0)
+        {
+            var clear = new Button { Content = "Очистить историю" };
+            clear.Classes.Add("ghost");
+            clear.Click += async (_, _) =>
+            {
+                if (!await GetDialogs.ConfirmAsync(this, "Очистить историю?",
+                        "Список недавних документов будет удалён. Сами файлы и избранное не затрагиваются.", "Очистить")) return;
+                _history.ClearRecent();
+                RefreshHome();
+            };
+            DockPanel.SetDock(clear, Dock.Right);
+            recentHeader.Children.Add(clear);
+        }
+        var title = new TextBlock { Text = "Недавние документы" };
+        title.Classes.Add("section");
+        recentHeader.Children.Add(title);
+        _homeLists.Children.Add(recentHeader);
+        if (recent.Count == 0)
+        {
+            var empty = new TextBlock { Text = "Здесь появятся документы, которые вы открывали." };
+            empty.Classes.Add("hint");
+            _homeLists.Children.Add(empty);
+        }
+        foreach (var item in recent)
+            _homeLists.Children.Add(HistoryRow(item.Path, item.OpenedUtc, favoriteSet.Contains(item.Path), recentRow: true));
+    }
+
+    private Control HistoryRow(string path, DateTime? opened, bool favorite, bool recentRow)
+    {
+        bool exists = File.Exists(path);
+        var kind = GetDocument.Core.DocumentFiles.DocumentFileClassifier.Classify(path).Kind;
+        var icon = kind switch
+        {
+            GetDocument.Core.DocumentFiles.DocumentFileKind.Spreadsheet => Icons.Table,
+            GetDocument.Core.DocumentFiles.DocumentFileKind.Presentation => Icons.Presentation,
+            GetDocument.Core.DocumentFiles.DocumentFileKind.Image => Icons.Square,
+            _ => Icons.FileText
+        };
+        string folder = Path.GetDirectoryName(path) ?? "";
+        string when = opened is { } at ? DescribeOpened(at.ToLocalTime(), DateTime.Now) + " · " : "";
+        var text = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock { Text = Path.GetFileName(path), FontWeight = FontWeight.SemiBold,
+            Foreground = (IBrush)Application.Current!.FindResource("GetNavyBrush")!, TextTrimming = TextTrimming.CharacterEllipsis });
+        var detail = new TextBlock { Text = (exists ? when : "Файл не найден · ") + folder, TextTrimming = TextTrimming.CharacterEllipsis };
+        detail.Classes.Add("hint");
+        text.Children.Add(detail);
+        var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        line.Children.Add(Icons.Create(icon, 22, "GetTealBrush"));
+        line.Children.Add(text);
+        var open = new Button { Content = line, HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 52, Opacity = exists ? 1 : .55 };
+        open.Classes.Add("ghost");
+        Avalonia.Automation.AutomationProperties.SetName(open, exists ? "Открыть " + Path.GetFileName(path) : Path.GetFileName(path) + ": файл не найден");
+        ToolTip.SetTip(open, path);
+        open.Click += async (_, _) =>
+        {
+            if (!File.Exists(path))
+            {
+                if (await GetDialogs.ConfirmAsync(this, "Документ не найден",
+                        "Файл переместили, переименовали или сетевая папка недоступна. Убрать его из списка?", "Убрать"))
+                {
+                    if (recentRow) _history.Forget(path); else _history.ToggleFavorite(path);
+                    RefreshHome();
+                }
+                return;
+            }
+            OpenFromLaunch([path]);
+        };
+        var star = new Button { Content = Icons.Create(Icons.Star, 18), Width = 40, MinHeight = 40, Padding = new Thickness(0) };
+        star.Classes.Add("ghost");
+        if (favorite && star.Content is Viewbox { Child: Canvas { Children: [Avalonia.Controls.Shapes.Path p] } })
+        {
+            p.Fill = new SolidColorBrush(Color.Parse("#FBBA00"));
+            p.Stroke = new SolidColorBrush(Color.Parse("#C98F00"));
+        }
+        string starTip = favorite ? "Убрать из избранного" : "Добавить в избранное";
+        ToolTip.SetTip(star, starTip);
+        Avalonia.Automation.AutomationProperties.SetName(star, starTip);
+        star.Click += (_, _) => { ToggleFavorite(path); RefreshHome(); };
+        var row = new DockPanel();
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+        actions.Children.Add(star);
+        // Favourite rows keep an invisible placeholder so the stars of both lists line up.
+        var remove = new Button { Content = Icons.Create(Icons.X, 16), Width = 40, MinHeight = 40, Padding = new Thickness(0),
+            Opacity = recentRow ? 1 : 0, IsHitTestVisible = recentRow, Focusable = recentRow };
+        remove.Classes.Add("ghost");
+        ToolTip.SetTip(remove, "Убрать из истории (файл не удаляется)");
+        Avalonia.Automation.AutomationProperties.SetName(remove, "Убрать из истории");
+        remove.Click += (_, _) => { _history.Forget(path); RefreshHome(); };
+        actions.Children.Add(remove);
+        DockPanel.SetDock(actions, Dock.Right);
+        row.Children.Add(actions);
+        row.Children.Add(open);
+        return row;
+    }
+
+    internal static string DescribeOpened(DateTime local, DateTime now)
+    {
+        var ru = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
+        if (local.Date == now.Date) return "сегодня, " + local.ToString("HH:mm", ru);
+        if (local.Date == now.Date.AddDays(-1)) return "вчера, " + local.ToString("HH:mm", ru);
+        return local.Year == now.Year ? local.ToString("d MMM, HH:mm", ru) : local.ToString("d MMM yyyy", ru);
+    }
+
+    private bool ToggleFavorite(string path)
+    {
+        try
+        {
+            bool now = _history.ToggleFavorite(path);
+            _status.Text = now ? "Документ добавлен в избранное." : "Документ убран из избранного.";
+            foreach (var tab in _views.Values)
+                if (tab.Content is GetDocument.Desktop.Pdf.PdfWorkspacePane pdf &&
+                    string.Equals(pdf.OriginalPath, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                    pdf.SetFavorite(now);
+            return now;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            _status.Text = ex.Message;
+            return _history.IsFavorite(path);
+        }
     }
 
     private Control BuildHeader()
@@ -257,6 +419,7 @@ public sealed class MainWindow : Window
                 "Когда ИТ-служба подключит сервер, документ из карточки GUP-2 откроется здесь, во вкладке. " +
                 "Сейчас сервер не настроен: правки и права пользователей не имитируются.")));
         content.Children.Add(open);
+        content.Children.Add(_homeLists);
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DropEvent, OnDrop);
         return new ScrollViewer { Content = content };
@@ -321,8 +484,18 @@ public sealed class MainWindow : Window
         {
             Control panel = PreviewFactory.Create(item, SaveDraftAsync, OpenSavedCopyAsync, SaveXlsxRevisionAsync, SetStatus);
 
-            var title = TabHeader(item.Title, () => CloseDocument(item.Id));
+            var title = TabHeader(item.Title, () => _ = CloseDocumentAsync(item.Id));
             view = new TabItem { Tag = item.Id, Header = title, Content = panel };
+            if (item.FilePath is { } opened)
+            {
+                try { _history.Remember(opened); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { }
+                if (panel is GetDocument.Desktop.Pdf.PdfWorkspacePane pdf)
+                {
+                    pdf.SetFavorite(_history.IsFavorite(opened));
+                    pdf.FavoriteToggleRequested += _ => ToggleFavorite(opened);
+                }
+            }
             Avalonia.Automation.AutomationProperties.SetName(view, item.Title);
             _views[item.Id] = view;
             _items.Add(view);
@@ -452,16 +625,20 @@ public sealed class MainWindow : Window
         }
     }
 
+    private async Task CloseDocumentAsync(Guid id)
+    {
+        if (!_views.TryGetValue(id, out var view)) return;
+        if (HasUnsaved(view.Content) &&
+            !await GetDialogs.ConfirmAsync(this, "Закрыть без сохранения?",
+                "В документе есть несохранённые изменения. Если закрыть вкладку, они пропадут. Исходный файл не изменён.",
+                "Закрыть без сохранения", "Вернуться"))
+            return;
+        CloseDocument(id);
+    }
+
     private void CloseDocument(Guid id)
     {
         if (!_views.TryGetValue(id, out var view)) return;
-        if (view.Content is SimpleDocxEditorPane { HasUnsavedChanges: true } or
-            SimpleXlsxEditPane { HasUnsavedChanges: true } or
-            ImagePreviewPane { HasUnsavedChanges: true })
-        {
-            _status.Text = "Есть несохранённые изменения. Сохраните редакцию или отмените правки.";
-            return;
-        }
         _views.Remove(id);
         _workspace.Close(id);
         if (view.Content is IDisposable disposable) disposable.Dispose();
@@ -528,13 +705,19 @@ public sealed class MainWindow : Window
         _tabs.SelectedIndex = 0;
     }
 
-    private void ShowPrintWizard()
+    private async void ShowPrintWizard()
     {
         if (_tabs.SelectedItem is TabItem { Tag: Guid id })
         {
             var document = _workspace.Tabs.FirstOrDefault(x => x.Id == id);
             string? printable = null;
-            if (document?.FilePath is { } path &&
+            if (_views.TryGetValue(id, out var pdfTab) && pdfTab.Content is GetDocument.Desktop.Pdf.PdfWorkspacePane pdf)
+            {
+                // Prints what is on screen: unsaved stamps, numbers and page edits included.
+                printable = await pdf.PreparePrintableAsync();
+                if (printable is null) return;
+            }
+            else if (document?.FilePath is { } path &&
                 string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
                 printable = path;
             else if (_views.TryGetValue(id, out var officeTab) && officeTab.Content is OfficeDocumentPane office)
@@ -790,7 +973,7 @@ public sealed class MainWindow : Window
 
     private async void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (_tabs.SelectedItem is TabItem { Content: PdfPreviewPane activePdf })
+        if (_tabs.SelectedItem is TabItem { Content: GetDocument.Desktop.Pdf.PdfWorkspacePane activePdf })
         {
             if (e.Key == Key.F3)
             {
@@ -829,7 +1012,7 @@ public sealed class MainWindow : Window
         if ((e.KeyModifiers & KeyModifiers.Control) == 0) return;
         if (e.Key == Key.O) { e.Handled = true; await OpenFilesAsync(); }
         else if (e.Key == Key.P) { e.Handled = true; ShowPrintWizard(); }
-        else if (e.Key == Key.G && _tabs.SelectedItem is TabItem { Content: PdfPreviewPane pdf })
+        else if (e.Key == Key.G && _tabs.SelectedItem is TabItem { Content: GetDocument.Desktop.Pdf.PdfWorkspacePane pdf })
         { e.Handled = true; pdf.FocusPageNumber(); }
         else if (e.Key == Key.T)
         {
@@ -837,7 +1020,7 @@ public sealed class MainWindow : Window
             AddDocument(_workspace.CreateDraft(WorkspaceDocumentKind.Text));
         }
         else if (e.Key == Key.W && _tabs.SelectedItem is TabItem { Tag: Guid id })
-        { e.Handled = true; CloseDocument(id); }
+        { e.Handled = true; await CloseDocumentAsync(id); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _filesTab))
         { e.Handled = true; CloseGetFiles(); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _templatesTab))

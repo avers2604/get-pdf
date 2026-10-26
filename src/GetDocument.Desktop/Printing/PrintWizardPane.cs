@@ -35,9 +35,9 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     private readonly Image _preview = new() { Width = 235, Height = 325,
         Stretch = Stretch.Uniform };
     private readonly StackPanel _stage = new() { Spacing = 14 };
-    private readonly Button _back = new() { Content = "Назад" };
-    private readonly Button _next = new() { Content = "Далее", IsEnabled = false };
-    private readonly Button _cancel = new() { Content = "Закрыть" };
+    private readonly Button _back = new() { Content = "Назад", Classes = { "ghost" } };
+    private readonly Button _next = new() { Content = "Далее", IsEnabled = false, Classes = { "primary" } };
+    private readonly Button _cancel = new() { Content = "Закрыть", Classes = { "ghost" } };
     private Bitmap? _bitmap;
     private int _pageCount;
     private int _step = 1;
@@ -104,6 +104,9 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
 
     private static StackPanel Labeled(string text, Control input)
     {
+        // The step is rebuilt on every change while the inputs are reused: detach an input from
+        // the previous step's panel first (Avalonia refuses a control with two visual parents).
+        if (input.Parent is Panel previous) previous.Children.Remove(input);
         var result = new StackPanel { Spacing = 5 };
         result.Children.Add(new TextBlock { Text = text, FontWeight = FontWeight.SemiBold });
         result.Children.Add(input);
@@ -248,10 +251,13 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             RenderStage();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
-        catch (Exception)
+        catch (Exception ex)
         {
             if (!_disposed)
-                _status.Text = "Не удалось открыть PDF для печати. Файл может быть защищён или повреждён.";
+            {
+                _status.Text = "Не удалось открыть PDF для печати. Файл может быть защищён или повреждён. (" + ex.Message + ")";
+                _previewStatus.Text = "Предпросмотр недоступен.";
+            }
         }
     }
 
@@ -264,7 +270,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         {
             var printers = await LocalPrintBroker.PrintersAsync(_lifetime.Token);
             if (_disposed) return;
-            string? selected = _printer.SelectedItem as string;
+            string? selected = _printer.SelectedItem as string ?? await LocalPrintBroker.DefaultPrinterAsync(_lifetime.Token);
             _printer.ItemsSource = printers;
             _printer.SelectedItem = selected is not null && printers.Contains(selected)
                 ? selected : printers.FirstOrDefault();
@@ -274,11 +280,11 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             RenderStage();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
-        catch (Exception)
+        catch (Exception ex)
         {
             if (!_disposed)
             {
-                _status.Text = "Служба печати недоступна или не установлен компонент Windows/CUPS.";
+                _status.Text = "Служба печати недоступна или не установлен компонент Windows/CUPS. (" + ex.Message + ")";
                 RenderStage();
             }
         }

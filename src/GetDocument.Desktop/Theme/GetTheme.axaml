@@ -124,6 +124,15 @@
   <Style Selector="Button.toolbar">
     <Setter Property="MinHeight" Value="44"/>
   </Style>
+  <!-- Toggle commands (text selection, editor panel, draw modes, favourite) in the DS selected state. -->
+  <Style Selector="Button.active">
+    <Setter Property="Background" Value="{StaticResource GetAccentSoftBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GetTealBrush}"/>
+  </Style>
+  <Style Selector="Button.active:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="#D2EDF3"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GetTealBrush}"/>
+  </Style>
   <Style Selector="Button.danger">
     <Setter Property="Foreground" Value="{StaticResource GetRedBrush}"/>
   </Style>

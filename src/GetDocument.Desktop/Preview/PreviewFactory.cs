@@ -41,7 +41,15 @@ internal static class PreviewFactory
             Path.GetExtension(item.FilePath).Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
             return new SimpleXlsxEditPane(item, saveXlsxRevision);
         if (item.Kind == WorkspaceDocumentKind.Pdf)
-            return new PdfPreviewPane(item.FilePath);
+        {
+            try { return new GetDocument.Desktop.Pdf.PdfWorkspacePane(item.FilePath, status, openSavedCopy, isFavorite: false); }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or
+                                       InvalidOperationException or UnauthorizedAccessException)
+            {
+                return Message(item.Title, "PDF не удалось открыть: " + ex.Message +
+                    " Файл может быть повреждён, защищён паролем или превышать лимит 128 МБ / 1000 страниц.");
+            }
+        }
         if (item.Kind == WorkspaceDocumentKind.Image)
             return new ImagePreviewPane(item.FilePath, openSavedCopy);
         if (Path.GetExtension(item.FilePath) is ".txt" or ".md" or ".csv" or ".TXT" or ".MD" or ".CSV")
