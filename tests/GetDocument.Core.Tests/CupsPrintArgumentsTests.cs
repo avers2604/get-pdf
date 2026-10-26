@@ -36,6 +36,18 @@ public sealed class CupsPrintArgumentsTests
     }
 
     [TestMethod]
+    public void NUpForAllPagesNeverSendsCupsOutputPageRange()
+    {
+        var plan = PrintJobPlan.Create("GET_HP", 12, "", 1,
+            PrintDuplex.LongEdge, PrintPaper.A4,
+            pagesPerSheet: PrintPagesPerSheet.Four);
+        var args = CupsPrintArguments.Create(plan, Absolute("/tmp/test.pdf")).ToArray();
+        CollectionAssert.Contains(args, "number-up=4");
+        CollectionAssert.DoesNotContain(args, "-P");
+        CollectionAssert.DoesNotContain(args, "1-12");
+    }
+
+    [TestMethod]
     public void NonPdfOrRelativePathsAreRejected()
     {
         var plan = PrintJobPlan.Create("Printer", 1, "", 1,

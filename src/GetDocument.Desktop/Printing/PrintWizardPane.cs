@@ -68,10 +68,15 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     private readonly TextBlock _previewStatus = new() { Text = "Загрузка предпросмотра…" };
     private readonly Grid _sheetPreview = new() { Width = 235, Height = 325 };
     private readonly StackPanel _stage = new() { Spacing = 14 };
+    private readonly Button _previousSheet = new() { Content = "‹", Classes = { "ghost" } };
+    private readonly Button _nextSheet = new() { Content = "›", Classes = { "ghost" } };
+    private readonly TextBlock _sheetLabel = new() { Text = "Лист 1", VerticalAlignment = VerticalAlignment.Center };
     private readonly Button _back = new() { Content = "Назад", Classes = { "ghost" } };
     private readonly Button _next = new() { Content = "Далее", IsEnabled = false, Classes = { "primary" } };
     private readonly Button _cancel = new() { Content = "Закрыть", Classes = { "ghost" } };
-    private readonly List<Bitmap> _previewPages = [];
+    private readonly Dictionary<int, Bitmap> _previewPages = [];
+    private int _sheetIndex;
+    private CancellationTokenSource? _sheetLoad;
     private int _pageCount;
     private int _step = 1;
     private bool _busy;
@@ -97,6 +102,8 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         StyleButton(_back);
         StyleButton(_next, primary: true);
         StyleButton(_cancel);
+        StyleButton(_previousSheet);
+        StyleButton(_nextSheet);
         _stepTitle.Foreground = Palette("#24305E");
         _summary.Foreground = Palette("#141A33");
         _status.Foreground = Palette("#565C7B");
@@ -135,7 +142,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             Child = left
         };
 
-        var side = new StackPanel { Spacing = 10, Width = 270 };
+        var side = new StackPanel { Spacing = 10, Width = 345 };
         side.Children.Add(new TextBlock { Text = "Предпросмотр размещения на листе",
             FontWeight = FontWeight.SemiBold });
         side.Children.Add(new Border
@@ -147,6 +154,11 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             CornerRadius = new CornerRadius(10),
             Child = _sheetPreview
         });
+        var sheetNav = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+        sheetNav.Children.Add(_previousSheet);
+        sheetNav.Children.Add(_sheetLabel);
+        sheetNav.Children.Add(_nextSheet);
+        side.Children.Add(sheetNav);
         side.Children.Add(_previewStatus);
         side.Children.Add(new TextBlock
         {
@@ -179,7 +191,10 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         _printer.SelectionChanged += async (_, _) => await LoadTraysAsync();
         _paper.SelectionChanged += (_, _) => RenderSheetPreview();
         _orientation.SelectionChanged += (_, _) => RenderSheetPreview();
-        _nup.SelectionChanged += (_, _) => RenderSheetPreview();
+        _nup.SelectionChanged += (_, _) => { _sheetIndex = 0; RenderSheetPreview(); };
+        _pages.TextChanged += (_, _) => { _sheetIndex = 0; RenderSheetPreview(); };
+        _previousSheet.Click += (_, _) => { if (_sheetIndex > 0) { _sheetIndex--; RenderSheetPreview(); } };
+        _nextSheet.Click += (_, _) => { _sheetIndex++; RenderSheetPreview(); };
         _cancel.Click += (_, _) => _closeTab();
 
         RenderStage();
@@ -253,6 +268,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
                     $"Ориентация: {plan.Orientation}; цвет: {plan.Color}\n" +
                     $"На листе: {(int)plan.PagesPerSheet}; печатных сторон: {plan.SheetSidesToPrint}\n" +
                     $"Лоток: {plan.Tray?.Label ?? "Устройство по умолчанию"}\n" +
+                    $"Ориентировочно физических листов: {plan.EstimatedPhysicalSheets}\n" +
                     "Проверьте бумагу, права и готовность принтера перед отправкой.";
         }
     }
@@ -345,7 +361,9 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
 
     private void RenderSheetPreview()
     {
-        if (_disposed || _pageCount == 0 || _previewPages.Count == 0) return;
+        if (_disposed || _pageCount == 0) return;
+        _sheetLoad?.Cancel();
+
         PrintPagesPerSheet count = _nup.SelectedIndex switch
         {
             1 => PrintPagesPerSheet.Two,
@@ -353,7 +371,31 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             _ => PrintPagesPerSheet.One
         };
         var orientation = (PrintOrientation)Math.Max(0, _orientation.SelectedIndex);
-        PrintSheetPreviewLayout layout = PrintSheetPreviewPlan.Create(_pageCount, count, orientation);
+        PrintSheetPreviewLayout layout;
+        try
+        {
+            // Same PrintJobPlan policy and page-range grammar as actual spool.
+            // Page order and 2/4-up restrictions must never diverge.
+            var selection = PrintJobPlan.Create(
+                _printer.SelectedItem as string ?? "Предпросмотр",
+                _pageCount, _pages.Text, 1, PrintDuplex.OneSided, PrintPaper.A4,
+                orientation, PrintColorMode.PrinterDefault, count);
+            int pagesPerSheet = (int)count;
+            int total = (selection.Pages.Count + pagesPerSheet - 1) / pagesPerSheet;
+            _sheetIndex = Math.Clamp(_sheetIndex, 0, total - 1);
+            layout = PrintSheetPreviewPlan.Create(
+                _pageCount, selection.Pages, count, orientation, _sheetIndex);
+        }
+        catch (ArgumentException)
+        {
+            _sheetPreview.Children.Clear();
+            _sheetLabel.Text = "Диапазон не определён";
+            _previousSheet.IsEnabled = false;
+            _nextSheet.IsEnabled = false;
+            _previewStatus.Text = "Уточните диапазон страниц. Предыдущий макет скрыт.";
+            return;
+        }
+
         bool landscape = orientation == PrintOrientation.Landscape;
         _sheetPreview.Width = landscape ? 325 : 235;
         _sheetPreview.Height = landscape ? 235 : 325;
@@ -365,8 +407,14 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         for (int i = 0; i < layout.Columns; i++)
             _sheetPreview.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
 
+        _sheetLabel.Text = $"Лист {layout.SheetIndex + 1} из {layout.TotalSheets}";
+        _previousSheet.IsEnabled = layout.SheetIndex > 0;
+        _nextSheet.IsEnabled = layout.SheetIndex < layout.TotalSheets - 1;
+        _previewStatus.Text = "Показаны выбранные страницы PDF. Поля и компоновка принтера могут отличаться.";
+
         int cellHeight = (landscape ? 235 : 325) / layout.Rows;
         int cellWidth = (landscape ? 325 : 235) / layout.Columns;
+        var missing = new List<int>();
         for (int index = 0; index < layout.PageNumbers.Count; index++)
         {
             int page = layout.PageNumbers[index];
@@ -376,13 +424,24 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
                 Text = $"Стр. {page}", FontSize = 11,
                 HorizontalAlignment = HorizontalAlignment.Center
             });
-            inner.Children.Add(new Image
+            if (_previewPages.TryGetValue(page, out var thumbnail))
             {
-                Source = _previewPages[page - 1],
-                Stretch = Stretch.Uniform,
-                MaxWidth = Math.Max(50, cellWidth - 22),
-                MaxHeight = Math.Max(45, cellHeight - 33)
-            });
+                inner.Children.Add(new Image
+                {
+                    Source = thumbnail, Stretch = Stretch.Uniform,
+                    MaxWidth = Math.Max(50, cellWidth - 22),
+                    MaxHeight = Math.Max(45, cellHeight - 33)
+                });
+            }
+            else
+            {
+                missing.Add(page);
+                inner.Children.Add(new TextBlock
+                {
+                    Text = "Загрузка страницы…", TextWrapping = TextWrapping.Wrap,
+                    FontSize = 11
+                });
+            }
             var tile = new Border
             {
                 Margin = new Thickness(3), Padding = new Thickness(4),
@@ -393,6 +452,81 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             Grid.SetColumn(tile, index % layout.Columns);
             _sheetPreview.Children.Add(tile);
         }
+        // Keep the initial 1..4 thumbnails and only the currently visible sheet.
+        // Paging through a 1,000-page PDF must not accumulate 1,000 bitmaps.
+        var keep = new HashSet<int>(layout.PageNumbers);
+        foreach (int page in _previewPages.Keys.ToArray())
+        {
+            if (page <= 4 || keep.Contains(page)) continue;
+            if (_previewPages.Remove(page, out var old)) old.Dispose();
+        }
+        if (missing.Count > 0) _ = FetchPageThumbnailsAsync(missing);
+    }
+
+    private async Task FetchPageThumbnailsAsync(IReadOnlyList<int> numbers)
+    {
+        var request = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _sheetLoad = request;
+        try
+        {
+            // A short delay avoids re-rendering PDF for every intermediate
+            // keystroke while an operator is editing the page-range field.
+            await Task.Delay(180, request.Token);
+            var images = await Task.Run(
+                () => RenderSelectedPages(_pdfPath, _pageCount, numbers, request.Token),
+                request.Token);
+            if (_disposed || request.IsCancellationRequested) return;
+            foreach (var (page, data) in images)
+            {
+                if (_previewPages.ContainsKey(page)) continue;
+                using var bytes = new MemoryStream(data, writable: false);
+                _previewPages[page] = new Bitmap(bytes);
+            }
+            RenderSheetPreview();
+        }
+        catch (OperationCanceledException) when (request.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            if (!_disposed && !request.IsCancellationRequested)
+                _previewStatus.Text = "Миниатюры выбранных страниц недоступны. Печать требует проверки PDF.";
+        }
+        finally
+        {
+            if (ReferenceEquals(_sheetLoad, request)) _sheetLoad = null;
+            request.Dispose();
+        }
+    }
+
+    private static IReadOnlyList<(int Page, byte[] Data)> RenderSelectedPages(
+        string path, int pageCount, IReadOnlyList<int> numbers, CancellationToken token)
+    {
+        PdfNativeGate.Instance.Wait(token);
+        try
+        {
+            using var source = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.Read, 65536, FileOptions.SequentialScan);
+            PdfPreviewPlan.ValidateInputLength(source.Length);
+            int actualCount = Conversion.GetPageCount(source, leaveOpen: true);
+            if (actualCount != pageCount)
+                throw new InvalidDataException("Число страниц PDF изменилось после открытия.");
+            var thumbnails = new List<(int Page, byte[] Data)>(numbers.Count);
+            foreach (int page in numbers)
+            {
+                token.ThrowIfCancellationRequested();
+                PdfPreviewPlan.ValidatePage(page - 1, actualCount);
+                source.Position = 0;
+                var size = Conversion.GetPageSize(source, page: page - 1, leaveOpen: true);
+                var raster = PdfPreviewPlan.GetRasterSize(size.Width, size.Height, 480);
+                source.Position = 0;
+                using var output = new MemoryStream();
+                Conversion.SavePng(output, source, page: page - 1, leaveOpen: true,
+                    options: new PDFtoImage.RenderOptions(Width: raster.Width, Height: raster.Height,
+                        WithAnnotations: true, WithFormFill: true));
+                thumbnails.Add((page, output.ToArray()));
+            }
+            return thumbnails;
+        }
+        finally { PdfNativeGate.Instance.Release(); }
     }
 
     private async Task InitializeAsync()
@@ -405,12 +539,12 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
                 _pdfPath, _lifetime.Token), _lifetime.Token);
             if (_disposed) return;
             _pageCount = info.Pages;
-            foreach (byte[] bytes in info.PreviewPngs)
+            for (int i = 0; i < info.PreviewPngs.Count; i++)
             {
-                using var buffer = new MemoryStream(bytes, writable: false);
-                _previewPages.Add(new Bitmap(buffer));
+                using var buffer = new MemoryStream(info.PreviewPngs[i], writable: false);
+                _previewPages.Add(i + 1, new Bitmap(buffer));
             }
-            _previewStatus.Text = $"Страниц в PDF: {_pageCount}. Макет первых страниц.";
+            _previewStatus.Text = $"Всего страниц PDF: {_pageCount}.";
             RenderSheetPreview();
             RenderStage();
         }
@@ -531,8 +665,9 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         if (_disposed) return;
         _disposed = true;
         _lifetime.Cancel();
+        _sheetLoad?.Cancel();
         _sheetPreview.Children.Clear();
-        foreach (Bitmap image in _previewPages) image.Dispose();
+        foreach (Bitmap image in _previewPages.Values) image.Dispose();
         _previewPages.Clear();
         // Active worker cancellation is cooperative; job may already be in spool.
     }

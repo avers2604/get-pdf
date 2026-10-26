@@ -40,6 +40,17 @@ public sealed class PrintJobPlan
     public PrintPagesPerSheet PagesPerSheet { get; }
     public PrintTrayOption? Tray { get; }
     public int SheetSidesToPrint => checked(((Pages.Count + (int)PagesPerSheet - 1) / (int)PagesPerSheet) * Copies);
+    /// <summary>Estimate only: printer may insert blank sides or covers.</summary>
+    public int EstimatedPhysicalSheets
+    {
+        get
+        {
+            int sidesPerCopy = (Pages.Count + (int)PagesPerSheet - 1) / (int)PagesPerSheet;
+            int sheetsPerCopy = Duplex == PrintDuplex.OneSided
+                ? sidesPerCopy : (sidesPerCopy + 1) / 2;
+            return checked(sheetsPerCopy * Copies);
+        }
+    }
     public int PageCountToPrint => checked(Pages.Count * Copies);
 
     public static PrintJobPlan Create(

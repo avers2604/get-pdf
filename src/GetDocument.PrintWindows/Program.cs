@@ -146,7 +146,15 @@ internal static class Program
             double height = plan.Paper == PrintPaper.A3 ? 1587.40 : 1122.52;
             if (plan.Orientation == PrintOrientation.Landscape)
                 (width, height) = (height, width);
-            var paginator = new PdfRasterPaginator(source, plan.Pages, new Size(width, height));
+            // Use the driver's print-ticket-specific imageable area when available.
+            // The previous fixed 18-DIP inset could cut off text on some MFPs.
+            var sheetSize = new Size(width, height);
+            var deviceBounds = queue.GetPrintCapabilities(ticket).PageImageableArea;
+            var area = PrintImageableArea.Choose(width, height,
+                deviceBounds?.OriginWidth, deviceBounds?.OriginHeight,
+                deviceBounds?.ExtentWidth, deviceBounds?.ExtentHeight);
+            var printable = new Rect(area.X, area.Y, area.Width, area.Height);
+            var paginator = new PdfRasterPaginator(source, plan.Pages, sheetSize, printable);
             XpsDocumentWriter writer = PrintQueue.CreateXpsDocumentWriter(queue);
             writer.Write(paginator, ticket);
             Console.Write("submitted");
@@ -170,12 +178,15 @@ internal static class Program
         private readonly Stream _source;
         private readonly IReadOnlyList<int> _pages;
         private Size _pageSize;
+        private readonly Rect _printableArea;
 
-        public PdfRasterPaginator(Stream source, IReadOnlyList<int> pages, Size pageSize)
+        public PdfRasterPaginator(Stream source, IReadOnlyList<int> pages, Size pageSize,
+            Rect printableArea)
         {
             _source = source;
             _pages = pages;
             _pageSize = pageSize;
+            _printableArea = printableArea;
         }
 
         public override bool IsPageCountValid => true;
@@ -205,10 +216,9 @@ internal static class Program
             bitmap.EndInit();
             bitmap.Freeze();
 
-            const double margin = 18; // WPF DIP, reserved for physical print margins.
             var surface = new FixedPage { Width = _pageSize.Width, Height = _pageSize.Height };
-            double areaWidth = Math.Max(1, _pageSize.Width - margin * 2);
-            double areaHeight = Math.Max(1, _pageSize.Height - margin * 2);
+            double areaWidth = _printableArea.Width;
+            double areaHeight = _printableArea.Height;
             // A landscape page on portrait paper (or vice versa) is turned 90° to fill the
             // sheet instead of printing shrunk to a strip.
             bool rotate = PdfPrintRasterPlan.ShouldRotate(
@@ -221,14 +231,22 @@ internal static class Program
                 Stretch = Stretch.Uniform,
                 LayoutTransform = rotate ? new RotateTransform(90) : Transform.Identity
             };
-            FixedPage.SetLeft(image, margin);
-            FixedPage.SetTop(image, margin);
-            surface.Children.Add(image);
+            // The printable region is supplied by the actual selected driver.
+            // A clip container prevents transformed bitmap overflow into hard margins.
+            var printSlot = new Grid
+            {
+                Width = areaWidth, Height = areaHeight,
+                ClipToBounds = true
+            };
+            printSlot.Children.Add(image);
+            FixedPage.SetLeft(printSlot, _printableArea.X);
+            FixedPage.SetTop(printSlot, _printableArea.Y);
+            surface.Children.Add(printSlot);
             surface.Measure(_pageSize);
             surface.Arrange(new Rect(_pageSize));
             surface.UpdateLayout();
             return new DocumentPage(surface, _pageSize,
-                new Rect(_pageSize), new Rect(_pageSize));
+                new Rect(_pageSize), _printableArea);
         }
     }
 }
