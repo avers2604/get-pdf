@@ -54,6 +54,36 @@ public sealed record EuroOfficeLaunchPageResult(
     string Html, string ContentSecurityPolicy);
 
 /// <summary>
+/// Shared launch authorization gate, separate from transport-specific HTTP.
+/// One-time consumption and employee/document binding belong to the
+/// enterprise implementation of ITrustedEuroOfficeLaunchStore.
+/// </summary>
+public static class EuroOfficeLaunchResolver
+{
+    public static async ValueTask<EuroOfficeLaunchPageResult?> ResolveAsync(
+        string? launchId,
+        ClaimsPrincipal? user,
+        ITrustedEuroOfficeLaunchStore store,
+        Uri trustedOfficeOrigin,
+        byte[] signingKey,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (user?.Identity?.IsAuthenticated != true ||
+            !EuroOfficeLaunchId.IsValid(launchId))
+            return null;
+
+        var authorized = await store.ConsumeOnceAsync(
+            launchId!, user, cancellationToken);
+        return authorized is null
+            ? null
+            : EuroOfficeLaunchPage.Render(
+                authorized, trustedOfficeOrigin, signingKey, now);
+    }
+}
+
+/// <summary>
 /// Browser bootstrap for a trusted Euro-Office Document Server. No arbitrary
 /// HTML/JS is accepted from user input. The JWT is held in the editor config
 /// body, NEVER appended to the launch URL or logged by the host.
