@@ -11,7 +11,8 @@ namespace GetDocument.Core.Printing;
 public sealed class PrintJobPlan
 {
     private PrintJobPlan(string printerName, int sourcePageCount, IReadOnlyList<int> pages,
-        int copies, PrintDuplex duplex, PrintPaper paper, string range)
+        int copies, PrintDuplex duplex, PrintPaper paper, string range,
+        PrintOrientation orientation, PrintColorMode color, PrintPagesPerSheet pagesPerSheet)
     {
         PrinterName = printerName;
         SourcePageCount = sourcePageCount;
@@ -20,6 +21,9 @@ public sealed class PrintJobPlan
         Duplex = duplex;
         Paper = paper;
         CupsPageRange = range;
+        Orientation = orientation;
+        Color = color;
+        PagesPerSheet = pagesPerSheet;
     }
 
     public string PrinterName { get; }
@@ -29,11 +33,18 @@ public sealed class PrintJobPlan
     public PrintDuplex Duplex { get; }
     public PrintPaper Paper { get; }
     public string CupsPageRange { get; }
+    public PrintOrientation Orientation { get; }
+    public PrintColorMode Color { get; }
+    public PrintPagesPerSheet PagesPerSheet { get; }
+    public int SheetSidesToPrint => checked(((Pages.Count + (int)PagesPerSheet - 1) / (int)PagesPerSheet) * Copies);
     public int PageCountToPrint => checked(Pages.Count * Copies);
 
     public static PrintJobPlan Create(
         string printerName, int sourcePageCount, string? pageRange, int copies,
-        PrintDuplex duplex, PrintPaper paper)
+        PrintDuplex duplex, PrintPaper paper,
+        PrintOrientation orientation = PrintOrientation.Automatic,
+        PrintColorMode color = PrintColorMode.PrinterDefault,
+        PrintPagesPerSheet pagesPerSheet = PrintPagesPerSheet.One)
     {
         if (string.IsNullOrWhiteSpace(printerName) || printerName.Length > 160 ||
             printerName[0] == '-' || printerName.Any(c => char.IsControl(c)))
@@ -43,7 +54,9 @@ public sealed class PrintJobPlan
                 nameof(sourcePageCount));
         if (copies is < 1 or > 99)
             throw new ArgumentOutOfRangeException(nameof(copies), "Разрешено от 1 до 99 копий.");
-        if (!Enum.IsDefined(duplex) || !Enum.IsDefined(paper))
+        if (!Enum.IsDefined(duplex) || !Enum.IsDefined(paper) ||
+            !Enum.IsDefined(orientation) || !Enum.IsDefined(color) ||
+            !Enum.IsDefined(pagesPerSheet))
             throw new ArgumentException("Неизвестная настройка печати.");
 
         string source = pageRange?.Trim() ?? "";
@@ -85,6 +98,10 @@ public sealed class PrintJobPlan
         }
 
         var chosen = pages.ToArray();
+        if (pagesPerSheet != PrintPagesPerSheet.One && chosen.Length != sourcePageCount)
+            throw new ArgumentException(
+                "Для 2/4 страниц на листе выберите все страницы: CUPS может считать диапазон по физическим листам.",
+                nameof(pageRange));
         if (chosen.Length == 0) throw new ArgumentException("Нет страниц для печати.");
         var compact = new StringBuilder();
         int i = 0;
@@ -104,9 +121,14 @@ public sealed class PrintJobPlan
             i++;
         }
         return new PrintJobPlan(printerName, sourcePageCount,
-            Array.AsReadOnly(chosen), copies, duplex, paper, compact.ToString());
+            Array.AsReadOnly(chosen), copies, duplex, paper, compact.ToString(),
+            orientation, color, pagesPerSheet);
     }
 }
 
 public enum PrintDuplex { OneSided = 0, LongEdge = 1, ShortEdge = 2 }
 public enum PrintPaper { A4 = 0, A3 = 1 }
+
+public enum PrintOrientation { Automatic = 0, Portrait = 1, Landscape = 2 }
+public enum PrintColorMode { PrinterDefault = 0, Color = 1, Monochrome = 2 }
+public enum PrintPagesPerSheet { One = 1, Two = 2, Four = 4 }
