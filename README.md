@@ -172,4 +172,12 @@ pwsh -File scripts/verify-get-document-release-windows.ps1 -OfflineNuGetFeed 'D:
 
 **Ещё не пройдено:** сборка и MSTest в этой среде (нет .NET 10 SDK), реальные Windows/Astra Linux МФУ и серверный Euro-Office. PR остаётся Draft.
 
+## GD-26 — самопроверка релизного контроля и строгая проверка TRX (26.10.2026)
+
+Релизный модуль `GetDocument.ReleaseGate` теперь сам проверяет себя через `--self-test` на искусственных корректных и вредоносных TRX-отчётах. Он блокирует ложные имена тестов, непрошедшие дубликаты обязательных сценариев, несовпадающие счётчики, ошибки `ResultSummary`, повреждённый XML и внешние XML-сущности. Итоговый JSON-отчёт записывается атомарно.
+
+Основные Windows/Linux скрипты приведены к синтаксису **.NET 10 Microsoft.Testing.Platform**: `dotnet test --project ...`. Самопроверка запускается до чтения реальных отчётов в строгих релизных сценариях GD-25.
+
+[GD-26 — технический разбор и порядок приёмки](docs/GET_DOCUMENT_GD26_RELEASE_GATE_SELFTEST_2026-10-26.md). **Новая версия ещё не собрана и её C# self-test не запускался в этом окружении** — нужен локальный .NET 10 SDK; оборудование Windows/Astra Linux также ожидает испытаний.
+
 План завершения с критериями приёмки: [GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md](docs/GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md). Исходное описание ГЭТ PDF: [LEGACY_GET_PDF_README_2026-10-24.md](docs/LEGACY_GET_PDF_README_2026-10-24.md).
