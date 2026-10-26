@@ -130,7 +130,14 @@ internal static class LocalPrintBroker
                 plan.CupsPageRange, plan.Copies, plan.Duplex, plan.Paper,
                 plan.Orientation, plan.Color, plan.PagesPerSheet, plan.Tray,
                 expectedSha256);
-            await RunAsync(WindowsWorker(), ["print"],
+            string worker;
+            try { worker = WindowsWorker(); }
+            catch (FileNotFoundException)
+            {
+                throw new PrintSubmissionException(
+                    PrintSpoolFailurePolicy.UnavailableBeforeSubmit());
+            }
+            await RunAsync(worker, ["print"],
                 JsonSerializer.Serialize(request), ct);
             return "Задание передано в очередь Windows. Проверьте состояние принтера.";
         }
