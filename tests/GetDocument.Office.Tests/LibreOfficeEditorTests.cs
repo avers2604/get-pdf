@@ -1,4 +1,5 @@
 using GetDocument.Office.LibreOffice;
+using GetDocument.Core.Printing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace GetDocument.Office.Tests;
@@ -66,6 +67,60 @@ public sealed class LibreOfficeEditorTests
             finally { await shared.CloseAsync(); }
         }
         finally { try { Directory.Delete(folder, recursive: true); } catch (IOException) { } }
+    }
+
+    [TestMethod]
+    [Timeout(240_000, CooperativeCancellation = true)]
+    public async Task UnsavedOfficeEditsAreFrozenIntoPdfSnapshotForGetPrintWizard()
+    {
+        if (!LibreOfficeEditor.IsSupported)
+            Assert.Inconclusive("Для интеграции Office → PDF → мастер ГЭТ нужен локальный LibreOffice.");
+        string folder = Path.Combine(Path.GetTempPath(), "gd21-office-print-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string doc = Path.Combine(folder, "Проверка печати.docx");
+            OfficeDocumentFactory.CreateNew(GetDocument.Core.Workspace.WorkspaceDocumentKind.Text, doc);
+            byte[] onDisk = await File.ReadAllBytesAsync(doc);
+            var editor = await LibreOfficeEditor.Shared.OpenAsync(doc);
+            try
+            {
+                await editor.DispatchAsync(".uno:InsertText", new Dictionary<string, object>
+                {
+                    ["Text"] = "Не сохранено: ГЭТ Документ, печать только этой редакции"
+                }, focus: false);
+                for (int attempt = 0; attempt < 50 && !editor.IsModified; attempt++)
+                    await Task.Delay(100);
+                Assert.IsTrue(editor.IsModified, "Office editor must contain unsaved changes");
+
+                string printPdf = Path.Combine(folder, "current-revision.pdf");
+                await editor.ExportPdfAsync(printPdf);
+                Assert.IsTrue(new FileInfo(printPdf).Length > 20);
+                using var snapshot = await PrintFileSnapshot.CreateAsync(printPdf, CancellationToken.None);
+                string digest = snapshot.Sha256Hex;
+                Assert.IsTrue(await snapshot.VerifyAsync(CancellationToken.None));
+                CollectionAssert.AreEqual(onDisk, await File.ReadAllBytesAsync(doc),
+                    "Preparing print must never save/overwrite the Office original.");
+
+                // Another Office edit/export cannot change what the operator previewed.
+                await editor.DispatchAsync(".uno:InsertText", new Dictionary<string, object>
+                {
+                    ["Text"] = " — изменение после открытия мастера"
+                }, focus: false);
+                await editor.ExportPdfAsync(printPdf);
+                Assert.IsTrue(await snapshot.VerifyAsync(CancellationToken.None));
+                Assert.AreEqual(digest, snapshot.Sha256Hex);
+                Assert.IsTrue(editor.IsModified);
+                CollectionAssert.AreEqual(onDisk, await File.ReadAllBytesAsync(doc),
+                    "Printing must not silently save unsaved changes.");
+            }
+            finally { await editor.CloseAsync(); }
+        }
+        finally
+        {
+            try { Directory.Delete(folder, recursive: true); }
+            catch (IOException) { }
+        }
     }
 
     [TestMethod]
