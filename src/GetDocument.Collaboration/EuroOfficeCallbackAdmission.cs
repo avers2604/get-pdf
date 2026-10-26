@@ -63,7 +63,11 @@ public sealed class DenyAllEuroOfficeCallbackRevisionSink :
 /// </summary>
 public static class EuroOfficeCallbackAdmission
 {
-    private static readonly TimeSpan MaximumLifetime = TimeSpan.FromMinutes(5);
+    // Editor sessions may last a full shift; do not use the five-minute
+    // *launch token* TTL for status=2 emitted after the editor closes.
+    // Continuous ACL revocation is the responsibility of the corporate
+    // session store and the commit-time GUP-2 CAS gate.
+    private static readonly TimeSpan MaximumLifetime = TimeSpan.FromHours(12);
 
     public static void RequireCurrent(
         EuroOfficeCallbackSession trustedSession,
