@@ -43,6 +43,26 @@ public sealed class CupsDeviceCapabilitiesTests
     }
 
     [TestMethod]
+    public void ExplicitOneSidedCannotOverrideDuplexOnlyIppDevice()
+    {
+        const string output = "PageSize/Page Size: *A4 A3\n" +
+            "sides/Sides: *two-sided-long-edge two-sided-short-edge\n";
+        Assert.IsFalse(CupsDeviceCapabilities.Supports(output, PrintPaper.A4,
+            PrintDuplex.OneSided));
+    }
+
+    [TestMethod]
+    public void AdvertisedOneSidedIsAllowedEvenWithoutAnyDuplexModes()
+    {
+        const string output = "PageSize/Page Size: *A4\n" +
+            "sides/Sides: *one-sided\n";
+        Assert.IsTrue(CupsDeviceCapabilities.Supports(output, PrintPaper.A4,
+            PrintDuplex.OneSided));
+        Assert.IsFalse(CupsDeviceCapabilities.Supports(output, PrintPaper.A4,
+            PrintDuplex.LongEdge));
+    }
+
+    [TestMethod]
     public void MissingCapabilitiesNeverClaimA3OrDuplex()
     {
         Assert.IsTrue(CupsDeviceCapabilities.Supports("", PrintPaper.A4,

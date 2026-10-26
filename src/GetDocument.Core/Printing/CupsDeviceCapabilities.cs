@@ -25,9 +25,12 @@ public static class CupsDeviceCapabilities
                                      StringComparison.OrdinalIgnoreCase)))
             return false;
 
-        if (duplex == PrintDuplex.OneSided) return true;
-
         var sides = Choices(output, "sides");
+        if (duplex == PrintDuplex.OneSided)
+            return sides is null ||
+                sides.Contains("one-sided", StringComparer.OrdinalIgnoreCase);
+
+
         string expected = duplex == PrintDuplex.LongEdge
             ? "two-sided-long-edge" : "two-sided-short-edge";
         if (sides is not null)

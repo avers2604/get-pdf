@@ -130,4 +130,20 @@ CUPS дополнительно проверяет поддержку **A3 и д
 
 **Shell-имитаторы проверены; C#-сборка/MSTest и реальные МФУ — пока не проверены** (нет .NET SDK/устройств в доступной среде).
 
+## GD-23 — аудит цепочки печати и строго офлайн-проверяемая сборка (26.10.2026)
+
+Аудит PR №39–47 выявил и исправил три проблемы: отсутствие проверки **one-sided** при явно объявленном IPP `sides`, неограниченный объём `stdout/stderr` процессов Windows/CUPS и возможность запуска `dotnet restore` с внешними NuGet-источниками при обычной приёмке.
+
+Добавлен `BoundedProcessOutput` с максимальным объёмом памяти 64 КиБ для stdout и 8 КиБ для stderr; фиктивная CUPS-очередь теперь проверяет ответ более 100 КиБ. Добавлены регрессионные MSTest для API и режимов CUPS. Для закрытого контура предусмотрены **отдельные строгие** команды сборки без публичного feed:
+
+```bash
+bash scripts/verify-get-document-offline-linux.sh /srv/get/nuget-feed
+```
+
+```powershell
+pwsh -File scripts/verify-get-document-offline-windows.ps1 -OfflineNuGetFeed 'D:\GET\NuGetOffline'
+```
+
+Список зависимостей PR и критерии release gate: [GD-23 — аудит и инструкция локальной приёмки](docs/GET_DOCUMENT_GD23_STACK_AUDIT_2026-10-26.md). **Новая реализация не собрана в текущем окружении: отсутствует .NET 10 SDK.** PR остаётся Draft.
+
 План завершения с критериями приёмки: [GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md](docs/GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md). Исходное описание ГЭТ PDF: [LEGACY_GET_PDF_README_2026-10-24.md](docs/LEGACY_GET_PDF_README_2026-10-24.md).
