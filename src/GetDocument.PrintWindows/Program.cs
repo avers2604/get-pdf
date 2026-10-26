@@ -24,8 +24,23 @@ internal static class Program
     {
         try
         {
-            if (args.Length != 1) return 2;
+            if (args.Length is < 1 or > 2) return 2;
             using var server = new LocalPrintServer();
+            if (args[0] == "trays" && args.Length == 2)
+            {
+                string queueName = args[1];
+                if (string.IsNullOrWhiteSpace(queueName) ||
+                    !server.GetPrintQueues().Any(q => q.Name == queueName)) return 3;
+                using var printer = server.GetPrintQueue(queueName);
+                var bins = printer.GetPrintCapabilities().InputBinCapability
+                    .Where(bin => bin != InputBin.Unknown)
+                    .Select(bin => bin.ToString())
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                Console.Write(JsonSerializer.Serialize(bins));
+                return 0;
+            }
+            if (args.Length != 1) return 2;
             if (args[0] == "printers")
             {
                 var queues = server.GetPrintQueues()
@@ -50,7 +65,7 @@ internal static class Program
             PrintJobPlan plan = PrintJobPlan.Create(request.PrinterName,
                 request.SourcePageCount, request.PageRange, request.Copies,
                 request.Duplex, request.Paper,
-                request.Orientation, request.Color, request.PagesPerSheet);
+                request.Orientation, request.Color, request.PagesPerSheet, request.Tray);
             if (string.IsNullOrWhiteSpace(request.PdfPath) ||
                 !Path.IsPathFullyQualified(request.PdfPath) ||
                 !request.PdfPath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
@@ -109,6 +124,15 @@ internal static class Program
                     return 4;
                 ticket.OutputColor = color;
             }
+            if (plan.Tray is { } requestedTray)
+            {
+                if (requestedTray.Option != "InputBin" ||
+                    !Enum.TryParse<InputBin>(requestedTray.Value, false, out var bin) ||
+                    bin == InputBin.Unknown ||
+                    !capabilities.InputBinCapability.Contains(bin))
+                    return 4;
+                ticket.InputBin = bin;
+            }
             if (plan.PagesPerSheet != PrintPagesPerSheet.One)
             {
                 int pagesPerSheet = (int)plan.PagesPerSheet;
@@ -138,7 +162,8 @@ internal static class Program
 
     private sealed record PrintRequest(string PdfPath, string PrinterName,
         int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper,
-        PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet);
+        PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet,
+        PrintTrayOption? Tray);
 
     private sealed class PdfRasterPaginator : DocumentPaginator
     {
