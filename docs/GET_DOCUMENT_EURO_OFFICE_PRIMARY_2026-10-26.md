@@ -9,6 +9,8 @@
 
 > **GD-17C.2:** C# клиент сервисной HMAC-аттестации подготовлен, GUP-2 server-side issue/consume внесён отдельным [PR #174](https://github.com/avers2604/Gup-2/pull/174). Этот протокол не возвращает документ и не разрешает редактирование; `EuroOfficeHost` остаётся `DenyAll`. [Детали GD-17C.2](GET_DOCUMENT_EUROOFFICE_ATTESTATION_GD17C2_2026-10-26.md).
 
+> **GD-17D.1:** подготовлен read-only контентный шлюз с отдельным HMAC purpose, закреплённой S3 VersionId, повторными ACL-проверками и SHA-before-release. Сторона GUP-2: [Draft PR #176](https://github.com/avers2604/Gup-2/pull/176); сторона ГЭТ Документы: [подробности GD-17D](GET_DOCUMENT_EUROOFFICE_CONTENT_GD17D_2026-10-26.md). Запись не включена; callback/CAS остаётся следующим этапом.
+
 ## 1. Приоритет движков
 
 1. **Euro-Office Document Server** — основной движок для DOCX/XLSX/PPTX в локальной сети и совместного редактирования. Это **не** файловый сервер, не система ACL и не замена ГЭТ Файлы/GUP-2.
