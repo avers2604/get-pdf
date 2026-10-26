@@ -104,7 +104,7 @@ public static class Gup2EuroOfficeSsoIntentClient
                 actor != trustedSsoEmployeeId || !CanonicalUuid(doc) ||
                 !Guid.TryParseExact(doc, "D", out Guid documentId) ||
                 rev.ValueKind != JsonValueKind.Number ||
-                !rev.TryGetInt32(out int version) || version <= 0 ||
+                !rev.TryGetInt32(out int version) || version < 0 ||
                 !LowerHex(digest, 64) || !LowerHex(editorKey, 64) ||
                 !LowerHex(grant, 64) || ext is not (".docx" or ".xlsx"))
                 throw new InvalidDataException("GUP-2 не подтвердил права сотрудника и версию.");
