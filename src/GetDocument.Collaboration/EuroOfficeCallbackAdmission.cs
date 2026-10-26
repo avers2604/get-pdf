@@ -93,13 +93,17 @@ public static class EuroOfficeCallbackAdmission
         // A real GUP-2 commit must return a verified, nonzero revision and
         // the SHA of the newly archived working copy. A positive boolean alone
         // is insufficient evidence to tell Document Server it can clear edits.
-        if (receipt?.Committed != true ||
-            receipt.RevisionId is not { Length: > 0 and <= 12 } revisionText ||
+        if (receipt?.Committed != true)
+            return 1;
+
+        string? revisionText = receipt.RevisionId;
+        string? digest = receipt.Sha256;
+        if (string.IsNullOrEmpty(revisionText) || revisionText.Length > 12 ||
             !revisionText.All(char.IsAsciiDigit) ||
             !int.TryParse(revisionText, System.Globalization.NumberStyles.None,
                 System.Globalization.CultureInfo.InvariantCulture, out int revision) ||
             revision <= 0 ||
-            receipt.Sha256 is not { Length: 64 } digest ||
+            digest is null || digest.Length != 64 ||
             !digest.All(ch => ch is >= 'a' and <= 'f' or >= '0' and <= '9'))
             return 1;
         return 0;
