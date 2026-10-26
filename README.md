@@ -146,4 +146,12 @@ pwsh -File scripts/verify-get-document-offline-windows.ps1 -OfflineNuGetFeed 'D:
 
 Список зависимостей PR и критерии release gate: [GD-23 — аудит и инструкция локальной приёмки](docs/GET_DOCUMENT_GD23_STACK_AUDIT_2026-10-26.md). **Новая реализация не собрана в текущем окружении: отсутствует .NET 10 SDK.** PR остаётся Draft.
 
+## GD-24 — исправления итогового аудита печати (26.10.2026)
+
+Исправлены три важных случая: большой ответ CUPS/Windows не должен считаться повреждением PDF, диагностические сообщения не показывают пути закрытых документов, а тестовые имитаторы `lp/lpstat/lpoptions` не могут случайно обратиться к системным принтерам из-за чужого `PATH`.
+
+Офлайн-проверка Windows/Linux теперь отбрасывает сетевые источники NuGet, а Windows дополнительно собирает и тестирует старый `GetPdf.slnx`. Linux выполняет проверку регистрации приложения. [GD-24 — найденные проблемы и перечень локальной приёмки](docs/GET_DOCUMENT_GD24_ACCEPTANCE_CORRECTIONS_2026-10-26.md).
+
+**GD-24 — Draft:** .NET-сборка и MSTest в текущем окружении не запускались, аппаратная приёмка не проведена.
+
 План завершения с критериями приёмки: [GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md](docs/GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md). Исходное описание ГЭТ PDF: [LEGACY_GET_PDF_README_2026-10-24.md](docs/LEGACY_GET_PDF_README_2026-10-24.md).
