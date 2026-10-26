@@ -49,7 +49,8 @@ internal static class Program
                 ?? throw new InvalidDataException("Отсутствуют настройки печати.");
             PrintJobPlan plan = PrintJobPlan.Create(request.PrinterName,
                 request.SourcePageCount, request.PageRange, request.Copies,
-                request.Duplex, request.Paper);
+                request.Duplex, request.Paper,
+                request.Orientation, request.Color, request.PagesPerSheet);
             if (string.IsNullOrWhiteSpace(request.PdfPath) ||
                 !Path.IsPathFullyQualified(request.PdfPath) ||
                 !request.PdfPath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
@@ -89,9 +90,38 @@ internal static class Program
                 PageMediaSize = new PageMediaSize(paper)
             };
             if (capabilities.DuplexingCapability.Count > 0) ticket.Duplexing = duplex;
+
+            if (plan.Orientation != PrintOrientation.Automatic)
+            {
+                var orientation = plan.Orientation == PrintOrientation.Landscape
+                    ? PageOrientation.Landscape : PageOrientation.Portrait;
+                if (capabilities.PageOrientationCapability is null ||
+                    !capabilities.PageOrientationCapability.Contains(orientation))
+                    return 4; // Never claim custom orientation unless driver supports it.
+                ticket.PageOrientation = orientation;
+            }
+            if (plan.Color != PrintColorMode.PrinterDefault)
+            {
+                var color = plan.Color == PrintColorMode.Color
+                    ? OutputColor.Color : OutputColor.Monochrome;
+                if (capabilities.OutputColorCapability is null ||
+                    !capabilities.OutputColorCapability.Contains(color))
+                    return 4;
+                ticket.OutputColor = color;
+            }
+            if (plan.PagesPerSheet != PrintPagesPerSheet.One)
+            {
+                int pagesPerSheet = (int)plan.PagesPerSheet;
+                if (capabilities.PagesPerSheetCapability is null ||
+                    !capabilities.PagesPerSheetCapability.Contains(pagesPerSheet))
+                    return 4;
+                ticket.PagesPerSheet = pagesPerSheet;
+            }
             // Read raster pages lazily. Do not decode a 1,000 page job into RAM.
             double width = plan.Paper == PrintPaper.A3 ? 1122.52 : 793.70;
             double height = plan.Paper == PrintPaper.A3 ? 1587.40 : 1122.52;
+            if (plan.Orientation == PrintOrientation.Landscape)
+                (width, height) = (height, width);
             var paginator = new PdfRasterPaginator(source, plan.Pages, new Size(width, height));
             XpsDocumentWriter writer = PrintQueue.CreateXpsDocumentWriter(queue);
             writer.Write(paginator, ticket);
@@ -107,7 +137,8 @@ internal static class Program
     }
 
     private sealed record PrintRequest(string PdfPath, string PrinterName,
-        int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper);
+        int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper,
+        PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet);
 
     private sealed class PdfRasterPaginator : DocumentPaginator
     {
