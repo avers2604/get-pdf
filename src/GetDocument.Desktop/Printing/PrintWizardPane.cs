@@ -57,6 +57,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     private readonly ComboBox _nup = new() { Width = 270,
         ItemsSource = new[] { "1 страница на листе", "2 страницы на листе", "4 страницы на листе" },
         SelectedIndex = 0 };
+    private readonly ComboBox _tray = new() { Width = 350 };
     private readonly TextBox _pages = new() { Width = 270,
         PlaceholderText = "Все страницы или 1,3-5" };
     private readonly TextBox _copies = new() { Width = 140, Text = "1" };
@@ -77,6 +78,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     private bool _busy;
     private bool _submitted;
     private bool _disposed;
+    private int _trayRequest;
 
     public PrintWizardPane(string pdfPath, Action closeTab)
     {
@@ -90,6 +92,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         StyleField(_orientation);
         StyleField(_color);
         StyleField(_nup);
+        StyleField(_tray);
         StyleField(_pages);
         StyleField(_copies);
         StyleButton(_back);
@@ -172,6 +175,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
 
         _back.Click += (_, _) => { if (_step > 1 && !_busy) { _step--; RenderStage(); } };
         _next.Click += async (_, _) => await AdvanceAsync();
+        _printer.SelectionChanged += async (_, _) => await LoadTraysAsync();
         _cancel.Click += (_, _) => _closeTab();
 
         RenderStage();
@@ -223,6 +227,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
                 $"Страницы (в документе {_pageCount})", _pages));
             _stage.Children.Add(Labeled("Копии (от 1 до 99)", _copies));
             _stage.Children.Add(Labeled("Размер бумаги", _paper));
+            _stage.Children.Add(Labeled("Источник бумаги / лоток", _tray));
             _stage.Children.Add(Labeled("Режим печати", _sides));
             _stage.Children.Add(Labeled("Ориентация", _orientation));
             _stage.Children.Add(Labeled("Цветность", _color));
@@ -243,6 +248,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
                     $"Бумага: {plan.Paper}; режим: {DuplexText(plan.Duplex)}\n" +
                     $"Ориентация: {plan.Orientation}; цвет: {plan.Color}\n" +
                     $"На листе: {(int)plan.PagesPerSheet}; печатных сторон: {plan.SheetSidesToPrint}\n" +
+                    $"Лоток: {plan.Tray?.Label ?? "Устройство по умолчанию"}\n" +
                     "Проверьте бумагу, права и готовность принтера перед отправкой.";
         }
     }
@@ -273,7 +279,8 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
                     1 => PrintPagesPerSheet.Two,
                     2 => PrintPagesPerSheet.Four,
                     _ => (PrintPagesPerSheet)(-1)
-                });
+                },
+                (_tray.SelectedItem as ComboBoxItem)?.Tag as PrintTrayOption);
             return true;
         }
         catch (ArgumentException ex)
@@ -356,6 +363,46 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
                 _status.Text = "Не удалось открыть PDF для печати. Файл может быть защищён или повреждён. (" + ex.Message + ")";
                 _previewStatus.Text = "Предпросмотр недоступен.";
             }
+        }
+    }
+
+    private async Task LoadTraysAsync()
+    {
+        if (_disposed) return;
+        int request = Interlocked.Increment(ref _trayRequest);
+        string? printer = _printer.SelectedItem as string;
+        _tray.ItemsSource = new[]
+        {
+            new ComboBoxItem { Content = "Выбор принтера (автоматически)" }
+        };
+        _tray.SelectedIndex = 0;
+        if (string.IsNullOrWhiteSpace(printer)) return;
+        _tray.IsEnabled = false;
+        try
+        {
+            var choices = await LocalPrintBroker.TraysAsync(printer, _lifetime.Token);
+            if (_disposed || request != _trayRequest ||
+                _printer.SelectedItem is not string current || current != printer) return;
+            var items = new List<ComboBoxItem>
+            {
+                new() { Content = "Выбор принтера (автоматически)" }
+            };
+            items.AddRange(choices.Select(option => new ComboBoxItem
+            {
+                Content = option.Label, Tag = option
+            }));
+            _tray.ItemsSource = items;
+            _tray.SelectedIndex = 0;
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            if (!_disposed && request == _trayRequest)
+                _status.Text = "Список лотков недоступен; используется выбор принтера по умолчанию.";
+        }
+        finally
+        {
+            if (!_disposed && request == _trayRequest) _tray.IsEnabled = true;
         }
     }
 
