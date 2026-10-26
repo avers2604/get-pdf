@@ -36,6 +36,20 @@ public static class Gup2EuroOfficeAttestationClient
         byte[] sharedSecret,
         DateTimeOffset now)
     {
+        return CreateSignedOperation(trustedDocumentsOrigin, opaqueGrant,
+            employeeId, sharedSecret, now, ConsumePath);
+    }
+
+    internal static HttpRequestMessage CreateSignedContentRequest(
+        Uri trustedDocumentsOrigin, string opaqueGrant, string employeeId,
+        byte[] sharedSecret, DateTimeOffset now) =>
+        CreateSignedOperation(trustedDocumentsOrigin, opaqueGrant,
+            employeeId, sharedSecret, now, "getdocument/eurooffice/content");
+
+    private static HttpRequestMessage CreateSignedOperation(
+        Uri trustedDocumentsOrigin, string opaqueGrant, string employeeId,
+        byte[] sharedSecret, DateTimeOffset now, string purpose)
+    {
         ArgumentNullException.ThrowIfNull(trustedDocumentsOrigin);
         if (!trustedDocumentsOrigin.IsAbsoluteUri ||
             trustedDocumentsOrigin.Scheme != Uri.UriSchemeHttps ||
@@ -54,13 +68,13 @@ public static class Gup2EuroOfficeAttestationClient
             throw new ArgumentException("Неверный сервисный HMAC ключ.", nameof(sharedSecret));
 
         string stamp = now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
-        string canonical = "POST\n" + ConsumePath + "\n" + opaqueGrant +
+        string canonical = "POST\n" + purpose + "\n" + opaqueGrant +
                            "\n" + employeeId + "\n" + stamp;
         string signature = Convert.ToHexString(HMACSHA256.HashData(
             sharedSecret, Encoding.ASCII.GetBytes(canonical))).ToLowerInvariant();
 
         var request = new HttpRequestMessage(
-            HttpMethod.Post, new Uri(trustedDocumentsOrigin, ConsumePath + "/"));
+            HttpMethod.Post, new Uri(trustedDocumentsOrigin, purpose + "/"));
         request.Content = new ByteArrayContent(Array.Empty<byte>());
         request.Content.Headers.ContentType =
             new MediaTypeHeaderValue("application/octet-stream");
