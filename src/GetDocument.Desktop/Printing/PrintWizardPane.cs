@@ -41,6 +41,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
 
     private string _pdfPath;
     private PrintFileSnapshot? _printSnapshot;
+    private readonly string? _ownedInputPath;
     private readonly Action _closeTab;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly ComboBox _printer = new() { Width = 350 };
@@ -85,10 +86,24 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     private bool _disposed;
     private int _trayRequest;
 
-    public PrintWizardPane(string pdfPath, Action closeTab)
+    public PrintWizardPane(string pdfPath, Action closeTab, bool deleteOwnedInput = false)
     {
         _pdfPath = pdfPath;
         _closeTab = closeTab;
+        // Only an Office-generated PDF in the known print export directory is
+        // deletable by this pane. Source/user PDFs must NEVER be deleted.
+        if (deleteOwnedInput)
+        {
+            string expectedFolder = Path.GetFullPath(
+                Path.Combine(Path.GetTempPath(), "GET-Document-print"));
+            string full = Path.GetFullPath(pdfPath);
+            if (string.Equals(Path.GetDirectoryName(full), expectedFolder,
+                    OperatingSystem.IsWindows()
+                        ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
+                string.Equals(Path.GetExtension(full), ".pdf",
+                    StringComparison.OrdinalIgnoreCase))
+                _ownedInputPath = full;
+        }
         Background = Palette("#F4F5F9");
         Foreground = Palette("#141A33");
         StyleField(_printer);
@@ -553,6 +568,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             }
             _printSnapshot = snapshot;
             _pdfPath = snapshot.Path;
+            DeleteOwnedInput();
             var info = await Task.Run(() => RenderPreviewPages(
                 snapshot.Path, _lifetime.Token), _lifetime.Token);
             if (_disposed) return;
@@ -678,6 +694,14 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         finally { PdfNativeGate.Instance.Release(); }
     }
 
+    private void DeleteOwnedInput()
+    {
+        if (_ownedInputPath is null) return;
+        try { File.Delete(_ownedInputPath); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -686,6 +710,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         _sheetLoad?.Cancel();
         _printSnapshot?.Dispose();
         _printSnapshot = null;
+        DeleteOwnedInput();
         _sheetPreview.Children.Clear();
         foreach (Bitmap image in _previewPages.Values) image.Dispose();
         _previewPages.Clear();
