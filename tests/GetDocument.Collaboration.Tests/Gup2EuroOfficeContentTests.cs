@@ -84,6 +84,37 @@ public sealed class Gup2EuroOfficeContentTests
     }
 
     [TestMethod]
+    public async Task RefusesTruncatedResponseEvenWhenShaArgumentIsValid()
+    {
+        var payload = Encoding.UTF8.GetBytes("short");
+        var sha = Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
+        using var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(payload)
+        };
+        response.Content.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        response.Content.Headers.ContentLength = payload.Length + 1;
+        await Assert.ThrowsExactlyAsync<EndOfStreamException>(() =>
+            Gup2EuroOfficeContentClient.ReadVerifiedResponseAsync(response, sha,
+                CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task RefusesUnexpectedMimeTypeBeforeGivingEditorAnyBytes()
+    {
+        var content = Encoding.UTF8.GetBytes("office bytes");
+        var sha = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+        using var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("office bytes")
+        };
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+            Gup2EuroOfficeContentClient.ReadVerifiedResponseAsync(response, sha,
+                CancellationToken.None));
+    }
+
+    [TestMethod]
     public void NoNetworkRequestWithMalformedIdentityOrExternalOrigin()
     {
         Assert.ThrowsExactly<ArgumentException>(() =>
