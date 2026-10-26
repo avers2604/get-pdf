@@ -12,7 +12,8 @@ public sealed class PrintJobPlan
 {
     private PrintJobPlan(string printerName, int sourcePageCount, IReadOnlyList<int> pages,
         int copies, PrintDuplex duplex, PrintPaper paper, string range,
-        PrintOrientation orientation, PrintColorMode color, PrintPagesPerSheet pagesPerSheet)
+        PrintOrientation orientation, PrintColorMode color, PrintPagesPerSheet pagesPerSheet,
+        PrintTrayOption? tray)
     {
         PrinterName = printerName;
         SourcePageCount = sourcePageCount;
@@ -24,6 +25,7 @@ public sealed class PrintJobPlan
         Orientation = orientation;
         Color = color;
         PagesPerSheet = pagesPerSheet;
+        Tray = tray;
     }
 
     public string PrinterName { get; }
@@ -36,6 +38,7 @@ public sealed class PrintJobPlan
     public PrintOrientation Orientation { get; }
     public PrintColorMode Color { get; }
     public PrintPagesPerSheet PagesPerSheet { get; }
+    public PrintTrayOption? Tray { get; }
     public int SheetSidesToPrint => checked(((Pages.Count + (int)PagesPerSheet - 1) / (int)PagesPerSheet) * Copies);
     public int PageCountToPrint => checked(Pages.Count * Copies);
 
@@ -44,7 +47,8 @@ public sealed class PrintJobPlan
         PrintDuplex duplex, PrintPaper paper,
         PrintOrientation orientation = PrintOrientation.Automatic,
         PrintColorMode color = PrintColorMode.PrinterDefault,
-        PrintPagesPerSheet pagesPerSheet = PrintPagesPerSheet.One)
+        PrintPagesPerSheet pagesPerSheet = PrintPagesPerSheet.One,
+        PrintTrayOption? tray = null)
     {
         if (string.IsNullOrWhiteSpace(printerName) || printerName.Length > 160 ||
             printerName[0] == '-' || printerName.Any(c => char.IsControl(c)))
@@ -54,6 +58,12 @@ public sealed class PrintJobPlan
                 nameof(sourcePageCount));
         if (copies is < 1 or > 99)
             throw new ArgumentOutOfRangeException(nameof(copies), "Разрешено от 1 до 99 копий.");
+        if (tray is not null)
+        {
+            var validated = PrintTrayOptions.Make(tray.Option, tray.Value);
+            if (tray != validated)
+                throw new ArgumentException("Лоток содержит некорректное наименование.", nameof(tray));
+        }
         if (!Enum.IsDefined(duplex) || !Enum.IsDefined(paper) ||
             !Enum.IsDefined(orientation) || !Enum.IsDefined(color) ||
             !Enum.IsDefined(pagesPerSheet))
@@ -122,7 +132,7 @@ public sealed class PrintJobPlan
         }
         return new PrintJobPlan(printerName, sourcePageCount,
             Array.AsReadOnly(chosen), copies, duplex, paper, compact.ToString(),
-            orientation, color, pagesPerSheet);
+            orientation, color, pagesPerSheet, tray);
     }
 }
 
