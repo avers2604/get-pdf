@@ -232,16 +232,23 @@ internal static class LocalPrintBroker
         {
         try
         {
-            var stdOut = process.StandardOutput.ReadToEndAsync(timeout.Token);
-            var stdErr = process.StandardError.ReadToEndAsync(timeout.Token);
+            // Printer drivers and command wrappers are outside our process trust
+            // boundary; drain their pipes without buffering arbitrary megabytes.
+            var stdOut = BoundedProcessOutput.ReadAsync(
+                process.StandardOutput, 65536, timeout.Token);
+            var stdErr = BoundedProcessOutput.ReadAsync(
+                process.StandardError, 8192, timeout.Token);
             if (stdin is not null)
             {
                 await process.StandardInput.WriteAsync(stdin.AsMemory(), timeout.Token);
                 process.StandardInput.Close();
             }
             await process.WaitForExitAsync(timeout.Token);
-            string output = await stdOut;
+            ProcessOutput response = await stdOut;
             _ = await stdErr; // Never surface arbitrary driver stderr/paths to end-user.
+            if (response.WasTruncated)
+                throw new InvalidDataException("Ответ службы печати превышает ограничение размера.");
+            string output = response.Value;
             if (process.ExitCode != 0)
             {
                 if (isPrintJob)
@@ -250,8 +257,6 @@ internal static class LocalPrintBroker
                         : PrintSpoolFailurePolicy.FromCupsFailure());
                 throw new IOException("Локальная служба печати отклонила запрос.");
             }
-            if (output.Length > 65536)
-                throw new InvalidDataException("Некорректный ответ службы печати.");
             return output;
         }
         catch (OperationCanceledException) when (!cancel.IsCancellationRequested && isPrintJob)
