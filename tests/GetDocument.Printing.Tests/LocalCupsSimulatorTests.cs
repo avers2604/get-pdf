@@ -163,6 +163,45 @@ public sealed class LocalCupsSimulatorTests
     }
 
     [TestMethod]
+    public async Task A3AndDuplexAreRejectedWhenQueueDoesNotAdvertiseThem()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Fake CUPS executable tests require Linux.");
+
+        using var cups = new FakeCups();
+        using var frozen = await cups.CreateSnapshotAsync("test.pdf");
+        var a3 = PrintJobPlan.Create("GET_SIMULATOR", 1, "", 1,
+            PrintDuplex.OneSided, PrintPaper.A3);
+        var duplex = PrintJobPlan.Create("GET_SIMULATOR", 1, "", 1,
+            PrintDuplex.LongEdge, PrintPaper.A4);
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            LocalPrintBroker.SubmitPdfAsync(frozen.Path, a3,
+                CancellationToken.None, frozen.Sha256Hex));
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            LocalPrintBroker.SubmitPdfAsync(frozen.Path, duplex,
+                CancellationToken.None, frozen.Sha256Hex));
+        Assert.IsFalse(File.Exists(cups.ArgumentsFile));
+    }
+
+    [TestMethod]
+    public async Task AdvertisedA3AndDuplexReachLpWithExactDeviceOptions()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Fake CUPS executable tests require Linux.");
+
+        using var cups = new FakeCups();
+        cups.EnableA3AndDuplex();
+        using var frozen = await cups.CreateSnapshotAsync("test.pdf");
+        var plan = PrintJobPlan.Create("GET_SIMULATOR", 1, "", 1,
+            PrintDuplex.LongEdge, PrintPaper.A3);
+        await LocalPrintBroker.SubmitPdfAsync(frozen.Path, plan,
+            CancellationToken.None, frozen.Sha256Hex);
+        string[] args = await cups.ReadArgumentsAsync();
+        CollectionAssert.Contains(args, "media=A3");
+        CollectionAssert.Contains(args, "sides=two-sided-long-edge");
+    }
+
+    [TestMethod]
     public async Task FailedCupsCommandIsAmbiguousAndMustNotClaimPrinted()
     {
         if (!OperatingSystem.IsLinux())
@@ -190,6 +229,7 @@ public sealed class LocalCupsSimulatorTests
         private readonly string? _previousReject;
         private readonly string? _previousNoQueue;
         private readonly string? _previousNoColor;
+        private readonly string? _previousFullCaps;
         private readonly string _folder;
 
         public FakeCups()
@@ -212,6 +252,13 @@ public sealed class LocalCupsSimulatorTests
                 #!/bin/sh
                 if [ "$1" != "-p" ] || [ "$2" != "GET_SIMULATOR" ] || [ "$3" != "-l" ]; then exit 2; fi
                 printf 'InputSlot/Paper Source: *Auto Tray1\n'
+                if [ "${GETDOC_FAKE_CUPS_FULL_CAPS:-0}" = "1" ]; then
+                  printf 'PageSize/Page Size: *A4 A3\n'
+                  printf 'Duplex/Two-sided: *None DuplexNoTumble DuplexTumble\n'
+                else
+                  printf 'PageSize/Page Size: *A4\n'
+                  printf 'Duplex/Two-sided: *None\n'
+                fi
                 if [ "${GETDOC_FAKE_CUPS_NO_COLOR:-0}" != "1" ]; then
                   printf 'print-color-mode/Color Mode: *monochrome color\n'
                 fi
@@ -227,11 +274,13 @@ public sealed class LocalCupsSimulatorTests
             _previousReject = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_REJECT");
             _previousNoQueue = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_QUEUE");
             _previousNoColor = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR");
+            _previousFullCaps = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_FULL_CAPS");
             Environment.SetEnvironmentVariable("PATH", _folder + Path.PathSeparator + _originalPath);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_ARGS", ArgumentsFile);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_REJECT", "0");
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_QUEUE", "0");
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR", "0");
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_FULL_CAPS", "0");
         }
 
         public string ArgumentsFile { get; }
@@ -244,6 +293,9 @@ public sealed class LocalCupsSimulatorTests
 
         public void DenyColor() =>
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR", "1");
+
+        public void EnableA3AndDuplex() =>
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_FULL_CAPS", "1");
 
         public async Task<PrintFileSnapshot> CreateSnapshotAsync(string name)
         {
@@ -271,6 +323,7 @@ public sealed class LocalCupsSimulatorTests
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_REJECT", _previousReject);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_QUEUE", _previousNoQueue);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR", _previousNoColor);
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_FULL_CAPS", _previousFullCaps);
             try { Directory.Delete(_folder, recursive: true); }
             catch (IOException) { }
         }
