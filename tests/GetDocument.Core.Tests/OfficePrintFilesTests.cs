@@ -22,7 +22,8 @@ public sealed class OfficePrintFilesTests
     public void CleanupDeletesOnlyRecognizedOfficeExport()
     {
         string owned = OfficePrintFiles.NewExportPath();
-        string userDocument = Path.Combine(OfficePrintFiles.ExportFolder, "document.pdf");
+        string userDocument = Path.Combine(OfficePrintFiles.ExportFolder,
+            "user-" + Guid.NewGuid().ToString("N") + ".pdf");
         try
         {
             File.WriteAllText(owned, "%PDF-1.4\n");
