@@ -528,7 +528,8 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             or TimeoutException or UnauthorizedAccessException)
         {
             OfficePrintFiles.DeleteOwnedExport(target); // partially exported or failed PDF
-            _status("Не удалось подготовить PDF для печати: " + ex.Message);
+            // The editor may include user file paths in its error messages.
+            _status("Не удалось экспортировать документ для печати. Проверьте формат, права и доступность редактора.");
             return null;
         }
     }
