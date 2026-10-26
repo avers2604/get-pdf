@@ -43,6 +43,7 @@ public sealed class MainWindow : Window
     private readonly Dictionary<string, TabItem> _collaborationTabs = new(StringComparer.Ordinal);
     private readonly OfficeReturnPolicy _officeReturnPolicy = OfficeReturnPolicy.LoadLocal();
     private TabItem? _officeReturnTab;
+    private TabItem? _officeBindingTab;
     private TabItem? _printTab;
     private readonly DocumentHistory _history = new();
     private readonly StackPanel _homeLists = new() { Spacing = 4 };
@@ -106,6 +107,7 @@ public sealed class MainWindow : Window
         {
             if (_filesTab?.Content is IDisposable files) files.Dispose();
             if (_officeReturnTab?.Content is IDisposable officeReturn) officeReturn.Dispose();
+            if (_officeBindingTab?.Content is IDisposable officeBinding) officeBinding.Dispose();
             if (_printTab?.Content is IDisposable printWizard) printWizard.Dispose();
             foreach (var view in _views.Values)
                 if (view.Content is IDisposable document) document.Dispose();
@@ -321,6 +323,9 @@ public sealed class MainWindow : Window
         if (_officeReturnPolicy.Enabled)
             commands.Children.Add(HeaderCommand("Отправить в GUP-2", Icons.Send,
                 "Вернуть рабочую копию DOCX/XLSX в карточку GUP-2", ShowOfficeReturn));
+        if (_officeReturnPolicy.AllowGup2TabBinding)
+            commands.Children.Add(HeaderCommand("Связать с GUP-2", Icons.Network,
+                "Проверить SHA-256 и привязать рабочую копию к карточке GUP-2", ShowOfficeBinding));
         DockPanel.SetDock(commands, Dock.Left);
         bar.Children.Add(commands);
 
@@ -697,6 +702,32 @@ public sealed class MainWindow : Window
 
     public void ReportRejectedLaunch() =>
         _status.Text = "Неверные параметры запуска: допустимы только локальные файлы поддерживаемых форматов.";
+
+    private void ShowOfficeBinding()
+    {
+        if (_officeBindingTab is not null)
+        {
+            _tabs.SelectedItem = _officeBindingTab;
+            return;
+        }
+        if (!_officeReturnPolicy.AllowGup2TabBinding) return;
+        _officeBindingTab = new TabItem
+        {
+            Header = TabHeader("Связь GUP-2", CloseOfficeBinding),
+            Content = new OfficeBindingPane(this, _officeReturnPolicy)
+        };
+        _items.Add(_officeBindingTab);
+        _tabs.SelectedItem = _officeBindingTab;
+    }
+
+    private void CloseOfficeBinding()
+    {
+        if (_officeBindingTab is null) return;
+        if (_officeBindingTab.Content is IDisposable pane) pane.Dispose();
+        _items.Remove(_officeBindingTab);
+        _officeBindingTab = null;
+        _tabs.SelectedIndex = 0;
+    }
 
     private void ShowOfficeReturn()
     {
