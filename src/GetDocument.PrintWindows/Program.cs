@@ -75,17 +75,15 @@ internal static class Program
             using var source = new FileStream(request.PdfPath, FileMode.Open, FileAccess.Read,
                 FileShare.Read, 65536, FileOptions.SequentialScan);
             PdfPreviewPlan.ValidateInputLength(source.Length);
-            if (request.ExpectedSha256 is { } expected)
-            {
-                if (expected.Length != 64 || expected.Any(c =>
-                    c is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
-                    return 3;
-                byte[] actualDigest = SHA256.HashData(source);
-                if (!CryptographicOperations.FixedTimeEquals(
-                    Convert.FromHexString(expected), actualDigest))
-                    return 3; // Snapshot changed between Avalonia and native print worker.
-                source.Position = 0;
-            }
+            string expected = request.ExpectedSha256;
+            if (string.IsNullOrEmpty(expected) || expected.Length != 64 ||
+                expected.Any(c => c is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+                return 3; // An unbound PDF path can never bypass snapshot verification.
+            byte[] actualDigest = SHA256.HashData(source);
+            if (!CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(expected), actualDigest))
+                return 3;
+            source.Position = 0;
             int actualPages = Conversion.GetPageCount(source, leaveOpen: true);
             if (actualPages != plan.SourcePageCount) return 3;
             source.Position = 0;
@@ -183,7 +181,7 @@ internal static class Program
     private sealed record PrintRequest(string PdfPath, string PrinterName,
         int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper,
         PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet,
-        PrintTrayOption? Tray, string? ExpectedSha256);
+        PrintTrayOption? Tray, string ExpectedSha256);
 
     private sealed class PdfRasterPaginator : DocumentPaginator
     {
