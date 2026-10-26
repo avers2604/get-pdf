@@ -27,10 +27,11 @@ public static class OfficeServerEnginePolicy
     public static OnlyOfficeEditorBootstrap Create(
         OnlyOfficeSessionOptions options,
         byte[] signingKey,
-        OfficeServerEngine engine = Primary) => engine switch
+        OfficeServerEngine engine = Primary,
+        bool immutableRevisionSinkReady = false) => engine switch
     {
         OfficeServerEngine.EuroOffice =>
-            EuroOfficeSessionFactory.Create(options, signingKey),
+            EuroOfficeSessionFactory.Create(options, signingKey, immutableRevisionSinkReady),
         OfficeServerEngine.OnlyOfficeLegacy =>
             OnlyOfficeSessionFactory.Create(options, signingKey),
         OfficeServerEngine.CollaboraWopi =>
@@ -50,6 +51,17 @@ public static class OfficeServerEnginePolicy
 public static class EuroOfficeSessionFactory
 {
     public static OnlyOfficeEditorBootstrap Create(
-        OnlyOfficeSessionOptions options, byte[] signingKey) =>
-        OnlyOfficeSessionFactory.Create(options, signingKey);
+        OnlyOfficeSessionOptions options, byte[] signingKey,
+        bool immutableRevisionSinkReady = false)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        // Euro-Office callback handling and GUP-2 immutable revisions are not
+        // live yet. Until the trusted server explicitly declares readiness,
+        // never hand out a writable session, even for a CanEdit user.
+        var effectiveOptions = options with
+        {
+            CanEdit = options.CanEdit && immutableRevisionSinkReady
+        };
+        return OnlyOfficeSessionFactory.Create(effectiveOptions, signingKey);
+    }
 }
