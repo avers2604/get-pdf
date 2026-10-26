@@ -711,10 +711,17 @@ public sealed class MainWindow : Window
             return;
         }
         if (!_officeReturnPolicy.AllowGup2TabBinding) return;
+        if (_tabs.SelectedItem is not TabItem { Tag: Guid documentId } ||
+            _workspace.Tabs.FirstOrDefault(x => x.Id == documentId)?.FilePath is not { } openedPath ||
+            !OfficeReturnClient.IsSupportedCopy(openedPath))
+        {
+            _status.Text = "Для привязки сначала откройте рабочий DOCX/XLSX во вкладке.";
+            return;
+        }
         _officeBindingTab = new TabItem
         {
             Header = TabHeader("Связь GUP-2", CloseOfficeBinding),
-            Content = new OfficeBindingPane(this, _officeReturnPolicy)
+            Content = new OfficeBindingPane(this, _officeReturnPolicy, openedPath)
         };
         _items.Add(_officeBindingTab);
         _tabs.SelectedItem = _officeBindingTab;
