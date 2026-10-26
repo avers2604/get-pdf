@@ -1,6 +1,9 @@
 using GetDocument.Collaboration;
 
 var builder = WebApplication.CreateBuilder(args);
+// Do not log request-start paths containing one-time launch handles.
+// Reverse proxies must redact /get-document/editor/launch/{nonce} as well.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 
 // Corporate identities and single-use grants are intentionally NOT faked.
 // Register enterprise authentication and replace DenyAllEuroOfficeLaunchStore
