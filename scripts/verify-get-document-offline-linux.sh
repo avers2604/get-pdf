@@ -40,6 +40,8 @@ fi
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 export DOTNET_NOLOGO=1
+# Keep packaging/desktop registration checks in the same offline gate.
+bash packaging/test-register-get-document-linux.sh
 # '--source' replaces the configured feed set; NuGetAudit is disabled here
 # because the sealed network must not call the public vulnerability endpoint.
 # Admins verify the signed/pinned package bundle separately before rollout.
