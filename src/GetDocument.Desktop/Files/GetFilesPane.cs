@@ -18,9 +18,9 @@ internal sealed class GetFilesPane : DockPanel, IDisposable
     private readonly TextBox _root = new()
     {
         Width = 350,
-        Watermark = @"\\сервер\общая_папка или /mnt/get-share"
+        PlaceholderText = @"\\сервер\общая_папка или /mnt/get-share"
     };
-    private readonly TextBox _filter = new() { Watermark = "Фильтр текущей папки", Width = 240 };
+    private readonly TextBox _filter = new() { PlaceholderText = "Фильтр текущей папки", Width = 240 };
     private readonly TextBlock _location = new() { Text = "Папка не выбрана" };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
     private readonly ListBox _list = new();
@@ -46,7 +46,7 @@ internal sealed class GetFilesPane : DockPanel, IDisposable
         header.Children.Add(new TextBlock
         {
             Text = "ГЭТ Файлы · существующее серверное хранилище",
-            FontSize = 20,
+            Classes = { "title" },
             FontWeight = FontWeight.SemiBold
         });
         header.Children.Add(new TextBlock

@@ -50,7 +50,7 @@ internal static class PreviewFactory
             Spacing = 12,
             Children =
             {
-                new TextBlock { Text = title, FontSize = 24 },
+                new TextBlock { Text = title, Classes = { "title" } },
                 new TextBlock { Text = explanation, TextWrapping = Avalonia.Media.TextWrapping.Wrap }
             }
         };

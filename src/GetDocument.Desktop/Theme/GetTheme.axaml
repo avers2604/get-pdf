@@ -1,0 +1,228 @@
+<!--
+  GET Design System 4.1 for the Avalonia client: same tokens as the GET PDF WPF theme
+  (src/GetPdf/App.xaml). Light only — the brand palette is defined for light surfaces.
+  Fluent stays the control base; its brushes are re-pointed to DS tokens, and a few
+  style classes (primary, ghost, tile, card, title, hint, toolbar) cover the shell.
+-->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+      <Color x:Key="GetNavy">#24305E</Color>
+      <Color x:Key="GetNavyDeep">#18213F</Color>
+      <Color x:Key="GetTeal">#00809A</Color>
+      <Color x:Key="GetTealAccent">#009CBC</Color>
+      <Color x:Key="GetRed">#E4032E</Color>
+      <Color x:Key="GetYellow">#FBBA00</Color>
+      <Color x:Key="GetInk">#1B2240</Color>
+      <Color x:Key="GetMuted">#5C6480</Color>
+      <Color x:Key="GetBorder">#E3E6EE</Color>
+      <Color x:Key="GetStrongBorder">#CBD0DD</Color>
+      <Color x:Key="GetSurface">#FFFFFF</Color>
+      <Color x:Key="GetSubtle">#F1F4F9</Color>
+      <Color x:Key="GetCanvas">#F5F7FB</Color>
+      <Color x:Key="GetAccentSoft">#E6F5F9</Color>
+
+      <SolidColorBrush x:Key="GetNavyBrush" Color="{StaticResource GetNavy}"/>
+      <SolidColorBrush x:Key="GetNavyDeepBrush" Color="{StaticResource GetNavyDeep}"/>
+      <SolidColorBrush x:Key="GetTealBrush" Color="{StaticResource GetTeal}"/>
+      <SolidColorBrush x:Key="GetRedBrush" Color="{StaticResource GetRed}"/>
+      <SolidColorBrush x:Key="GetInkBrush" Color="{StaticResource GetInk}"/>
+      <SolidColorBrush x:Key="GetMutedBrush" Color="{StaticResource GetMuted}"/>
+      <SolidColorBrush x:Key="GetBorderBrush" Color="{StaticResource GetBorder}"/>
+      <SolidColorBrush x:Key="GetStrongBorderBrush" Color="{StaticResource GetStrongBorder}"/>
+      <SolidColorBrush x:Key="GetSurfaceBrush" Color="{StaticResource GetSurface}"/>
+      <SolidColorBrush x:Key="GetSubtleBrush" Color="{StaticResource GetSubtle}"/>
+      <SolidColorBrush x:Key="GetCanvasBrush" Color="{StaticResource GetCanvas}"/>
+      <SolidColorBrush x:Key="GetAccentSoftBrush" Color="{StaticResource GetAccentSoft}"/>
+
+      <!-- Fluent re-pointing: accent, text, buttons, fields, tabs, lists. -->
+      <Color x:Key="SystemAccentColor">#00809A</Color>
+      <Color x:Key="SystemAccentColorDark1">#006E85</Color>
+      <Color x:Key="SystemAccentColorLight1">#009CBC</Color>
+      <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="#1B2240"/>
+      <SolidColorBrush x:Key="SystemControlForegroundBaseHighBrush" Color="#1B2240"/>
+      <SolidColorBrush x:Key="ButtonBackground" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#F1F4F9"/>
+      <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#E3E6EE"/>
+      <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#F5F7FB"/>
+      <SolidColorBrush x:Key="ButtonForeground" Color="#24305E"/>
+      <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#24305E"/>
+      <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#18213F"/>
+      <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="#8A91A8"/>
+      <SolidColorBrush x:Key="ButtonBorderBrush" Color="#CBD0DD"/>
+      <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#00809A"/>
+      <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#00809A"/>
+      <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#E3E6EE"/>
+      <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="TextControlBorderBrush" Color="#CBD0DD"/>
+      <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#00809A"/>
+      <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#00809A"/>
+      <SolidColorBrush x:Key="TextControlForeground" Color="#1B2240"/>
+      <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#1B2240"/>
+      <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#8A91A8"/>
+      <SolidColorBrush x:Key="TabItemHeaderForegroundSelected" Color="#24305E"/>
+      <SolidColorBrush x:Key="TabItemHeaderForegroundUnselected" Color="#5C6480"/>
+      <SolidColorBrush x:Key="TabItemHeaderForegroundUnselectedPointerOver" Color="#24305E"/>
+      <SolidColorBrush x:Key="TabItemHeaderSelectedPipeFill" Color="#00809A"/>
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#E6F5F9"/>
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#D2EDF3"/>
+      <SolidColorBrush x:Key="SystemControlHighlightListLowBrush" Color="#F1F4F9"/>
+      <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
+      <CornerRadius x:Key="OverlayCornerRadius">12</CornerRadius>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{StaticResource GetCanvasBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource GetInkBrush}"/>
+    <Setter Property="FontFamily" Value="Segoe UI, Inter, Noto Sans, sans-serif"/>
+    <Setter Property="FontSize" Value="13"/>
+  </Style>
+
+  <!-- Buttons: radius 10, SemiBold 13, min 36 px (toolbar/primary commands 44 px). -->
+  <Style Selector="Button">
+    <Setter Property="CornerRadius" Value="10"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="MinHeight" Value="36"/>
+    <Setter Property="Padding" Value="14,6"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{StaticResource GetNavyBrush}"/>
+    <Setter Property="Foreground" Value="White"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GetNavyBrush}"/>
+    <Setter Property="MinHeight" Value="44"/>
+    <Setter Property="Padding" Value="20,6"/>
+  </Style>
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource GetNavyDeepBrush}"/>
+    <Setter Property="Foreground" Value="White"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GetNavyDeepBrush}"/>
+  </Style>
+  <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="#151B33"/>
+    <Setter Property="Foreground" Value="White"/>
+  </Style>
+  <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="#A7ADC2"/>
+    <Setter Property="Foreground" Value="White"/>
+    <Setter Property="BorderBrush" Value="#A7ADC2"/>
+  </Style>
+  <Style Selector="Button.ghost">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.ghost:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource GetSubtleBrush}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.toolbar">
+    <Setter Property="MinHeight" Value="44"/>
+  </Style>
+  <Style Selector="Button.danger">
+    <Setter Property="Foreground" Value="{StaticResource GetRedBrush}"/>
+  </Style>
+  <Style Selector="Button.tabclose">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="MinHeight" Value="24"/>
+    <Setter Property="MinWidth" Value="24"/>
+    <Setter Property="Padding" Value="4,0"/>
+    <Setter Property="Foreground" Value="{StaticResource GetMutedBrush}"/>
+    <Setter Property="FontWeight" Value="Normal"/>
+    <Setter Property="FontSize" Value="16"/>
+  </Style>
+  <Style Selector="Button.tabclose:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource GetSubtleBrush}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+  </Style>
+
+  <!-- Home tiles: white cards with a teal hover edge. -->
+  <Style Selector="Button.tile">
+    <Setter Property="Background" Value="{StaticResource GetSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GetBorderBrush}"/>
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="Padding" Value="18,16"/>
+    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+    <Setter Property="VerticalContentAlignment" Value="Top"/>
+    <Setter Property="FontWeight" Value="Normal"/>
+  </Style>
+  <Style Selector="Button.tile:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource GetSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GetTealBrush}"/>
+  </Style>
+  <Style Selector="Button.tile:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource GetSubtleBrush}"/>
+  </Style>
+
+  <!-- Fields: 40–44 px, radius 10, teal focus. -->
+  <Style Selector="TextBox">
+    <Setter Property="CornerRadius" Value="10"/>
+    <Setter Property="MinHeight" Value="40"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Padding" Value="12,8"/>
+  </Style>
+  <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="BorderThickness" Value="2"/>
+  </Style>
+  <Style Selector="ComboBox">
+    <Setter Property="CornerRadius" Value="10"/>
+    <Setter Property="MinHeight" Value="40"/>
+  </Style>
+  <Style Selector="CheckBox">
+    <Setter Property="Foreground" Value="{StaticResource GetInkBrush}"/>
+  </Style>
+
+  <!-- Document tabs: compact 14 px headers instead of Fluent's 24 px "pivot" headers. -->
+  <Style Selector="TabControl">
+    <Setter Property="Padding" Value="0"/>
+  </Style>
+  <Style Selector="TabItem">
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="MinHeight" Value="44"/>
+    <Setter Property="Padding" Value="14,0"/>
+  </Style>
+
+  <!-- Typography and surfaces used across panes. -->
+  <Style Selector="TextBlock.title">
+    <Setter Property="FontSize" Value="24"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{StaticResource GetNavyBrush}"/>
+  </Style>
+  <Style Selector="TextBlock.section">
+    <Setter Property="FontSize" Value="16"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{StaticResource GetNavyBrush}"/>
+  </Style>
+  <Style Selector="TextBlock.hint">
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="Foreground" Value="{StaticResource GetMutedBrush}"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </Style>
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{StaticResource GetSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GetBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="12"/>
+  </Style>
+  <Style Selector="Border.header">
+    <Setter Property="Background" Value="{StaticResource GetSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GetBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+  </Style>
+  <Style Selector="Border.statusbar">
+    <Setter Property="Background" Value="{StaticResource GetSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GetBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="0,1,0,0"/>
+  </Style>
+  <Style Selector="Border.statusbar TextBlock">
+    <Setter Property="Foreground" Value="{StaticResource GetMutedBrush}"/>
+    <Setter Property="FontSize" Value="13"/>
+  </Style>
+</Styles>

@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Markup.Xaml.Styling;
+using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using GetDocument.Core.Instance;
@@ -12,7 +14,16 @@ public sealed class App : Application
     internal static IReadOnlyList<string> InitialPaths { get; set; } = [];
     internal static bool InitialArgumentsInvalid { get; set; }
 
-    public override void Initialize() => Styles.Add(new FluentTheme());
+    public override void Initialize()
+    {
+        // GET DS 4.1 is a light palette: do not follow a dark Windows theme.
+        RequestedThemeVariant = ThemeVariant.Light;
+        Styles.Add(new FluentTheme());
+        Styles.Add(new StyleInclude(new Uri("avares://GetDocument.Desktop/"))
+        {
+            Source = new Uri("avares://GetDocument.Desktop/Theme/GetTheme.axaml")
+        });
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {

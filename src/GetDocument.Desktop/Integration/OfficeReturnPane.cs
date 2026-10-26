@@ -38,7 +38,7 @@ public sealed class OfficeReturnPane : UserControl, IDisposable
         content.Children.Add(new TextBlock
         {
             Text = "Возврат рабочей копии в GUP-2",
-            FontSize = 22,
+            Classes = { "title" },
             FontWeight = Avalonia.Media.FontWeight.SemiBold
         });
         content.Children.Add(new TextBlock

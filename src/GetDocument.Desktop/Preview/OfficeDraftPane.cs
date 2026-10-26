@@ -15,7 +15,7 @@ internal sealed class OfficeDraftPane : StackPanel
         Children.Add(new TextBlock
         {
             Text = draft.Title,
-            FontSize = 24,
+            Classes = { "title" },
             FontWeight = FontWeight.SemiBold
         });
         Children.Add(new TextBlock

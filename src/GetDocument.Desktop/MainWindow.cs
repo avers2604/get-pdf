@@ -60,13 +60,17 @@ public sealed class MainWindow : Window
 
         var statusBar = new Border
         {
-            Padding = new Thickness(16, 8),
-            Background = new SolidColorBrush(Color.Parse("#E7EDF5")),
+            Padding = new Thickness(20, 9),
             Child = _status
         };
+        statusBar.Classes.Add("statusbar");
+        _status.TextTrimming = TextTrimming.CharacterEllipsis;
+        Avalonia.Automation.AutomationProperties.SetName(_status, "Строка состояния");
+        Avalonia.Automation.AutomationProperties.SetLiveSetting(_status,
+            Avalonia.Automation.AutomationLiveSetting.Polite);
         DockPanel.SetDock(statusBar, Dock.Bottom);
         root.Children.Add(statusBar);
-        _status.Text = "ГЭТ Документ — прототип общего рабочего пространства";
+        _status.Text = "Готово. Откройте файл или создайте новый документ.";
 
         _items.Add(new TabItem
         {
@@ -109,128 +113,206 @@ public sealed class MainWindow : Window
 
     private Control BuildHeader()
     {
-        var bar = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 12,
-            Margin = new Thickness(14, 10)
-        };
-        // Temporary text target; use official brandbook mark asset after visual acceptance.
-        // Reuse the verified official mark from the existing GetPdf asset without altering it.
+        // GET DS 4.1 shell header: official mark + product name, then commands. The mark is
+        // the brandbook asset (no button chrome); it still counts taps for the hidden module.
+        var bar = new DockPanel { Margin = new Thickness(20, 10), LastChildFill = false };
         Bitmap logo;
         using (var stream = AssetLoader.Open(new Uri("avares://GetDocument.Desktop/Assets/get-mark.png")))
             logo = new Bitmap(stream);
         var mark = new Button
         {
-            Content = new Image { Source = logo, Width = 34, Height = 34 },
-            Padding = new Thickness(7, 3)
+            Content = new Image { Source = logo, Width = 36, Height = 36 },
+            Padding = new Thickness(2),
+            MinHeight = 0
         };
-        ToolTip.SetTip(mark, "ГЭТ");
+        mark.Classes.Add("ghost");
+        Avalonia.Automation.AutomationProperties.SetName(mark, "Знак ГЭТ");
+        ToolTip.SetTip(mark, "ГЭТ Документ");
         mark.Click += (_, _) =>
         {
             if (_hiddenGame.Tap(DateTimeOffset.UtcNow)) OpenHiddenGame();
         };
-        bar.Children.Add(mark);
-        bar.Children.Add(new TextBlock
+        var brand = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10,
+            VerticalAlignment = VerticalAlignment.Center };
+        brand.Children.Add(mark);
+        var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        names.Children.Add(new TextBlock { Text = "ГЭТ Документ", FontSize = 18, FontWeight = FontWeight.SemiBold,
+            Foreground = (IBrush)Application.Current!.FindResource("GetNavyBrush")! });
+        names.Children.Add(new TextBlock { Text = "PDF, Office и изображения в одном окне", FontSize = 12,
+            Foreground = (IBrush)Application.Current!.FindResource("GetMutedBrush")! });
+        brand.Children.Add(names);
+        DockPanel.SetDock(brand, Dock.Left);
+        bar.Children.Add(brand);
+
+        var commands = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6,
+            Margin = new Thickness(28, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        commands.Children.Add(HeaderCommand("Главная", Icons.Home, "Главная (стартовый экран)",
+            () => _tabs.SelectedIndex = 0));
+        commands.Children.Add(HeaderCommand("ГЭТ Файлы", Icons.Network, "Сетевые папки",
+            ShowGetFiles));
+        commands.Children.Add(HeaderCommand("Шаблоны", Icons.Template, "Корпоративные шаблоны",
+            ShowCorporateTemplates));
+        commands.Children.Add(HeaderCommand("История", Icons.History,
+            "История редакций и комментарии выбранного документа", ShowRevisionHistory));
+        if (_officeReturnPolicy.Enabled)
+            commands.Children.Add(HeaderCommand("Отправить в GUP-2", Icons.Send,
+                "Вернуть рабочую копию DOCX/XLSX в карточку GUP-2", ShowOfficeReturn));
+        DockPanel.SetDock(commands, Dock.Left);
+        bar.Children.Add(commands);
+
+        var right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center };
+        var print = HeaderCommand("Печать", Icons.Printer, "Печать выбранного документа (Ctrl+P)", ShowPrintWizard);
+        print.Classes.Remove("ghost");
+        print.Classes.Add("toolbar");
+        right.Children.Add(print);
+        var open = HeaderCommand("Открыть файл", Icons.Folder, "Открыть документ (Ctrl+O)",
+            () => _ = OpenFilesAsync());
+        open.Classes.Remove("ghost");
+        open.Classes.Add("primary");
+        right.Children.Add(open);
+        DockPanel.SetDock(right, Dock.Right);
+        bar.Children.Add(right);
+
+        var header = new Border { Child = bar };
+        header.Classes.Add("header");
+        return header;
+    }
+
+    private static Button HeaderCommand(string text, Geometry icon, string tip, Action action)
+    {
+        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        content.Children.Add(Icons.Create(icon, 18));
+        content.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
+        var button = new Button { Content = content, MinHeight = 44 };
+        button.Classes.Add("ghost");
+        ToolTip.SetTip(button, tip);
+        Avalonia.Automation.AutomationProperties.SetName(button, text);
+        button.Click += (_, _) => action();
+        return button;
+    }
+
+    /// <summary>DS tab caption with a labelled close button.</summary>
+    private static StackPanel TabHeader(string title, Action close)
+    {
+        var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        heading.Children.Add(new TextBlock
         {
-            Text = "ГЭТ Документ",
-            FontSize = 18,
-            FontWeight = FontWeight.SemiBold,
+            Text = title, MaxWidth = 220, TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center
         });
-        var open = new Button { Content = "Открыть файл" };
-        open.Click += async (_, _) => await OpenFilesAsync();
-        bar.Children.Add(open);
-        var getFiles = new Button { Content = "ГЭТ Файлы" };
-        getFiles.Click += (_, _) => ShowGetFiles();
-        bar.Children.Add(getFiles);
-        if (_officeReturnPolicy.Enabled)
-        {
-            var officeReturn = new Button { Content = "Отправить в GUP-2" };
-            officeReturn.Click += (_, _) => ShowOfficeReturn();
-            bar.Children.Add(officeReturn);
-        }
-        var templates = new Button { Content = "Шаблоны" };
-        templates.Click += (_, _) => ShowCorporateTemplates();
-        bar.Children.Add(templates);
-        var history = new Button { Content = "История и комментарии" };
-        history.Click += (_, _) => ShowRevisionHistory();
-        bar.Children.Add(history);
-        var home = new Button { Content = "Главная" };
-        home.Click += (_, _) => _tabs.SelectedIndex = 0;
-        bar.Children.Add(home);
-        var print = new Button { Content = "Печать" };
-        print.Click += (_, _) => ShowPrintWizard();
-        bar.Children.Add(print);
-        return bar;
+        var button = new Button { Content = "×" };
+        button.Classes.Add("tabclose");
+        ToolTip.SetTip(button, "Закрыть вкладку (Ctrl+W)");
+        Avalonia.Automation.AutomationProperties.SetName(button, "Закрыть вкладку " + title);
+        button.Click += (_, _) => close();
+        heading.Children.Add(button);
+        return heading;
     }
 
     private Control CreateHome()
     {
         var content = new StackPanel
         {
-            Margin = new Thickness(32),
-            Spacing = 16,
-            HorizontalAlignment = HorizontalAlignment.Left
+            Margin = new Thickness(40, 32),
+            Spacing = 10,
+            MaxWidth = 1080,
+            HorizontalAlignment = HorizontalAlignment.Center
         };
-        content.Children.Add(new TextBlock
+        var title = new TextBlock { Text = "Создайте или откройте документ" };
+        title.Classes.Add("title");
+        content.Children.Add(title);
+        var lead = new TextBlock
         {
-            Text = "Создать документ",
-            FontSize = 28,
-            FontWeight = FontWeight.SemiBold
-        });
-        content.Children.Add(new TextBlock
-        {
-            Text = "Все открытые файлы — в верхних вкладках одного окна.\n" +
-                "Новые документы можно сохранить в DOCX, XLSX и PPTX.\n" +
-                "Полный офисный редактор подключается следующим этапом.",
-            FontSize = 14
-        });
-        var actions = new WrapPanel { Orientation = Orientation.Horizontal };
-        actions.Children.Add(CreateAction("Текстовый документ", "DOCX",
+            Text = "PDF, документы Word, таблицы Excel, презентации и изображения открываются во вкладках одного окна. " +
+                   "Файлы можно перетащить в окно."
+        };
+        lead.Classes.Add("hint");
+        content.Children.Add(lead);
+
+        content.Children.Add(Section("Создать"));
+        var create = new WrapPanel { Orientation = Orientation.Horizontal };
+        create.Children.Add(CreateAction("Текстовый документ", "Документ Word (DOCX)", Icons.FileText,
             () => AddDocument(_workspace.CreateDraft(WorkspaceDocumentKind.Text))));
-        actions.Children.Add(CreateAction("Таблица", "XLSX",
+        create.Children.Add(CreateAction("Таблица", "Книга Excel (XLSX)", Icons.Table,
             () => AddDocument(_workspace.CreateDraft(WorkspaceDocumentKind.Spreadsheet))));
-        actions.Children.Add(CreateAction("Презентация", "PPTX",
+        create.Children.Add(CreateAction("Презентация", "PowerPoint (PPTX)", Icons.Presentation,
             () => AddDocument(_workspace.CreateDraft(WorkspaceDocumentKind.Presentation))));
-        actions.Children.Add(CreateAction("Открыть", "PDF, Office, изображения",
-            () => _ = OpenFilesAsync()));
-        actions.Children.Add(CreateAction("ГЭТ Файлы", "Сетевые папки и документы",
-            ShowGetFiles));
-        actions.Children.Add(CreateAction("Шаблоны документов", "Записка, акт, письмо",
+        create.Children.Add(CreateAction("По шаблону", "Записка, акт, письмо", Icons.Template,
             ShowCorporateTemplates));
-        actions.Children.Add(CreateAction("Совместное редактирование",
-            "Доступно после подключения сервера",
+        content.Children.Add(create);
+
+        content.Children.Add(Section("Открыть"));
+        var open = new WrapPanel { Orientation = Orientation.Horizontal };
+        open.Children.Add(CreateAction("Открыть файл…", "PDF, Office, изображения", Icons.Folder,
+            () => _ = OpenFilesAsync()));
+        open.Children.Add(CreateAction("ГЭТ Файлы", "Общие сетевые папки", Icons.Network, ShowGetFiles));
+        open.Children.Add(CreateAction("ГЭТ Сканирование", ScannerApp.IsInstalled
+                ? "Сканировать документы в PDF" : "Приложение не установлено", Icons.Scanner,
+            OpenScanner));
+        open.Children.Add(CreateAction("Совместное редактирование", "Нужен сервер ГЭТ (настраивает ИТ)",
+            Icons.Users,
             () => OpenPlaceholder("Совместная работа",
-                "Серверные сеансы Collabora/ONLYOFFICE подключаются через защищённый запуск GUP-2. " +
-                "Сейчас доступ не настроен: редактор и права пользователей не эмулируются.")));
-        actions.Children.Add(CreateAction("ГЭТ Сканирование", "Подключение позднее",
-            () => OpenPlaceholder("ГЭТ Сканирование",
-                "Интеграция с отдельным приложением ГЭТ Сканирование предусмотрена, но пока не подключена.")));
-        content.Children.Add(actions);
-        content.Children.Add(new TextBlock
-        {
-            Text = "ГЭТ Файлы: подключение к доступным общим папкам Windows и Linux, без второго хранилища.",
-            Margin = new Thickness(0, 26, 0, 0)
-        });
+                "Совместное редактирование в реальном времени работает через сервер Collabora и вход в GUP-2. " +
+                "Когда ИТ-служба подключит сервер, документ из карточки GUP-2 откроется здесь, во вкладке. " +
+                "Сейчас сервер не настроен: правки и права пользователей не имитируются.")));
+        content.Children.Add(open);
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DropEvent, OnDrop);
         return new ScrollViewer { Content = content };
     }
 
-    private static Button CreateAction(string title, string subtitle, Action action)
+    private static TextBlock Section(string text)
     {
-        var label = new StackPanel { Spacing = 8, Margin = new Thickness(8) };
-        label.Children.Add(new TextBlock { Text = title, FontSize = 16,
-            FontWeight = FontWeight.SemiBold });
-        label.Children.Add(new TextBlock { Text = subtitle, FontSize = 12 });
+        var block = new TextBlock { Text = text, Margin = new Thickness(0, 18, 0, 2) };
+        block.Classes.Add("section");
+        return block;
+    }
+
+    private static Button CreateAction(string title, string subtitle, Geometry icon, Action action)
+    {
+        var label = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        var badge = new Border
+        {
+            Width = 40, Height = 40, CornerRadius = new CornerRadius(10),
+            Background = (IBrush)Application.Current!.FindResource("GetAccentSoftBrush")!,
+            Child = Icons.Create(icon, 22, "GetTealBrush"),
+            VerticalAlignment = VerticalAlignment.Top
+        };
+        label.Children.Add(badge);
+        var text = new StackPanel { Spacing = 4, Margin = new Thickness(14, 0, 0, 0) };
+        text.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeight.SemiBold,
+            Foreground = (IBrush)Application.Current!.FindResource("GetNavyBrush")!,
+            TextWrapping = TextWrapping.Wrap });
+        var sub = new TextBlock { Text = subtitle };
+        sub.Classes.Add("hint");
+        text.Children.Add(sub);
+        Grid.SetColumn(text, 1);
+        label.Children.Add(text);
         var button = new Button
         {
             Content = label,
-            Width = 225,
-            Height = 116,
+            Width = 252,
+            Height = 112,
             Margin = new Thickness(0, 0, 12, 12)
         };
+        button.Classes.Add("tile");
+        Avalonia.Automation.AutomationProperties.SetName(button, title + ". " + subtitle);
         button.Click += (_, _) => action();
         return button;
+    }
+
+    private void OnDrop(object? sender, DragEventArgs e)
+    {
+        var files = e.DataTransfer.TryGetFiles();
+        if (files is null) return;
+        OpenFromLaunch(files.Select(f => f.Path).Where(p => p.IsFile).Select(p => p.LocalPath).ToArray());
+    }
+
+    private void OpenScanner()
+    {
+        if (ScannerApp.TryLaunch(out string message)) _status.Text = message;
+        else OpenPlaceholder("ГЭТ Сканирование", message);
     }
 
     private void AddDocument(WorkspaceDocumentTab item)
@@ -239,13 +321,9 @@ public sealed class MainWindow : Window
         {
             Control panel = PreviewFactory.Create(item, SaveDraftAsync, OpenSavedCopyAsync, SaveXlsxRevisionAsync);
 
-            var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-            title.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center,
-                MaxWidth = 210, TextTrimming = TextTrimming.CharacterEllipsis });
-            var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
-            close.Click += (_, _) => CloseDocument(item.Id);
-            title.Children.Add(close);
+            var title = TabHeader(item.Title, () => CloseDocument(item.Id));
             view = new TabItem { Tag = item.Id, Header = title, Content = panel };
+            Avalonia.Automation.AutomationProperties.SetName(view, item.Title);
             _views[item.Id] = view;
             _items.Add(view);
         }
@@ -425,15 +503,7 @@ public sealed class MainWindow : Window
             return;
         }
         if (!_officeReturnPolicy.Enabled) return;
-        var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        heading.Children.Add(new TextBlock
-        {
-            Text = "Возврат GUP-2",
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
-        close.Click += (_, _) => CloseOfficeReturn();
-        heading.Children.Add(close);
+        var heading = TabHeader("Возврат GUP-2", CloseOfficeReturn);
         _officeReturnTab = new TabItem
         {
             Header = heading,
@@ -465,16 +535,7 @@ public sealed class MainWindow : Window
                 return;
             }
             ClosePrintWizard();
-            var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
-            heading.Children.Add(new TextBlock
-            {
-                Text = "Печать: " + Path.GetFileName(path),
-                MaxWidth = 220, TextTrimming = TextTrimming.CharacterEllipsis,
-                VerticalAlignment = VerticalAlignment.Center
-            });
-            var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
-            close.Click += (_, _) => ClosePrintWizard();
-            heading.Children.Add(close);
+            var heading = TabHeader("Печать: " + Path.GetFileName(path), ClosePrintWizard);
             _printTab = new TabItem
             {
                 Header = heading,
@@ -548,21 +609,7 @@ public sealed class MainWindow : Window
             return;
         }
         var pane = new CollaborationEditorPane(launch);
-        var heading = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6
-        };
-        heading.Children.Add(new TextBlock
-        {
-            Text = "Совместно: " + launch.DisplayName,
-            MaxWidth = 220,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
-        close.Click += (_, _) => CloseCollaborationSession(key);
-        heading.Children.Add(close);
+        var heading = TabHeader("Совместно: " + launch.DisplayName, () => CloseCollaborationSession(key));
         var view = new TabItem { Header = heading, Content = pane };
         _collaborationTabs.Add(key, view);
         _items.Add(view);
@@ -608,15 +655,7 @@ public sealed class MainWindow : Window
                 _status.Text = "Не удалось открыть документ из ГЭТ Файлы: " + ex.Message;
             }
         });
-        var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        heading.Children.Add(new TextBlock
-        {
-            Text = "ГЭТ Файлы",
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
-        close.Click += (_, _) => CloseGetFiles();
-        heading.Children.Add(close);
+        var heading = TabHeader("ГЭТ Файлы", CloseGetFiles);
         _filesTab = new TabItem { Header = heading, Content = pane };
         _items.Add(_filesTab);
         _tabs.SelectedItem = _filesTab;
@@ -643,15 +682,7 @@ public sealed class MainWindow : Window
             AddDocument(_workspace.OpenExisting(path));
             return Task.CompletedTask;
         });
-        var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        heading.Children.Add(new TextBlock
-        {
-            Text = "Шаблоны",
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
-        close.Click += (_, _) => CloseCorporateTemplates();
-        heading.Children.Add(close);
+        var heading = TabHeader("Шаблоны", CloseCorporateTemplates);
         _templatesTab = new TabItem { Header = heading, Content = content };
         _items.Add(_templatesTab);
         _tabs.SelectedItem = _templatesTab;
@@ -686,22 +717,8 @@ public sealed class MainWindow : Window
                 _status.Text = "Не удалось открыть редакцию во вкладке: " + ex.Message;
             }
         });
-        var heading = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 5
-        };
-        heading.Children.Add(new TextBlock
-        {
-            Text = "История: " + source.Title,
-            VerticalAlignment = VerticalAlignment.Center,
-            MaxWidth = 210,
-            TextTrimming = TextTrimming.CharacterEllipsis
-        });
-        var close = new Button { Content = "×", Padding = new Thickness(6, 0) };
         Guid sourceId = source.Id;
-        close.Click += (_, _) => CloseRevisionHistory(sourceId);
-        heading.Children.Add(close);
+        var heading = TabHeader("История: " + source.Title, () => CloseRevisionHistory(sourceId));
         var view = new TabItem { Header = heading, Content = pane };
         _revisionTabs[source.Id] = view;
         _items.Add(view);

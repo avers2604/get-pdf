@@ -29,10 +29,10 @@ internal sealed class ImagePreviewPane : DockPanel, IDisposable
         IsEnabled = false
     };
     private readonly Button _discard = new() { Content = "Сбросить", IsEnabled = false };
-    private readonly TextBox _x = new() { Width = 66, Watermark = "X" };
-    private readonly TextBox _y = new() { Width = 66, Watermark = "Y" };
-    private readonly TextBox _w = new() { Width = 66, Watermark = "Шир." };
-    private readonly TextBox _h = new() { Width = 66, Watermark = "Выс." };
+    private readonly TextBox _x = new() { Width = 66, PlaceholderText = "X" };
+    private readonly TextBox _y = new() { Width = 66, PlaceholderText = "Y" };
+    private readonly TextBox _w = new() { Width = 66, PlaceholderText = "Шир." };
+    private readonly TextBox _h = new() { Width = 66, PlaceholderText = "Выс." };
     private Bitmap? _bitmap;
     private string? _fingerprint;
     private int _turns;

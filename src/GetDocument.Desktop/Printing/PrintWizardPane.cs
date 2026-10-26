@@ -25,10 +25,10 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         ItemsSource = new[] { "Односторонняя", "Двусторонняя — длинный край",
             "Двусторонняя — короткий край" }, SelectedIndex = 0 };
     private readonly TextBox _pages = new() { Width = 270,
-        Watermark = "Все страницы или 1,3-5" };
+        PlaceholderText = "Все страницы или 1,3-5" };
     private readonly TextBox _copies = new() { Width = 140, Text = "1" };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly TextBlock _stepTitle = new() { FontSize = 20,
+    private readonly TextBlock _stepTitle = new() { Classes = { "title" },
         FontWeight = FontWeight.SemiBold };
     private readonly TextBlock _summary = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _previewStatus = new() { Text = "Загрузка предпросмотра…" };
@@ -52,7 +52,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         left.Children.Add(new TextBlock
         {
             Text = "Мастер печати ГЭТ",
-            FontSize = 26, FontWeight = FontWeight.SemiBold
+            Classes = { "title" }, FontWeight = FontWeight.SemiBold
         });
         left.Children.Add(new TextBlock
         {

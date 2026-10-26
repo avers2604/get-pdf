@@ -16,15 +16,15 @@ internal sealed class CorporateTemplatesPane : ScrollViewer
 {
     private readonly Func<string, Task> _openResult;
     private readonly ComboBox _kind = new() { Width = 330, HorizontalAlignment = HorizontalAlignment.Left };
-    private readonly TextBox _department = new() { Watermark = "Название подразделения" };
-    private readonly TextBox _author = new() { Watermark = "ФИО и/или должность" };
-    private readonly TextBox _recipient = new() { Watermark = "Кому предназначен документ" };
-    private readonly TextBox _subject = new() { Watermark = "Тема документа" };
-    private readonly TextBox _number = new() { Watermark = "Номер (при отсутствии будет б/н)" };
-    private readonly TextBox _date = new() { Watermark = "ГГГГ-ММ-ДД" };
+    private readonly TextBox _department = new() { PlaceholderText = "Название подразделения" };
+    private readonly TextBox _author = new() { PlaceholderText = "ФИО и/или должность" };
+    private readonly TextBox _recipient = new() { PlaceholderText = "Кому предназначен документ" };
+    private readonly TextBox _subject = new() { PlaceholderText = "Тема документа" };
+    private readonly TextBox _number = new() { PlaceholderText = "Номер (при отсутствии будет б/н)" };
+    private readonly TextBox _date = new() { PlaceholderText = "ГГГГ-ММ-ДД" };
     private readonly TextBox _body = new()
     {
-        Watermark = "Содержание",
+        PlaceholderText = "Содержание",
         AcceptsReturn = true,
         TextWrapping = TextWrapping.Wrap,
         MinHeight = 120
@@ -53,7 +53,7 @@ internal sealed class CorporateTemplatesPane : ScrollViewer
         layout.Children.Add(new TextBlock
         {
             Text = "Корпоративные шаблоны",
-            FontSize = 27,
+            Classes = { "title" },
             FontWeight = FontWeight.SemiBold
         });
         layout.Children.Add(new TextBlock

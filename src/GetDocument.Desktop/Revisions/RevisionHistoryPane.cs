@@ -26,11 +26,11 @@ internal sealed class RevisionHistoryPane : DockPanel, IDisposable
     private readonly ListBox _comments = new() { MinHeight = 100 };
     private readonly TextBox _author = new()
     {
-        Width = 235, Watermark = "Имя автора (не подтверждено)"
+        Width = 235, PlaceholderText = "Имя автора (не подтверждено)"
     };
     private readonly TextBox _comment = new()
     {
-        Width = 390, Height = 75, Watermark = "Текст замечания",
+        Width = 390, Height = 75, PlaceholderText = "Текст замечания",
         AcceptsReturn = true, TextWrapping = TextWrapping.Wrap
     };
     private readonly TextBox _comparison = new()
@@ -56,7 +56,7 @@ internal sealed class RevisionHistoryPane : DockPanel, IDisposable
         var layout = new StackPanel { Margin = new Thickness(24), Spacing = 10 };
         layout.Children.Add(new TextBlock
         {
-            Text = "История редакций и комментарии", FontSize = 25,
+            Text = "История редакций и комментарии", Classes = { "title" },
             FontWeight = FontWeight.SemiBold
         });
         layout.Children.Add(new TextBlock

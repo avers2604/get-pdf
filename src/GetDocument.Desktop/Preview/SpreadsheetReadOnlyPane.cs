@@ -19,7 +19,7 @@ internal sealed class SpreadsheetReadOnlyPane : DockPanel, IDisposable
         Text = "Чтение таблицы…",
         TextWrapping = TextWrapping.Wrap
     };
-    private readonly TextBlock _heading = new() { FontSize = 22 };
+    private readonly TextBlock _heading = new() { Classes = { "title" } };
     private readonly ListBox _rows = new();
     private bool _loaded;
     private bool _disposed;

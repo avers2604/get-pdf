@@ -28,12 +28,12 @@ internal sealed class PdfPreviewPane : DockPanel, IDisposable
     private readonly Button _previous = new() { Content = "←", IsEnabled = false };
     private readonly Button _next = new() { Content = "→", IsEnabled = false };
     private readonly Button _last = new() { Content = "⇥", IsEnabled = false };
-    private readonly TextBox _pageInput = new() { Width = 64, Watermark = "Стр." };
+    private readonly TextBox _pageInput = new() { Width = 64, PlaceholderText = "Стр." };
     private readonly Button _jump = new() { Content = "Перейти", IsEnabled = false };
     private readonly Button _zoomOut = new() { Content = "−" };
     private readonly Button _zoomIn = new() { Content = "+" };
     private readonly TextBlock _zoomLabel = new() { Text = "100%", VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBox _searchInput = new() { Width = 220, Watermark = "Найти текст в PDF" };
+    private readonly TextBox _searchInput = new() { Width = 220, PlaceholderText = "Найти текст в PDF" };
     private readonly Button _search = new() { Content = "Найти" };
     private readonly Button _previousHit = new() { Content = "↑", IsEnabled = false };
     private readonly Button _nextHit = new() { Content = "↓", IsEnabled = false };

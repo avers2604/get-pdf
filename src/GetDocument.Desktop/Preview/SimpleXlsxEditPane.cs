@@ -37,7 +37,7 @@ internal sealed class SimpleXlsxEditPane : DockPanel, IDisposable
         var header = new StackPanel { Margin = new Thickness(18, 12), Spacing = 8,
             Children =
             {
-                new TextBlock { Text = tab.Title, FontSize = 23, FontWeight = FontWeight.SemiBold },
+                new TextBlock { Text = tab.Title, Classes = { "title" }, FontWeight = FontWeight.SemiBold },
                 new TextBlock { Text = "Простой текстовый лист A1:J10. Формулы и сложное оформление не изменяются.",
                     TextWrapping = TextWrapping.Wrap },
                 bar, _status
