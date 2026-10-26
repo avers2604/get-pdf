@@ -64,7 +64,7 @@ public sealed class PrintFileSnapshotTests
         string original = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".pdf");
         string root = PrintFileSnapshot.GetPrivateJobsDirectory();
         string orphan = Path.Combine(root, "job-" + Guid.NewGuid().ToString("N"));
-        string unrelated = Path.Combine(root, "user-data");
+        string unrelated = Path.Combine(root, "other-" + Guid.NewGuid().ToString("N"));
         try
         {
             await File.WriteAllTextAsync(original, "%PDF-1.5\n");
