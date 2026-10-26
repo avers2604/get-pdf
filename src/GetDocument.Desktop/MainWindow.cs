@@ -739,11 +739,11 @@ public sealed class MainWindow : Window
         if (_tabs.SelectedItem is TabItem { Tag: Guid id })
         {
             _openingPrintWizard = true;
+            string? printable = null;
+            bool generatedOfficePrintCopy = false;
             try
             {
             var document = _workspace.Tabs.FirstOrDefault(x => x.Id == id);
-            string? printable = null;
-            bool generatedOfficePrintCopy = false;
             if (_views.TryGetValue(id, out var pdfTab) && pdfTab.Content is GetDocument.Desktop.Pdf.PdfWorkspacePane pdf)
             {
                 // Prints what is on screen: unsaved stamps, numbers and page edits included.
@@ -784,7 +784,7 @@ public sealed class MainWindow : Window
                 currentId != id || !_views.ContainsKey(id))
             {
                 if (generatedOfficePrintCopy && printable is not null)
-                    GetDocument.Desktop.Printing.OfficePrintFiles.DeleteOwnedExport(printable);
+                    GetDocument.Core.Printing.OfficePrintFiles.DeleteOwnedExport(printable);
                 _status.Text = "Исходная вкладка изменилась во время подготовки PDF. Печать отменена.";
                 return;
             }
@@ -798,6 +798,7 @@ public sealed class MainWindow : Window
             _items.Add(_printTab);
             _tabs.SelectedItem = _printTab;
             _status.Text = "Открыт мастер печати ГЭТ. Параметры задаются без системного диалога.";
+            generatedOfficePrintCopy = false; // print wizard now owns its Office export
             return;
             }
             catch (Exception ex) when (ex is IOException or InvalidOperationException
@@ -809,6 +810,8 @@ public sealed class MainWindow : Window
             }
             finally
             {
+                if (generatedOfficePrintCopy && printable is not null)
+                    GetDocument.Core.Printing.OfficePrintFiles.DeleteOwnedExport(printable);
                 _openingPrintWizard = false;
             }
             return;
