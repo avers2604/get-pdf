@@ -521,6 +521,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             await document.ExportPdfAsync(target);
             if (!File.Exists(target) || new FileInfo(target).Length == 0)
                 throw new InvalidDataException("Офисный редактор не создал PDF для печати.");
+            OfficePrintFiles.HardenExport(target);
             return target;
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException
