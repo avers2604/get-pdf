@@ -27,7 +27,12 @@ if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate restore failed.' }
 & dotnet build tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj -c Release --no-restore
 if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate build failed.' }
 
-$reports = Join-Path (Join-Path (Get-Location) 'artifacts') ('gd25-windows-' + [guid]::NewGuid().ToString('N'))
+# Reports may contain document paths: use the private current-user data area,
+# not a shared source checkout or publicly readable artifacts directory.
+if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    throw 'Current-user LocalApplicationData is not available.'
+}
+$reports = Join-Path $env:LOCALAPPDATA ('GET-Document\ReleaseReports\gd25-windows-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $reports | Out-Null
 Write-Host "Local TRX reports: $reports"
 foreach ($suite in @('Core','Office','Printing','Images','Revisions','Collaboration','WopiGateway')) {
