@@ -26,6 +26,8 @@ public partial class App : Application
         // prevent tab/session or GET-system status cleanup under IT policy.
         if (!WorkstationPolicy.Current.RememberRecentDocuments)
             PrivacyCleanup("pdf-recent-cleanup", PdfRecentDocuments.Clear);
+        if (!WorkstationPolicy.Current.AllowFavoriteDocuments)
+            PrivacyCleanup("pdf-favorites-cleanup", PdfFavoriteDocuments.Clear);
         if (!WorkstationPolicy.Current.RestoreTabs)
             PrivacyCleanup("pdf-tabs-cleanup", PdfTabSessionStore.Clear);
         if (!WorkstationPolicy.Current.ExportGetSystemStatus)

@@ -67,7 +67,7 @@ internal static class PdfQpdfChunkAssembler
             {
                 var args = BuildMergeArguments(group, tempOutput);
                 var (code, _) = await ExecuteAsync(args, token);
-                if (code != 0)
+                if (!PdfQpdfProcessRunner.Succeeded(code))
                     throw new InvalidDataException(
                         "qpdf не смог объединить OCR-фрагменты. Итоговый файл не публикуется.");
                 await VerifyStructureAsync(tempOutput, token);
@@ -85,7 +85,7 @@ internal static class PdfQpdfChunkAssembler
             throw new InvalidDataException("Выходной PDF отсутствует или пуст.");
         await VerifyStructureAsync(source, cancellation);
         var (countExit, standardOut) = await ExecuteAsync(["--show-npages", source], cancellation);
-        if (countExit != 0 || ParsePageCount(standardOut) != expectedPages)
+        if (!PdfQpdfProcessRunner.Succeeded(countExit) || ParsePageCount(standardOut) != expectedPages)
             throw new InvalidDataException(
                 $"qpdf не подтвердил ожидаемое число страниц ({expectedPages}).");
     }
@@ -96,7 +96,7 @@ internal static class PdfQpdfChunkAssembler
         if (!File.Exists(path) || new FileInfo(path).Length == 0)
             throw new InvalidDataException("qpdf не создал проверяемый PDF.");
         var (checkExit, _) = await ExecuteAsync(["--check", path], cancellation);
-        if (checkExit != 0)
+        if (!PdfQpdfProcessRunner.Succeeded(checkExit))
             throw new InvalidDataException("qpdf не подтвердил структуру PDF-фрагмента.");
     }
 

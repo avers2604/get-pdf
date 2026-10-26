@@ -13,6 +13,11 @@ namespace GetPdf;
 internal static class PdfQpdfProcessRunner
 {
     internal const int MaxCapturedCharacters = 256;
+    // qpdf exit codes: 0 = success, 2 = errors, 3 = success with warnings. Scanner and
+    // office PDFs routinely give 3 for recoverable quirks (e.g. stream length slack);
+    // the output is still complete, and every caller verifies the result independently.
+    internal const int ExitWarnings = 3;
+    internal static bool Succeeded(int exitCode) => exitCode is 0 or ExitWarnings;
 
     internal static TimeSpan TimeoutFor(IReadOnlyList<string> args)
     {

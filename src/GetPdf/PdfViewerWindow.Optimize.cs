@@ -16,8 +16,9 @@ public partial class PdfViewerWindow
                 "Оптимизация PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (!ConfirmStructuralExport()) return;
-        var dialog = NewPdfOutputDialog(Path.GetFileNameWithoutExtension(_originalPath!) + "_оптимизированный");
+        // No "Проверка PDF" prompt: qpdf rewrites losslessly (bookmarks, links and text stay), and
+        // PdfLosslessOptimizer itself refuses signed PDFs, forms and annotations via PdfStructureGuard.
+        var dialog = NewPdfOutputDialog(Path.GetFileNameWithoutExtension(_originalPath!) + "_сжатый");
         if (dialog.ShowDialog(HostWindow) != true || !ValidateOutput(dialog.FileName)) return;
         string source = _sourcePath;
         string target = dialog.FileName;
@@ -30,7 +31,7 @@ public partial class PdfViewerWindow
         {
             var result = await PdfJobCoordinator.Shared.RunAsync(token =>
                 PdfLosslessOptimizer.OptimizeAsync(source, target, pages, token), cancel.Token);
-            StatusText.Text = $"Создана отдельная копия: {result.Before - result.After:N0} байт экономии.";
+            StatusText.Text = DescribeCompression(result.Before, result.After, Path.GetFileName(target));
         }
         catch (OperationCanceledException)
         { StatusText.Text = "Оптимизация отменена; новая копия не опубликована."; }
@@ -42,5 +43,15 @@ public partial class PdfViewerWindow
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally { _batchCancel = null; _loading = false; SetControls(); }
+    }
+
+    /// <summary>"Сжатая копия «a.pdf»: 167 КБ → 71 КБ (−57 %). Исходный файл не изменён."</summary>
+    internal static string DescribeCompression(long before, long after, string fileName)
+    {
+        static string Size(long bytes) => bytes >= 1024 * 1024
+            ? $"{bytes / (1024.0 * 1024):0.#} МБ"
+            : $"{Math.Max(1, (bytes + 512) / 1024)} КБ";
+        int saved = before > 0 ? (int)Math.Round(100.0 * (before - after) / before) : 0;
+        return $"Сжатая копия «{fileName}»: {Size(before)} → {Size(after)} (−{saved} %). Исходный файл не изменён.";
     }
 }

@@ -33,7 +33,7 @@ internal static class PdfLosslessOptimizer
         try
         {
             var (code, _) = await PdfQpdfProcessRunner.RunAsync(Arguments(source, stage), token);
-            if (code != 0)
+            if (!PdfQpdfProcessRunner.Succeeded(code))
                 throw new InvalidDataException("Не удалось выполнить безопасную оптимизацию qpdf.");
             token.ThrowIfCancellationRequested();
             PdfOutputVerifier.Verify(stage, expectedPages);

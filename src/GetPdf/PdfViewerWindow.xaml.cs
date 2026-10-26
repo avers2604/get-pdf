@@ -110,16 +110,15 @@ public partial class PdfViewerWindow : UserControl
         InitializeComponent();
         DataContext = _workspace;
         InitializeContinuousView();
-        RecentButton.Visibility = WorkstationPolicy.Current.RememberRecentDocuments
-            ? Visibility.Visible : Visibility.Collapsed;
+        InitializeStartPage();
         Gup2PortalButton.Visibility = WorkstationPolicy.Current.AllowGup2Portal
             ? Visibility.Visible : Visibility.Collapsed;
         Gup2VerifyShaButton.Visibility = WorkstationPolicy.Current.AllowGup2Portal
             ? Visibility.Visible : Visibility.Collapsed;
         Gup2DirectReturnButton.Visibility = WorkstationPolicy.Current.AllowGup2DirectReturn
             ? Visibility.Visible : Visibility.Collapsed;
-        // Lossless optimisation needs an IT-approved qpdf (tools\qpdf + qpdf.sha256); without it, hide the command.
-        OptimizePdfButton.Visibility = PdfQpdfValidator.IsAvailable ? Visibility.Visible : Visibility.Collapsed;
+        // Lossless optimisation needs qpdf (bundled since 0.1.2: tools\qpdf + qpdf.sha256); hide it if absent or altered.
+        OptimizePdfButton.Visibility = PdfQpdfValidator.IsUsable ? Visibility.Visible : Visibility.Collapsed;
         // OCR needs IT-installed offline Tesseract models (tessdata\rus + eng); hide the command otherwise.
         string tessdata = Path.Combine(AppContext.BaseDirectory, "tessdata");
         OcrButton.Visibility = File.Exists(Path.Combine(tessdata, "rus.traineddata")) &&
@@ -224,7 +223,8 @@ public partial class PdfViewerWindow : UserControl
         if (PagePaneColumn is null || PagePaneBorder is null ||
             PagePaneToggleButton is null || SearchResultsList is null) return;
 
-        bool show = PdfWorkspaceLayout.ShowPages(
+        // No empty thumbnail card next to the start screen.
+        bool show = _plan is not null && PdfWorkspaceLayout.ShowPages(
             ActualWidth, _pagePaneOverride, _editingToolsVisible);
         bool wasVisible = PagePaneBorder.Visibility == Visibility.Visible;
         PagePaneBorder.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
@@ -423,33 +423,6 @@ public partial class PdfViewerWindow : UserControl
         await OpenPdfPathsAsync(paths);
     }
 
-    private void Recent_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button owner ||
-            !WorkstationPolicy.Current.RememberRecentDocuments) return;
-        var menu = new ContextMenu();
-        foreach (string path in PdfRecentDocuments.Read())
-        {
-            var item = new MenuItem { Header = PdfSafeDisplayName.Normalize(Path.GetFileName(path)), ToolTip = path };
-            item.Click += async (_, _) =>
-            {
-                if (_closing || _loading) return;
-                await OpenPdfPathsAsync([path]);
-            };
-            menu.Items.Add(item);
-        }
-        if (menu.Items.Count == 0)
-            menu.Items.Add(new MenuItem { Header = "Список пуст", IsEnabled = false });
-        menu.Items.Add(new Separator());
-        var clear = new MenuItem { Header = "Очистить недавние" };
-        clear.Click += (_, _) => PdfRecentDocuments.Clear();
-        menu.Items.Add(clear);
-        owner.ContextMenu = menu;
-        menu.PlacementTarget = owner;
-        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-        menu.IsOpen = true;
-    }
-
     internal async Task LoadPdfAsync(string path)
     {
         if (_loading) return;
@@ -561,6 +534,7 @@ public partial class PdfViewerWindow : UserControl
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 { DiagnosticLog.Failure("pdf-recent", ex); }
             }
+            UpdateFavoriteButton();
             StatusText.Text = draftStatus ?? (_canModify
                 ? "Просмотр PDF. Исходный файл не изменён."
                 : "Только просмотр: редактирование структуры документа не подтверждено.");
@@ -877,6 +851,15 @@ public partial class PdfViewerWindow : UserControl
             IsJobActive = _batchCancel is not null,
             CanCancelJob = _batchCancel is { IsCancellationRequested: false }
         });
+        // Start screen while no document is open (also after a failed opening).
+        if (_plan is null && !_loading) EmptyMessage.Visibility = Visibility.Visible;
+        else if (_plan is null) EmptyMessage.Visibility = Visibility.Collapsed;
+        if (_plan is null) FavoriteButton.Visibility = Visibility.Collapsed;
+        if ((_plan is not null) != _layoutHasDocument)
+        {
+            _layoutHasDocument = _plan is not null;
+            ApplyResponsiveLayout();
+        }
         CancelPdfJobButton.Visibility = _workspace.IsJobActive
             ? Visibility.Visible : Visibility.Collapsed;
         PdfJobProgressBar.Visibility = _workspace.IsJobActive
@@ -2338,16 +2321,17 @@ public partial class PdfViewerWindow : UserControl
             // can reject a present-but-tampered optional qpdf executable.
             if (!PdfQpdfValidator.IsAvailable)
                 return message; // qpdf is optional: no noise when IT has not installed it
-            await PdfJobCoordinator.Shared.RunAsync(token =>
+            var check = await PdfJobCoordinator.Shared.RunAsync(token =>
                 PdfQpdfValidator.ValidateIfAvailableAsync(outputFile, token));
-            return message + " · структура проверена qpdf";
+            return check == PdfQpdfCheck.Warnings
+                ? message + " · структура проверена (qpdf: есть некритичные замечания, файл читается)"
+                : message + " · структура проверена";
         }
         catch (Exception ex)
         {
             DiagnosticLog.Failure("pdf-qpdf-validation", ex);
             return message +
-                " · PDF сохранён, но qpdf не одобрен или проверка структуры не пройдена. " +
-                "Проверьте файл перед использованием.";
+                " · PDF сохранён, но проверка структуры не пройдена. Проверьте файл перед использованием.";
         }
     }
 

@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>GetPdf</AssemblyName>
     <RootNamespace>GetPdf</RootNamespace>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <!-- Exe/window icon: brandbook inverse GET mark on corporate navy, legible on light and dark taskbars. -->
     <ApplicationIcon>Assets\get-pdf.ico</ApplicationIcon>
