@@ -14,12 +14,12 @@ if [ "$major" -lt 10 ]; then
 fi
 dotnet restore GetDocument.slnx
 dotnet build GetDocument.slnx -c Release --no-restore
-dotnet test tests/GetDocument.Core.Tests/GetDocument.Core.Tests.csproj -c Release --no-restore
-dotnet test tests/GetDocument.Office.Tests/GetDocument.Office.Tests.csproj -c Release --no-restore
-dotnet test tests/GetDocument.Printing.Tests/GetDocument.Printing.Tests.csproj -c Release --no-restore
-dotnet test tests/GetDocument.Images.Tests/GetDocument.Images.Tests.csproj -c Release --no-restore
-dotnet test tests/GetDocument.Revisions.Tests/GetDocument.Revisions.Tests.csproj -c Release --no-restore
-dotnet test tests/GetDocument.Collaboration.Tests/GetDocument.Collaboration.Tests.csproj -c Release --no-restore
-dotnet test tests/GetDocument.WopiGateway.Tests/GetDocument.WopiGateway.Tests.csproj -c Release --no-restore
+dotnet test --project tests/GetDocument.Core.Tests/GetDocument.Core.Tests.csproj -c Release --no-restore
+dotnet test --project tests/GetDocument.Office.Tests/GetDocument.Office.Tests.csproj -c Release --no-restore
+dotnet test --project tests/GetDocument.Printing.Tests/GetDocument.Printing.Tests.csproj -c Release --no-restore
+dotnet test --project tests/GetDocument.Images.Tests/GetDocument.Images.Tests.csproj -c Release --no-restore
+dotnet test --project tests/GetDocument.Revisions.Tests/GetDocument.Revisions.Tests.csproj -c Release --no-restore
+dotnet test --project tests/GetDocument.Collaboration.Tests/GetDocument.Collaboration.Tests.csproj -c Release --no-restore
+dotnet test --project tests/GetDocument.WopiGateway.Tests/GetDocument.WopiGateway.Tests.csproj -c Release --no-restore
 echo "PASS: core and Office test projects have completed locally."
 echo "NEXT: run Avalonia, XLS/XLSB fixtures and SMB/CIFS UI acceptance manually."
