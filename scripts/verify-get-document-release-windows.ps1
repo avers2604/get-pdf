@@ -26,6 +26,8 @@ if ($driveType -ne [IO.DriveType]::Fixed -and
 if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate restore failed.' }
 & dotnet build tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj -c Release --no-restore
 if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate build failed.' }
+& dotnet run --project tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj -c Release --no-build --no-restore -- --self-test
+if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate self-tests failed.' }
 
 # Reports may contain document paths: use the private current-user data area,
 # not a shared source checkout or publicly readable artifacts directory.
@@ -38,10 +40,10 @@ Write-Host "Local TRX reports: $reports"
 foreach ($suite in @('Core','Office','Printing','Images','Revisions','Collaboration','WopiGateway')) {
     $project = "tests/GetDocument.$suite.Tests/GetDocument.$suite.Tests.csproj"
     # Native MTP reporting. A skipped critical test does NOT satisfy the gate.
-    & dotnet test $project -c Release --no-restore -- --report-trx --report-trx-filename "$suite.trx" --results-directory $reports
+    & dotnet test --project $project -c Release --no-restore -- --report-trx --report-trx-filename "$suite.trx" --results-directory $reports
     if ($LASTEXITCODE -ne 0) { throw "Test suite failed: $suite" }
 }
-& dotnet test tests/GetPdf.Tests/GetPdf.Tests.csproj -c Release --no-restore -- --report-trx --report-trx-filename 'LegacyPdf.trx' --results-directory $reports
+& dotnet test --project tests/GetPdf.Tests/GetPdf.Tests.csproj -c Release --no-restore -- --report-trx --report-trx-filename 'LegacyPdf.trx' --results-directory $reports
 if ($LASTEXITCODE -ne 0) { throw 'Legacy GetPdf regression tests failed.' }
 & dotnet run --project tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj -c Release --no-build --no-restore -- $reports windows
 if ($LASTEXITCODE -ne 0) { throw 'Critical GD-25 release gate test missing/failed/inconclusive.' }
