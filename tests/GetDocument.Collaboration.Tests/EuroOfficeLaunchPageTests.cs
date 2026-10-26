@@ -116,6 +116,59 @@ public sealed class EuroOfficeLaunchPageTests
     }
 
     [TestMethod]
+    public async Task ResolverDoesNotContactStorageForAnonymousOrMalformedLaunch()
+    {
+        var store = new SingleUseStore(Grant());
+        var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
+        Assert.IsNull(await EuroOfficeLaunchResolver.ResolveAsync(
+            EuroOfficeLaunchId.New(), anonymous, store, OfficeOrigin, Key, Now,
+            CancellationToken.None));
+        Assert.IsNull(await EuroOfficeLaunchResolver.ResolveAsync(
+            "invalid-id", AuthenticatedUser(), store, OfficeOrigin, Key, Now,
+            CancellationToken.None));
+        Assert.AreEqual(0, store.Calls);
+    }
+
+    [TestMethod]
+    public async Task ResolverRetrievesOnlyOnceForTheAuthenticatedEmployee()
+    {
+        string launchId = EuroOfficeLaunchId.New();
+        var store = new SingleUseStore(Grant());
+        var user = AuthenticatedUser();
+        var first = await EuroOfficeLaunchResolver.ResolveAsync(
+            launchId, user, store, OfficeOrigin, Key, Now, CancellationToken.None);
+        var replay = await EuroOfficeLaunchResolver.ResolveAsync(
+            launchId, user, store, OfficeOrigin, Key, Now, CancellationToken.None);
+        Assert.IsNotNull(first);
+        Assert.IsNull(replay);
+        Assert.AreEqual(2, store.Calls);
+    }
+
+    private static ClaimsPrincipal AuthenticatedUser() =>
+        new(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "user-17")
+        }, "trusted-enterprise"));
+
+    private sealed class SingleUseStore(EuroOfficeAuthorizedLaunch? initial)
+        : ITrustedEuroOfficeLaunchStore
+    {
+        private EuroOfficeAuthorizedLaunch? _available = initial;
+        public int Calls { get; private set; }
+
+        public ValueTask<EuroOfficeAuthorizedLaunch?> ConsumeOnceAsync(
+            string launchId, ClaimsPrincipal authenticatedUser, CancellationToken cancellationToken)
+        {
+            Calls++;
+            if (authenticatedUser.FindFirstValue(ClaimTypes.NameIdentifier) != "user-17")
+                return ValueTask.FromResult<EuroOfficeAuthorizedLaunch?>(null);
+            var result = _available;
+            _available = null;
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    [TestMethod]
     public async Task DenyAllStoreCannotProvideAnySession()
     {
         ITrustedEuroOfficeLaunchStore store = new DenyAllEuroOfficeLaunchStore();
