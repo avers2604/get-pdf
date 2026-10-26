@@ -15,8 +15,12 @@ dotnet restore tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
 dotnet build tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
   -c Release --no-restore
 
-mkdir -p artifacts
-reports="$(mktemp -d "$(pwd)/artifacts/gd25-linux-XXXXXXXX")"
+# TRX may include user documents and local paths: store reports privately,
+# outside shared source checkout; chmod limits access to the current OS user.
+state_root="${XDG_STATE_HOME:-$HOME/.local/state}/GET-Document/ReleaseReports"
+mkdir -p "$state_root"
+chmod 700 "$state_root"
+reports="$(mktemp -d "$state_root/gd25-linux-XXXXXXXX")"
 chmod 700 "$reports"
 echo "Local TRX reports: $reports"
 for suite in Core Office Printing Images Revisions Collaboration WopiGateway; do
