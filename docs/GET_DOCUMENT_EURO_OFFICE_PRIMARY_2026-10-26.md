@@ -11,6 +11,8 @@
 
 > **GD-17D.1:** подготовлен read-only контентный шлюз с отдельным HMAC purpose, закреплённой S3 VersionId, повторными ACL-проверками и SHA-before-release. Сторона GUP-2: [Draft PR #176](https://github.com/avers2604/Gup-2/pull/176); сторона ГЭТ Документы: [подробности GD-17D](GET_DOCUMENT_EUROOFFICE_CONTENT_GD17D_2026-10-26.md). Запись не включена; callback/CAS остаётся следующим этапом.
 
+> **GD-17D.2a:** [нативная JWT-проверка callback Euro-Office и denied-by-default commit](GET_DOCUMENT_EUROOFFICE_CALLBACK_GD17D2_2026-10-26.md); GUP-2 [GD-22 PR #177](https://github.com/avers2604/Gup-2/pull/177) проверяет текущие права/ревизию/архив без записи. Реальная запись `services.update_document` через серверный callback по-прежнему отсутствует — только следующий GD-17D.2b после ИБ-аудита.
+
 ## 1. Приоритет движков
 
 1. **Euro-Office Document Server** — основной движок для DOCX/XLSX/PPTX в локальной сети и совместного редактирования. Это **не** файловый сервер, не система ACL и не замена ГЭТ Файлы/GUP-2.
