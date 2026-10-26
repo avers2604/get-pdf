@@ -12,8 +12,8 @@ public static class CupsPrintArguments
             pdfPath.Any(char.IsControl))
             throw new ArgumentException("Нужен полный путь к исходному PDF.", nameof(pdfPath));
 
-        return
-        [
+        var argv = new List<string>
+        {
             "-d", plan.PrinterName,
             "-n", plan.Copies.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "-P", plan.CupsPageRange,
@@ -23,8 +23,28 @@ public static class CupsPrintArguments
                 PrintDuplex.LongEdge => "sides=two-sided-long-edge",
                 PrintDuplex.ShortEdge => "sides=two-sided-short-edge",
                 _ => "sides=one-sided"
-            },
-            "--", pdfPath
-        ];
+            }
+        };
+        if (plan.Orientation != PrintOrientation.Automatic)
+        {
+            argv.Add("-o");
+            argv.Add(plan.Orientation == PrintOrientation.Landscape
+                ? "orientation-requested=4" : "orientation-requested=3");
+        }
+        if (plan.Color != PrintColorMode.PrinterDefault)
+        {
+            argv.Add("-o");
+            argv.Add(plan.Color == PrintColorMode.Color
+                ? "print-color-mode=color" : "print-color-mode=monochrome");
+        }
+        if (plan.PagesPerSheet != PrintPagesPerSheet.One)
+        {
+            argv.Add("-o");
+            argv.Add("number-up=" + ((int)plan.PagesPerSheet)
+                .ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        argv.Add("--");
+        argv.Add(pdfPath);
+        return argv;
     }
 }
