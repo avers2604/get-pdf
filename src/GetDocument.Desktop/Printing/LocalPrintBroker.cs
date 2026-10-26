@@ -100,28 +100,44 @@ internal static class LocalPrintBroker
         if (!discovered.Contains(plan.PrinterName, StringComparer.Ordinal))
             throw new InvalidOperationException("Принтер не найден. Обновите список устройств.");
 
-        if (plan.Tray is { } requestedTray)
+        if (OperatingSystem.IsWindows() && plan.Tray is { } windowsTray)
         {
-            var currentlyAvailable = await TraysAsync(plan.PrinterName, ct);
-            if (!PrintTrayOptions.IsSupported(currentlyAvailable, requestedTray))
+            var available = await TraysAsync(plan.PrinterName, ct);
+            if (!PrintTrayOptions.IsSupported(available, windowsTray))
                 throw new InvalidOperationException(
-                    "Выбранный лоток больше не поддерживается принтером. Обновите список лотков.");
+                    "Выбранный лоток недоступен. Обновите список принтеров.");
         }
         if (OperatingSystem.IsLinux())
         {
-            if (plan.Color != PrintColorMode.PrinterDefault)
-            {
-                // Do not silently ignore color overrides on older PPD/IPP drivers.
-                string advertised = await RunAsync("lpoptions",
-                    ["-p", plan.PrinterName, "-l"], null, ct);
-                if (!CupsColorCapabilities.Supports(advertised, plan.Color))
-                    throw new InvalidOperationException(
-                        "Этот принтер не подтверждает выбранный цветовой режим. " +
-                        "Используйте настройки принтера или другое устройство.");
-            }
+            // Query exactly once for the selected local queue: a disconnected
+            // A3 tray or a simplex-only device must not silently downgrade.
+            bool needsOptions = plan.Tray is not null ||
+                plan.Color != PrintColorMode.PrinterDefault ||
+                plan.Paper == PrintPaper.A3 ||
+                plan.Duplex != PrintDuplex.OneSided;
+            string advertised = needsOptions
+                ? await RunAsync("lpoptions", ["-p", plan.PrinterName, "-l"], null, ct)
+                : "";
+
+            if (plan.Tray is { } requestedTray &&
+                !PrintTrayOptions.IsSupported(
+                    PrintTrayOptions.ParseCups(advertised), requestedTray))
+                throw new InvalidOperationException(
+                    "Принтер больше не подтверждает выбранный источник бумаги.");
+            if (plan.Color != PrintColorMode.PrinterDefault &&
+                !CupsColorCapabilities.Supports(advertised, plan.Color))
+                throw new InvalidOperationException(
+                    "Этот принтер не подтверждает выбранный цветовой режим.");
+            if (!CupsDeviceCapabilities.Supports(advertised, plan.Paper, plan.Duplex))
+                throw new InvalidOperationException(
+                    "Принтер не подтверждает бумагу A3/A4 или двустороннюю печать.");
+
             var args = CupsPrintArguments.Create(plan, Path.GetFullPath(pdfPath));
-            await RunAsync("lp", args, null, ct);
-            return "Задание передано в очередь CUPS. Проверьте состояние принтера.";
+            string receipt = await RunAsync("lp", args, null, ct);
+            string? job = PrintSubmissionReceipt.CupsJobId(receipt, plan.PrinterName);
+            if (job is null)
+                throw new PrintSubmissionException(PrintSpoolFailurePolicy.FromCupsFailure());
+            return "Задание " + job + " принято в очередь CUPS. Фактическую печать проверьте на принтере.";
         }
         if (OperatingSystem.IsWindows())
         {
@@ -137,9 +153,12 @@ internal static class LocalPrintBroker
                 throw new PrintSubmissionException(
                     PrintSpoolFailurePolicy.UnavailableBeforeSubmit());
             }
-            await RunAsync(worker, ["print"],
+            string acknowledgement = await RunAsync(worker, ["print"],
                 JsonSerializer.Serialize(request), ct);
-            return "Задание передано в очередь Windows. Проверьте состояние принтера.";
+            if (!PrintSubmissionReceipt.WindowsAccepted(acknowledgement))
+                throw new PrintSubmissionException(
+                    PrintSpoolFailurePolicy.FromWindowsWorker(5));
+            return "Windows принял задание в очередь. Фактическую печать проверьте на принтере.";
         }
         throw new PlatformNotSupportedException();
     }
@@ -196,8 +215,9 @@ internal static class LocalPrintBroker
             CreateNoWindow = true
         };
         foreach (string arg in argv) start.ArgumentList.Add(arg);
-        if (OperatingSystem.IsLinux() && program == "lpstat")
-            start.Environment["LC_ALL"] = "C"; // predictable fallback parsing across locales
+        if (OperatingSystem.IsLinux() &&
+            (program == "lpstat" || program == "lpoptions" || program == "lp"))
+            start.Environment["LC_ALL"] = "C"; // canonical CUPS command output for parsing
         Process process;
         try
         {

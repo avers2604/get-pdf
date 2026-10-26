@@ -14,4 +14,5 @@
   <Project Path="tests/GetDocument.Images.Tests/GetDocument.Images.Tests.csproj" />
   <Project Path="src/GetDocument.Desktop/GetDocument.Desktop.csproj" />
   <Project Path="tests/GetDocument.Core.Tests/GetDocument.Core.Tests.csproj" />
+  <Project Path="tests/GetDocument.Printing.Tests/GetDocument.Printing.Tests.csproj" />
 </Solution>

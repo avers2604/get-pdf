@@ -12,6 +12,10 @@
     <Company>SPb GUP Gorelektrotrans</Company>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Test the real local print transport with an isolated CUPS simulator. -->
+    <InternalsVisibleTo Include="GetDocument.Printing.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
