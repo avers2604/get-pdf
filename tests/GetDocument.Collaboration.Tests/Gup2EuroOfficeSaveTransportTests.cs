@@ -34,7 +34,7 @@ public sealed class Gup2EuroOfficeSaveTransportTests
         Assert.AreEqual("https://gup2.get.intra/documents/getdocument/eurooffice/save/",
             req.RequestUri!.AbsoluteUri);
         Assert.IsFalse(req.RequestUri.AbsoluteUri.Contains(Grant, StringComparison.Ordinal));
-        Assert.AreEqual(Content.Length, req.Content!.Headers.ContentLength);
+        Assert.AreEqual((long)Content.Length, req.Content!.Headers.ContentLength);
         Assert.AreEqual(sha, req.Headers.GetValues("X-Get-Eurooffice-File-Sha256").Single());
         Assert.AreEqual(Fingerprint,
             req.Headers.GetValues("X-Get-Eurooffice-Callback-Fingerprint").Single());
