@@ -370,11 +370,24 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             }
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (PrintSubmissionException ex)
+        {
+            if (!_disposed)
+                _status.Text = ex.Failure.UserMessage +
+                    (ex.Failure.MightBeQueued
+                        ? " Не отправляйте задание снова, пока не проверите очередь."
+                        : " Исправьте причину и откройте новый мастер печати.");
+        }
+        catch (InvalidDataException)
+        {
+            if (!_disposed)
+                _status.Text = "Подготовленная PDF-копия не прошла проверку целостности. Печать прекращена.";
+        }
         catch (Exception)
         {
             if (!_disposed)
-                _status.Text = "Печать не подтверждена. Проверьте службу, принтер и поддерживаемые функции. " +
-                               "Задание могло быть принято. Проверьте очередь; для нового задания откройте мастер заново.";
+                _status.Text = "Служба печати не подтвердила результат. " +
+                    "Проверьте очередь до повторного задания.";
         }
         finally
         {
