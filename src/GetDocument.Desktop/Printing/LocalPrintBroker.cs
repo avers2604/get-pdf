@@ -67,7 +67,8 @@ internal static class LocalPrintBroker
         {
             var request = new PrintWorkerRequest(
                 Path.GetFullPath(pdfPath), plan.PrinterName, plan.SourcePageCount,
-                plan.CupsPageRange, plan.Copies, plan.Duplex, plan.Paper);
+                plan.CupsPageRange, plan.Copies, plan.Duplex, plan.Paper,
+                plan.Orientation, plan.Color, plan.PagesPerSheet);
             await RunAsync(WindowsWorker(), ["print"],
                 JsonSerializer.Serialize(request), ct);
             return "Задание передано в очередь Windows. Проверьте состояние принтера.";
@@ -158,5 +159,6 @@ internal static class LocalPrintBroker
     }
 
     private sealed record PrintWorkerRequest(string PdfPath, string PrinterName,
-        int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper);
+        int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper,
+        PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet);
 }
