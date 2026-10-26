@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -15,6 +16,29 @@ namespace GetDocument.Desktop.Printing;
 /// </summary>
 internal sealed class PrintWizardPane : UserControl, IDisposable
 {
+    private static SolidColorBrush Palette(string hex) => new(Color.Parse(hex));
+
+    private static void StyleButton(Button button, bool primary = false)
+    {
+        button.MinHeight = 44;
+        button.Padding = new Thickness(16, 0);
+        button.Background = Palette(primary ? "#24305E" : "#FFFFFF");
+        button.Foreground = Palette(primary ? "#FFFFFF" : "#141A33");
+        button.BorderBrush = Palette(primary ? "#24305E" : "#7E859E");
+        button.BorderThickness = new Thickness(1);
+    }
+
+    private static void StyleField(TemplatedControl control)
+    {
+        control.MinHeight = 44;
+        control.Background = Palette("#FFFFFF");
+        control.Foreground = Palette("#141A33");
+        control.BorderBrush = Palette("#7E859E");
+        control.BorderThickness = new Thickness(1);
+        control.Padding = new Thickness(10, 8);
+        control.CornerRadius = new CornerRadius(9);
+    }
+
     private readonly string _pdfPath;
     private readonly Action _closeTab;
     private readonly CancellationTokenSource _lifetime = new();
@@ -48,11 +72,26 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     {
         _pdfPath = pdfPath;
         _closeTab = closeTab;
-        var left = new StackPanel { Spacing = 18, Width = 680 };
+        Background = Palette("#F4F5F9");
+        Foreground = Palette("#141A33");
+        StyleField(_printer);
+        StyleField(_paper);
+        StyleField(_sides);
+        StyleField(_pages);
+        StyleField(_copies);
+        StyleButton(_back);
+        StyleButton(_next, primary: true);
+        StyleButton(_cancel);
+        _stepTitle.Foreground = Palette("#24305E");
+        _summary.Foreground = Palette("#141A33");
+        _status.Foreground = Palette("#565C7B");
+        _previewStatus.Foreground = Palette("#565C7B");
+        var left = new StackPanel { Spacing = 18 };
         left.Children.Add(new TextBlock
         {
             Text = "Мастер печати ГЭТ",
-            Classes = { "title" }, FontWeight = FontWeight.SemiBold
+            Classes = { "title" }, FontSize = 26, FontWeight = FontWeight.SemiBold,
+            Foreground = Palette("#24305E")
         });
         left.Children.Add(new TextBlock
         {
@@ -68,6 +107,18 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         controls.Children.Add(_next);
         controls.Children.Add(_cancel);
         left.Children.Add(controls);
+        var leftCard = new Border
+        {
+            MinWidth = 520,
+            MaxWidth = 720,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Background = Palette("#FFFFFF"),
+            BorderBrush = Palette("#E1E4EE"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(24),
+            Child = left
+        };
 
         var side = new StackPanel { Spacing = 10, Width = 270 };
         side.Children.Add(new TextBlock { Text = "Предпросмотр первой страницы",
@@ -75,7 +126,10 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         side.Children.Add(new Border
         {
             Padding = new Thickness(10),
-            Background = new SolidColorBrush(Color.Parse("#EFF2F6")),
+            Background = Palette("#EEF0F6"),
+            BorderBrush = Palette("#E1E4EE"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
             Child = _preview
         });
         side.Children.Add(_previewStatus);
@@ -85,9 +139,18 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             TextWrapping = TextWrapping.Wrap, FontSize = 12
         });
 
+        var sideCard = new Border
+        {
+            Background = Palette("#FFFFFF"),
+            BorderBrush = Palette("#E1E4EE"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(18),
+            Child = side
+        };
         var columns = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 28 };
-        columns.Children.Add(left);
-        columns.Children.Add(side);
+        columns.Children.Add(leftCard);
+        columns.Children.Add(sideCard);
         Content = new ScrollViewer { Content = new Border
             { Padding = new Thickness(28), Child = columns } };
         SizeChanged += (_, eventArgs) =>
@@ -132,6 +195,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         {
             _stage.Children.Add(Labeled("Принтер из локальной очереди", _printer));
             var refresh = new Button { Content = "Обновить список принтеров" };
+            StyleButton(refresh);
             refresh.Click += async (_, _) => await LoadPrintersAsync();
             _stage.Children.Add(refresh);
             _stage.Children.Add(new TextBlock
