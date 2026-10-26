@@ -68,6 +68,6 @@ if ($LASTEXITCODE -ne 0) { throw 'Offline Windows PrintWorker build failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Offline legacy GetPdf restore failed.' }
 & dotnet build GetPdf.slnx -c Release --no-restore
 if ($LASTEXITCODE -ne 0) { throw 'Offline legacy GetPdf build failed.' }
-& dotnet test tests/GetPdf.Tests/GetPdf.Tests.csproj -c Release --no-restore
+& dotnet test --project tests/GetPdf.Tests/GetPdf.Tests.csproj -c Release --no-restore
 if ($LASTEXITCODE -ne 0) { throw 'Offline legacy GetPdf tests failed.' }
 Write-Host 'PASS: offline GetDocument + GetPdf .NET build/tests. Physical printer trials still required.'
