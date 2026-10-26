@@ -14,6 +14,9 @@ dotnet restore tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
   --source "$feed" -p:NuGetAudit=false
 dotnet build tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
   -c Release --no-restore
+# Validate the evaluator itself before trusting any of its TRX decisions.
+dotnet run --project tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
+  -c Release --no-build --no-restore -- --self-test
 
 # TRX may include user documents and local paths: store reports privately,
 # outside shared source checkout; chmod limits access to the current OS user.
