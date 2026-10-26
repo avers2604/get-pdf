@@ -30,7 +30,7 @@ public static class Gup2EuroOfficeSaveTransportClient
 
     public static HttpRequestMessage CreateSignedRequest(
         Uri trustedDocumentsOrigin, string serverOnlyGrant, string employeeId,
-        byte[] signingKey, DateTimeOffset now,
+        string editorDocumentKey, byte[] signingKey, DateTimeOffset now,
         ReadOnlyMemory<byte> verifiedOfficeBytes, string callbackFingerprint)
     {
         ArgumentNullException.ThrowIfNull(trustedDocumentsOrigin);
@@ -42,7 +42,7 @@ public static class Gup2EuroOfficeSaveTransportClient
             !string.IsNullOrEmpty(trustedDocumentsOrigin.Query) ||
             trustedDocumentsOrigin.AbsoluteUri.Contains('%'))
             throw new ArgumentException("Требуется утверждённый HTTPS адрес GUP-2.");
-        if (!LowerHex(serverOnlyGrant, 64) ||
+        if (!LowerHex(serverOnlyGrant, 64) || !LowerHex(editorDocumentKey, 64) ||
             !Guid.TryParseExact(employeeId, "D", out Guid parsedEmployee) ||
             parsedEmployee == Guid.Empty ||
             parsedEmployee.ToString("D") != employeeId ||
@@ -56,8 +56,8 @@ public static class Gup2EuroOfficeSaveTransportClient
             SHA256.HashData(verifiedOfficeBytes.Span)).ToLowerInvariant();
         string timestamp = now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         string signed = "POST\n" + Purpose + "\n" + serverOnlyGrant + "\n" +
-                        employeeId + "\n" + timestamp + "\n" + sha + "\n" +
-                        callbackFingerprint + "\n" +
+                        employeeId + "\n" + timestamp + "\n" + editorDocumentKey + "\n" +
+                        sha + "\n" + callbackFingerprint + "\n" +
                         verifiedOfficeBytes.Length.ToString(CultureInfo.InvariantCulture);
         string proof = Convert.ToHexString(HMACSHA256.HashData(
             signingKey, Encoding.ASCII.GetBytes(signed))).ToLowerInvariant();
@@ -70,6 +70,7 @@ public static class Gup2EuroOfficeSaveTransportClient
         request.Headers.TryAddWithoutValidation("X-Get-Eurooffice-Save-Code", serverOnlyGrant);
         request.Headers.TryAddWithoutValidation("X-Get-Eurooffice-User", employeeId);
         request.Headers.TryAddWithoutValidation("X-Get-Eurooffice-Timestamp", timestamp);
+        request.Headers.TryAddWithoutValidation("X-Get-Eurooffice-Document-Key", editorDocumentKey);
         request.Headers.TryAddWithoutValidation("X-Get-Eurooffice-File-Sha256", sha);
         request.Headers.TryAddWithoutValidation(
             "X-Get-Eurooffice-Callback-Fingerprint", callbackFingerprint);
@@ -125,14 +126,14 @@ public static class Gup2EuroOfficeSaveTransportClient
     }
 
     public static async Task<Gup2EuroOfficeSaveReceipt> SubmitAsync(
-        Uri origin, string grant, string employeeId,
+        Uri origin, string grant, string employeeId, string editorDocumentKey,
         byte[] serverHmacKey, DateTimeOffset now,
         ReadOnlyMemory<byte> alreadyVerifiedOfficeBytes,
         string signedCallbackFingerprint, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var request = CreateSignedRequest(
-            origin, grant, employeeId, serverHmacKey, now,
+            origin, grant, employeeId, editorDocumentKey, serverHmacKey, now,
             alreadyVerifiedOfficeBytes, signedCallbackFingerprint);
 
         using var handler = new HttpClientHandler
