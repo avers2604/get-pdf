@@ -9,6 +9,10 @@ builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.W
 // Register enterprise authentication and replace DenyAllEuroOfficeLaunchStore
 // only after the GUP-2/AD policy, revocation and immutable revision sink exist.
 builder.Services.AddSingleton<ITrustedEuroOfficeLaunchStore, DenyAllEuroOfficeLaunchStore>();
+builder.Services.AddSingleton<ITrustedEuroOfficeCallbackSessionStore,
+    DenyAllEuroOfficeCallbackSessionStore>();
+builder.Services.AddSingleton<ITrustedEuroOfficeCallbackRevisionSink,
+    DenyAllEuroOfficeCallbackRevisionSink>();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
 // Mandatory explicit pinned HTTPS endpoint and server-side JWT secret.
@@ -98,6 +102,77 @@ app.MapGet("/get-document/editor/launch/{launchId}", async (
         // Invalid/mismatched trusted backend values must never cause an
         // automatic fallback to an unpinned Euro-Office server.
         return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
+});
+
+
+// Native Docs API callback is disabled independently of editor launch.
+// The default session store and revision sink both deny all corporate files.
+bool callbacksEnabled =
+    Environment.GetEnvironmentVariable("GET_EUROOFFICE_CALLBACKS_ENABLED") == "1";
+app.MapPost("/get-document/editor/callback/{callbackId}", async (
+    string callbackId, HttpContext context,
+    ITrustedEuroOfficeCallbackSessionStore sessions,
+    ITrustedEuroOfficeCallbackRevisionSink sink,
+    EuroOfficeHostSecrets secrets, TimeProvider clock) =>
+{
+    if (!callbacksEnabled || !EuroOfficeLaunchId.IsValid(callbackId))
+        return Results.NotFound();
+    if (context.Request.Cookies.Count > 0 ||
+        context.Request.Headers.ContainsKey("Origin") ||
+        context.Request.ContentType != "application/json" ||
+        context.Request.ContentLength is not > 0 and <= 65536)
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+    // The session must come from trusted corporate storage, NOT a client
+    // supplied document key or unverified JWT user field.
+    var session = await sessions.FindAsync(callbackId, context.RequestAborted);
+    if (session is null)
+        return Results.NotFound();
+
+    try
+    {
+        EuroOfficeCallbackAdmission.RequireCurrent(
+            session, secrets.OfficeOrigin, clock.GetUtcNow());
+
+        // Only an explicitly configured outbound JWT header is accepted.
+        // Default matches the internal Euro-Office server lab policy;
+        // actual header format must be verified with the pinned release.
+        string token = context.Request.Headers["AuthorizationJWT"].ToString();
+        if (token.StartsWith("Bearer ", StringComparison.Ordinal))
+            token = token["Bearer ".Length..];
+        if (string.IsNullOrEmpty(token) || token.Length > 65536)
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+        using var reader = new StreamReader(
+            context.Request.Body, System.Text.Encoding.UTF8,
+            detectEncodingFromByteOrderMarks: false, bufferSize: 8192,
+            leaveOpen: true);
+        string body = await reader.ReadToEndAsync(context.RequestAborted);
+        EuroOfficeSaveCandidate? candidate = EuroOfficeNativeCallback.Plan(
+            body, token, session.DocumentKey, session.TrustedDocumentServerOrigin,
+            secrets.SigningKey);
+
+        // A correctly authenticated status 1/4 has no revision to save.
+        if (candidate is null)
+            return Results.Json(new { error = 0 });
+
+        // A positive acknowledgment requires a real, approved GUP-2 CAS
+        // commit. DenyAll returns false, so no changed document is lost
+        // through a misleading HTTP 200 {"error":0}.
+        EuroOfficeCallbackCommitReceipt receipt =
+            await sink.CommitAsync(candidate, context.RequestAborted);
+        int error = EuroOfficeCallbackAdmission.ResponseError(receipt);
+        return error == 0
+            ? Results.Json(new { error = 0 })
+            : Results.Json(new { error = 1 },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (Exception ex) when (ex is UnauthorizedAccessException or
+        ArgumentException or InvalidDataException)
+    {
+        return Results.Json(new { error = 1 },
+            statusCode: StatusCodes.Status403Forbidden);
     }
 });
 
