@@ -74,12 +74,21 @@ public static class EuroOfficeLaunchResolver
             !EuroOfficeLaunchId.IsValid(launchId))
             return null;
 
+        // Bind the SSO principal to GUP-2's immutable user identifier.
+        // The one-time store must independently check ACL/revocation; this
+        // check guards against a faulty store returning somebody else's grant.
+        string? principalId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(principalId))
+            return null;
+
         var authorized = await store.ConsumeOnceAsync(
             launchId!, user, cancellationToken);
-        return authorized is null
-            ? null
-            : EuroOfficeLaunchPage.Render(
-                authorized, trustedOfficeOrigin, signingKey, now);
+        if (authorized is null || authorized.Session is null ||
+            !string.Equals(authorized.Session.UserId, principalId, StringComparison.Ordinal))
+            return null;
+
+        return EuroOfficeLaunchPage.Render(
+            authorized, trustedOfficeOrigin, signingKey, now);
     }
 }
 
