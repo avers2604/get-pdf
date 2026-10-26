@@ -39,7 +39,9 @@ internal static class Program
         }
         finally
         {
-            instance.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            // Off the UI thread: its dispatcher no longer pumps once the window is closed, and a
+            // continuation posted back to it would keep the process alive forever.
+            Task.Run(() => instance.DisposeAsync().AsTask()).Wait(TimeSpan.FromSeconds(5));
         }
     }
 

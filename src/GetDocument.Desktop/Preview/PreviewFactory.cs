@@ -17,8 +17,12 @@ internal static class PreviewFactory
         if (item.FilePath is null)
             return Message(item.Title, "Не указан источник документа.");
 
-        // Office documents: faithful preview + editing + printing through local LibreOffice.
-        // The built-in simple DOCX/XLSX editors remain only as a fallback without LibreOffice.
+        // Office documents are edited right in the tab: LibreOffice draws the pages, the GET DS
+        // toolbar drives it. Without window embedding (non-Windows) the LibreOffice PDF preview
+        // remains; the simple DOCX/XLSX editors are the last fallback without LibreOffice.
+        if (GetDocument.Office.LibreOffice.LibreOfficeRuntime.Handles(item.FilePath) &&
+            GetDocument.Office.LibreOffice.LibreOfficeEditor.IsSupported)
+            return new OfficeEditorPane(item.FilePath, status);
         if (GetDocument.Office.LibreOffice.LibreOfficeRuntime.Handles(item.FilePath) &&
             (GetDocument.Office.LibreOffice.LibreOfficeRuntime.IsAvailable ||
              item.Kind == WorkspaceDocumentKind.Presentation))

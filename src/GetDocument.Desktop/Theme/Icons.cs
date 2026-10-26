@@ -53,6 +53,25 @@ internal static class Icons
     public static readonly Geometry Square = Parse("M5,4 H19 A1,1 0 0 1 20,5 V19 A1,1 0 0 1 19,20 H5 A1,1 0 0 1 4,19 V5 A1,1 0 0 1 5,4 Z");
     public static readonly Geometry Note = Parse("M4,4 H20 V15 L15,20 H4 Z M15,20 V15 H20 M8,9 H16 M8,12 H13");
     public static readonly Geometry Minimize = Parse("M4,14 H10 V20 M20,10 H14 V4 M14,10 L21,3 M3,21 L10,14");
+    // Editing (Word / Excel / PowerPoint toolbar).
+    public static readonly Geometry AlignLeft = Parse("M4,6 H20 M4,10 H14 M4,14 H20 M4,18 H14");
+    public static readonly Geometry AlignCenter = Parse("M4,6 H20 M7,10 H17 M4,14 H20 M7,18 H17");
+    public static readonly Geometry AlignRight = Parse("M4,6 H20 M10,10 H20 M4,14 H20 M10,18 H20");
+    public static readonly Geometry AlignJustify = Parse("M4,6 H20 M4,10 H20 M4,14 H20 M4,18 H20");
+    public static readonly Geometry ListBullets = Parse("M9,6 H21 M9,12 H21 M9,18 H21 M4,6 H4.01 M4,12 H4.01 M4,18 H4.01");
+    public static readonly Geometry IndentMore = Parse("M10,6 H21 M10,12 H21 M10,18 H21 M3,8 L7,12 L3,16");
+    public static readonly Geometry IndentLess = Parse("M10,6 H21 M10,12 H21 M10,18 H21 M7,8 L3,12 L7,16");
+    public static readonly Geometry Image = Parse("M5,4 H19 A2,2 0 0 1 21,6 V18 A2,2 0 0 1 19,20 H5 A2,2 0 0 1 3,18 V6 A2,2 0 0 1 5,4 Z M7,9 a1.5,1.5 0 1 0 3,0 a1.5,1.5 0 1 0 -3,0 M21,15 L16,10 L5,20");
+    public static readonly Geometry PageBreak = Parse("M6,3 V8 H18 V3 M6,21 V16 H18 V21 M3,12 H5 M8,12 H10 M14,12 H16 M19,12 H21");
+    public static readonly Geometry Merge = Parse("M5,4 H19 A2,2 0 0 1 21,6 V18 A2,2 0 0 1 19,20 H5 A2,2 0 0 1 3,18 V6 A2,2 0 0 1 5,4 Z M7,12 H17 M14,9 L17,12 L14,15 M10,9 L7,12 L10,15");
+    public static readonly Geometry Sum = Parse("M18,5 H6 L12,12 L6,19 H18");
+    public static readonly Geometry SortAsc = Parse("M4,6 H11 M4,12 H9 M4,18 H7 M17,4 V20 M13,16 L17,20 L21,16");
+    public static readonly Geometry Filter = Parse("M3,4 H21 L14,12.5 V19 L10,21 V12.5 Z");
+    public static readonly Geometry RowInsert = Parse("M5,4 H19 A2,2 0 0 1 21,6 V10 H3 V6 A2,2 0 0 1 5,4 Z M12,14 V20 M9,17 H15");
+    public static readonly Geometry ColumnInsert = Parse("M4,5 V19 A2,2 0 0 0 6,21 H10 V3 H6 A2,2 0 0 0 4,5 Z M17,9 V15 M14,12 H20");
+    public static readonly Geometry WrapText = Parse("M4,6 H20 M4,12 H17 A3,3 0 0 1 17,18 H13 M15,16 L13,18 L15,20 M4,18 H9");
+    public static readonly Geometry Play = Parse("M7,4 L19,12 L7,20 Z");
+    public static readonly Geometry SlideAdd = Parse("M3,5 H17 A1,1 0 0 1 18,6 V15 A1,1 0 0 1 17,16 H3 A1,1 0 0 1 2,15 V6 A1,1 0 0 1 3,5 Z M20,17 V23 M17,20 H23");
 
     private static Geometry Parse(string data) => Geometry.Parse(data);
 

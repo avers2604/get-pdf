@@ -145,17 +145,17 @@ internal sealed class LibreOfficeBridge : IDisposable
         return true;
     }
 
-    /// <summary>Writes the bridge script next to the profile (versioned by content).</summary>
-    private static string ScriptPath()
+    /// <summary>Writes a bridge script next to the profiles (versioned by content).</summary>
+    internal static string ScriptPath(string name = "lo_bridge.py")
     {
-        using var stream = typeof(LibreOfficeBridge).Assembly.GetManifestResourceStream("GetDocument.Office.lo_bridge.py")
+        using var stream = typeof(LibreOfficeBridge).Assembly.GetManifestResourceStream("GetDocument.Office." + name)
             ?? throw new InvalidOperationException("Скрипт моста LibreOffice отсутствует в сборке.");
         using var reader = new StreamReader(stream, Encoding.UTF8);
         string text = reader.ReadToEnd();
         string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..12];
         string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GET-Document");
         Directory.CreateDirectory(folder);
-        string path = Path.Combine(folder, $"lo_bridge-{hash}.py");
+        string path = Path.Combine(folder, $"{Path.GetFileNameWithoutExtension(name)}-{hash}.py");
         if (!File.Exists(path)) File.WriteAllText(path, text, new UTF8Encoding(false));
         return path;
     }

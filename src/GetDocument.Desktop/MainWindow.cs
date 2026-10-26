@@ -132,6 +132,7 @@ public sealed class MainWindow : Window
     }
 
     private static bool HasUnsaved(object? content) => content is SimpleDocxEditorPane { HasUnsavedChanges: true } or
+        OfficeEditorPane { HasUnsavedChanges: true } or
         SimpleXlsxEditPane { HasUnsavedChanges: true } or ImagePreviewPane { HasUnsavedChanges: true } or
         GetDocument.Desktop.Pdf.PdfWorkspacePane { HasUnsavedChanges: true };
 
@@ -497,6 +498,7 @@ public sealed class MainWindow : Window
                     pdf.FavoriteToggleRequested += _ => ToggleFavorite(opened);
                 }
             }
+            if (panel is OfficeEditorPane editor) WireEditor(editor, item, title);
             Avalonia.Automation.AutomationProperties.SetName(view, item.Title);
             _views[item.Id] = view;
             _items.Add(view);
@@ -555,11 +557,12 @@ public sealed class MainWindow : Window
                     caption.Text = saved.Title;
                 tab.Content = PreviewFactory.Create(saved, SaveDraftAsync, OpenSavedCopyAsync, SaveXlsxRevisionAsync, SetStatus);
             }
-            if (_views.TryGetValue(item.Id, out var created) && created.Content is OfficeDocumentPane office &&
+            if (_views.TryGetValue(item.Id, out var created) && created.Content is OfficeEditorPane editor)
+                WireEditor(editor, saved, created.Header as Control); // a new document opens ready for typing
+            else if (_views.TryGetValue(item.Id, out var preview) && preview.Content is OfficeDocumentPane office &&
                 GetDocument.Office.LibreOffice.LibreOfficeRuntime.IsAvailable)
-                office.Edit(); // a new document is meant to be written: open the editor right away
-            else
-                _status.Text = "Создан новый офисный файл: " + saved.Title;
+                office.Edit();
+            _status.Text = "Создан новый офисный файл: " + saved.Title;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
             ArgumentException or NotSupportedException or InvalidOperationException)
@@ -624,6 +627,22 @@ public sealed class MainWindow : Window
             _status.Text = "Не удалось сохранить XLSX: " + ex.Message;
             return false;
         }
+    }
+
+    /// <summary>Tab caption shows unsaved changes; Ctrl+P / Ctrl+W inside the document reach the app.</summary>
+    private void WireEditor(OfficeEditorPane editor, WorkspaceDocumentTab item, Control? header)
+    {
+        var caption = (header as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault();
+        editor.ModifiedChanged += modified =>
+        {
+            if (caption is not null) caption.Text = (modified ? "● " : "") + item.Title;
+        };
+        editor.PrintRequested += () =>
+        {
+            if (_views.TryGetValue(item.Id, out var tab)) _tabs.SelectedItem = tab;
+            ShowPrintWizard();
+        };
+        editor.CloseRequested += () => _ = CloseDocumentAsync(item.Id);
     }
 
     private async Task CloseDocumentAsync(Guid id)
@@ -721,6 +740,12 @@ public sealed class MainWindow : Window
             else if (document?.FilePath is { } path &&
                 string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
                 printable = path;
+            else if (_views.TryGetValue(id, out var editorTab) && editorTab.Content is OfficeEditorPane editor)
+            {
+                // Prints the document as it is on screen, unsaved edits included.
+                printable = await editor.PreparePrintableAsync();
+                if (printable is null) return;
+            }
             else if (_views.TryGetValue(id, out var officeTab) && officeTab.Content is OfficeDocumentPane office)
             {
                 // Word/Excel/PowerPoint print exactly what the preview shows: LibreOffice's PDF.

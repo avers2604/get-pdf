@@ -7,6 +7,7 @@
     <AssemblyName>GetDocument.Desktop</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon>Assets\get-document.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <Product>ГЭТ Документ</Product>
     <Company>SPb GUP Gorelektrotrans</Company>
   </PropertyGroup>

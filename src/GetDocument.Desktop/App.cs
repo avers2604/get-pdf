@@ -34,6 +34,8 @@ public sealed class App : Application
         {
             var window = new MainWindow();
             desktop.MainWindow = window;
+            // Close the embedded editor's documents so LibreOffice removes its lock files and exits.
+            desktop.Exit += (_, _) => GetDocument.Office.LibreOffice.LibreOfficeEditor.ShutdownIfStarted();
 
             // The IPC callback never touches Avalonia controls off the UI
             // thread. Initial files also open after window initialization.
@@ -45,11 +47,19 @@ public sealed class App : Application
                     window.ReportRejectedLaunch();
                 window.OpenFromLaunch(InitialPaths);
             });
-            // Warm up the background LibreOffice once the window is up: a cold start takes
-            // 10–30 s on office PCs, afterwards Word/Excel/PowerPoint previews take seconds.
-            DispatcherTimer.RunOnce(GetDocument.Office.LibreOffice.LibreOfficeRuntime.Prewarm,
+            // Warm up LibreOffice once the window is up: a cold start takes 10–30 s on office
+            // PCs, afterwards a Word/Excel/PowerPoint document opens in under a second.
+            DispatcherTimer.RunOnce(PrewarmOffice,
                 TimeSpan.FromSeconds(3));
         }
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static void PrewarmOffice()
+    {
+        if (GetDocument.Office.LibreOffice.LibreOfficeEditor.IsSupported)
+            GetDocument.Office.LibreOffice.LibreOfficeEditor.Shared.Prewarm();
+        else
+            GetDocument.Office.LibreOffice.LibreOfficeRuntime.Prewarm();
     }
 }
