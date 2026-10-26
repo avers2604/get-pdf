@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text.RegularExpressions;
 using GetDocument.Collaboration;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -58,7 +56,7 @@ app.Use(async (context, next) =>
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         return;
     }
-    await next(context);
+    await next();
 });
 
 // Liveness does not imply that real company files are accessible.
