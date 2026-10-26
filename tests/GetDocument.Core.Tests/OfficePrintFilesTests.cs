@@ -44,6 +44,39 @@ public sealed class OfficePrintFilesTests
     }
 
     [TestMethod]
+    public void StaleOwnedOfficeExportIsCleanedButFreshAndUnrelatedFilesSurvive()
+    {
+        string stale = OfficePrintFiles.NewExportPath();
+        string fresh = OfficePrintFiles.NewExportPath();
+        string unrelated = Path.Combine(OfficePrintFiles.ExportFolder,
+            "user-" + Guid.NewGuid().ToString("N") + ".pdf");
+        try
+        {
+            File.WriteAllText(stale, "%PDF-1.4\\nstale");
+            File.WriteAllText(fresh, "%PDF-1.4\\nfresh");
+            File.WriteAllText(unrelated, "%PDF-1.4\\nuser");
+            File.SetLastWriteTimeUtc(stale, DateTime.UtcNow.AddDays(-10));
+            _ = OfficePrintFiles.NewExportPath(); // lazy clean on next export
+            Assert.IsFalse(File.Exists(stale));
+            Assert.IsTrue(File.Exists(fresh));
+            Assert.IsTrue(File.Exists(unrelated));
+            if (!OperatingSystem.IsWindows())
+            {
+                OfficePrintFiles.HardenExport(fresh);
+                Assert.AreEqual(
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                    File.GetUnixFileMode(fresh));
+            }
+        }
+        finally
+        {
+            File.Delete(stale);
+            File.Delete(fresh);
+            File.Delete(unrelated);
+        }
+    }
+
+    [TestMethod]
     public void ForgedNamesAndOtherDirectoriesCannotBeTreatedAsTemporaryExports()
     {
         string root = OfficePrintFiles.ExportFolder;
