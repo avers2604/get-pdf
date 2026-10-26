@@ -9,12 +9,20 @@ internal static class PreviewFactory
 {
     public static Control Create(WorkspaceDocumentTab item, Func<WorkspaceDocumentTab, Task> saveDraft,
         Func<string, Task> openSavedCopy,
-        Func<WorkspaceDocumentTab, string, string[][], Task<bool>> saveXlsxRevision)
+        Func<WorkspaceDocumentTab, string, string[][], Task<bool>> saveXlsxRevision,
+        Action<string> status)
     {
         if (item.IsDraft)
             return new OfficeDraftPane(item, saveDraft);
         if (item.FilePath is null)
             return Message(item.Title, "Не указан источник документа.");
+
+        // Office documents: faithful preview + editing + printing through local LibreOffice.
+        // The built-in simple DOCX/XLSX editors remain only as a fallback without LibreOffice.
+        if (GetDocument.Office.LibreOffice.LibreOfficeRuntime.Handles(item.FilePath) &&
+            (GetDocument.Office.LibreOffice.LibreOfficeRuntime.IsAvailable ||
+             item.Kind == WorkspaceDocumentKind.Presentation))
+            return new OfficeDocumentPane(item.FilePath, status);
 
         if (item.Kind == WorkspaceDocumentKind.Text &&
             Path.GetExtension(item.FilePath).Equals(".docx", StringComparison.OrdinalIgnoreCase))

@@ -10,5 +10,6 @@
     <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.0" />
     <PackageReference Include="Scriban" Version="7.5.1" />
     <ProjectReference Include="../GetDocument.Core/GetDocument.Core.csproj" />
+    <EmbeddedResource Include="LibreOffice\lo_bridge.py" LogicalName="GetDocument.Office.lo_bridge.py" />
   </ItemGroup>
 </Project>

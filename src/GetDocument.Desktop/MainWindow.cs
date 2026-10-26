@@ -319,7 +319,7 @@ public sealed class MainWindow : Window
     {
         if (!_views.TryGetValue(item.Id, out var view))
         {
-            Control panel = PreviewFactory.Create(item, SaveDraftAsync, OpenSavedCopyAsync, SaveXlsxRevisionAsync);
+            Control panel = PreviewFactory.Create(item, SaveDraftAsync, OpenSavedCopyAsync, SaveXlsxRevisionAsync, SetStatus);
 
             var title = TabHeader(item.Title, () => CloseDocument(item.Id));
             view = new TabItem { Tag = item.Id, Header = title, Content = panel };
@@ -379,9 +379,13 @@ public sealed class MainWindow : Window
             {
                 if (tab.Header is StackPanel title && title.Children.FirstOrDefault() is TextBlock caption)
                     caption.Text = saved.Title;
-                tab.Content = PreviewFactory.Create(saved, SaveDraftAsync, OpenSavedCopyAsync, SaveXlsxRevisionAsync);
+                tab.Content = PreviewFactory.Create(saved, SaveDraftAsync, OpenSavedCopyAsync, SaveXlsxRevisionAsync, SetStatus);
             }
-            _status.Text = "Создан новый офисный файл: " + saved.Title;
+            if (_views.TryGetValue(item.Id, out var created) && created.Content is OfficeDocumentPane office &&
+                GetDocument.Office.LibreOffice.LibreOfficeRuntime.IsAvailable)
+                office.Edit(); // a new document is meant to be written: open the editor right away
+            else
+                _status.Text = "Создан новый офисный файл: " + saved.Title;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
             ArgumentException or NotSupportedException or InvalidOperationException)
@@ -389,6 +393,8 @@ public sealed class MainWindow : Window
             _status.Text = "Не удалось сохранить документ: " + ex.Message;
         }
     }
+
+    private void SetStatus(string text) => _status.Text = text;
 
     private Task OpenSavedCopyAsync(string savedPath)
     {
@@ -527,19 +533,32 @@ public sealed class MainWindow : Window
         if (_tabs.SelectedItem is TabItem { Tag: Guid id })
         {
             var document = _workspace.Tabs.FirstOrDefault(x => x.Id == id);
-            if (document?.FilePath is not { } path ||
-                !string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
+            string? printable = null;
+            if (document?.FilePath is { } path &&
+                string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
+                printable = path;
+            else if (_views.TryGetValue(id, out var officeTab) && officeTab.Content is OfficeDocumentPane office)
             {
-                _status.Text = "Мастер печати пока поддерживает только сохранённые PDF. " +
-                    "Печать DOCX/XLSX/PPTX требует подключённого офисного движка.";
+                // Word/Excel/PowerPoint print exactly what the preview shows: LibreOffice's PDF.
+                printable = office.PreviewPdf;
+                if (printable is null)
+                {
+                    _status.Text = "Документ ещё готовится к просмотру. Повторите печать через несколько секунд.";
+                    return;
+                }
+            }
+            if (printable is null || document is null)
+            {
+                _status.Text = "Печать доступна для PDF и документов Word, Excel, PowerPoint. " +
+                    "Изображение сначала сохраните или откройте как PDF.";
                 return;
             }
             ClosePrintWizard();
-            var heading = TabHeader("Печать: " + Path.GetFileName(path), ClosePrintWizard);
+            var heading = TabHeader("Печать: " + document.Title, ClosePrintWizard);
             _printTab = new TabItem
             {
                 Header = heading,
-                Content = new PrintWizardPane(path, ClosePrintWizard)
+                Content = new PrintWizardPane(printable, ClosePrintWizard)
             };
             _items.Add(_printTab);
             _tabs.SelectedItem = _printTab;

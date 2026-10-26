@@ -42,6 +42,10 @@ public sealed class App : Application
                     window.ReportRejectedLaunch();
                 window.OpenFromLaunch(InitialPaths);
             });
+            // Warm up the background LibreOffice once the window is up: a cold start takes
+            // 10–30 s on office PCs, afterwards Word/Excel/PowerPoint previews take seconds.
+            DispatcherTimer.RunOnce(GetDocument.Office.LibreOffice.LibreOfficeRuntime.Prewarm,
+                TimeSpan.FromSeconds(3));
         }
         base.OnFrameworkInitializationCompleted();
     }
