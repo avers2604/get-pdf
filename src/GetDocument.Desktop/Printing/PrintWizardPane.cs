@@ -48,6 +48,15 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     private readonly ComboBox _sides = new() { Width = 280,
         ItemsSource = new[] { "Односторонняя", "Двусторонняя — длинный край",
             "Двусторонняя — короткий край" }, SelectedIndex = 0 };
+    private readonly ComboBox _orientation = new() { Width = 250,
+        ItemsSource = new[] { "Автоматически (по документу)", "Книжная", "Альбомная" },
+        SelectedIndex = 0 };
+    private readonly ComboBox _color = new() { Width = 250,
+        ItemsSource = new[] { "Настройка принтера", "Цветная", "Чёрно-белая" },
+        SelectedIndex = 0 };
+    private readonly ComboBox _nup = new() { Width = 270,
+        ItemsSource = new[] { "1 страница на листе", "2 страницы на листе", "4 страницы на листе" },
+        SelectedIndex = 0 };
     private readonly TextBox _pages = new() { Width = 270,
         PlaceholderText = "Все страницы или 1,3-5" };
     private readonly TextBox _copies = new() { Width = 140, Text = "1" };
@@ -66,6 +75,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     private int _pageCount;
     private int _step = 1;
     private bool _busy;
+    private bool _submitted;
     private bool _disposed;
 
     public PrintWizardPane(string pdfPath, Action closeTab)
@@ -77,6 +87,9 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         StyleField(_printer);
         StyleField(_paper);
         StyleField(_sides);
+        StyleField(_orientation);
+        StyleField(_color);
+        StyleField(_nup);
         StyleField(_pages);
         StyleField(_copies);
         StyleButton(_back);
@@ -182,7 +195,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         _stage.Children.Clear();
         _summary.Text = "";
         _back.IsEnabled = !_busy && _step > 1;
-        _next.IsEnabled = !_busy && _pageCount > 0 &&
+        _next.IsEnabled = !_busy && !_submitted && _pageCount > 0 &&
             _printer.SelectedItem is string;
         _next.Content = _step == 3 ? "Отправить на печать" : "Далее";
         _stepTitle.Text = _step switch
@@ -211,6 +224,15 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             _stage.Children.Add(Labeled("Копии (от 1 до 99)", _copies));
             _stage.Children.Add(Labeled("Размер бумаги", _paper));
             _stage.Children.Add(Labeled("Режим печати", _sides));
+            _stage.Children.Add(Labeled("Ориентация", _orientation));
+            _stage.Children.Add(Labeled("Цветность", _color));
+            _stage.Children.Add(Labeled("Страниц на листе", _nup));
+            _stage.Children.Add(new TextBlock
+            {
+                Text = "2/4 страницы на листе доступны только при выборе всех страниц. " +
+                    "Возможности проверяются по драйверу; неподдерживаемые настройки запрещены.",
+                TextWrapping = TextWrapping.Wrap, FontSize = 12
+            });
         }
         else
         {
@@ -219,6 +241,8 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
                     $"Страницы: {plan.CupsPageRange}\n" +
                     $"Копии: {plan.Copies}; всего страниц отпечатков: {plan.PageCountToPrint}\n" +
                     $"Бумага: {plan.Paper}; режим: {DuplexText(plan.Duplex)}\n" +
+                    $"Ориентация: {plan.Orientation}; цвет: {plan.Color}\n" +
+                    $"На листе: {(int)plan.PagesPerSheet}; печатных сторон: {plan.SheetSidesToPrint}\n" +
                     "Проверьте бумагу, права и готовность принтера перед отправкой.";
         }
     }
@@ -240,7 +264,16 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             if (!int.TryParse(_copies.Text, out int count))
                 throw new ArgumentException("Количество копий должно быть целым числом.");
             result = PrintJobPlan.Create(printer, _pageCount, _pages.Text, count,
-                (PrintDuplex)_sides.SelectedIndex, (PrintPaper)_paper.SelectedIndex);
+                (PrintDuplex)_sides.SelectedIndex, (PrintPaper)_paper.SelectedIndex,
+                (PrintOrientation)_orientation.SelectedIndex,
+                (PrintColorMode)_color.SelectedIndex,
+                _nup.SelectedIndex switch
+                {
+                    0 => PrintPagesPerSheet.One,
+                    1 => PrintPagesPerSheet.Two,
+                    2 => PrintPagesPerSheet.Four,
+                    _ => (PrintPagesPerSheet)(-1)
+                });
             return true;
         }
         catch (ArgumentException ex)
@@ -252,7 +285,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
 
     private async Task AdvanceAsync()
     {
-        if (_disposed || _busy || _pageCount < 1) return;
+        if (_disposed || _busy || _submitted || _pageCount < 1) return;
         _status.Text = "";
         if (_step == 1)
         {
@@ -273,6 +306,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             return;
         }
         _busy = true;
+        _submitted = true; // Outcome may be ambiguous if queue accepts then connection times out.
         RenderStage();
         _status.Text = "Задание передаётся в выбранную очередь печати…";
         try
@@ -282,7 +316,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             if (!_disposed)
             {
                 _status.Text = confirmation;
-                _next.IsEnabled = false; // A second click must not duplicate copies.
+                _next.IsEnabled = false; // Strictly one attempt per wizard instance.
             }
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
@@ -290,7 +324,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         {
             if (!_disposed)
                 _status.Text = "Печать не подтверждена. Проверьте службу, принтер и поддерживаемые функции. " +
-                               "Повторную отправку выполняйте после проверки очереди: задание могло быть принято.";
+                               "Задание могло быть принято. Проверьте очередь; для нового задания откройте мастер заново.";
         }
         finally
         {
