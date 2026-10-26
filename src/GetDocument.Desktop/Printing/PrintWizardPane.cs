@@ -586,11 +586,13 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             RenderStage();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
-        catch (Exception ex)
+        catch (Exception)
         {
             if (!_disposed)
             {
-                _status.Text = "Не удалось открыть PDF для печати. Файл может быть защищён или повреждён. (" + ex.Message + ")";
+                // Native PDF libraries can put the full confidential file path
+                // in the exception. Never show it in the UI.
+                _status.Text = "Не удалось подготовить PDF для печати. Проверьте доступность, формат и права документа.";
                 _previewStatus.Text = "Предпросмотр недоступен.";
             }
         }
@@ -655,11 +657,12 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             RenderStage();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
-        catch (Exception ex)
+        catch (Exception)
         {
             if (!_disposed)
             {
-                _status.Text = "Служба печати недоступна или не установлен компонент Windows/CUPS. (" + ex.Message + ")";
+                // Never expose printer-share paths or stderr to the operator.
+                _status.Text = "Служба печати недоступна либо компонент Windows/CUPS не установлен. Проверьте настройки принтеров.";
                 RenderStage();
             }
         }
