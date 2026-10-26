@@ -1,130 +1,77 @@
 using System.Text.Json;
-using System.Xml.Linq;
 
 namespace GetDocument.ReleaseGate;
 
-/// <summary>
-/// No NuGet packages, network, test framework or printer required. Examines
-/// reports produced by the already-executed MSTest.Sdk/MTP test applications.
-/// Fails if critical print regression tests are missing or inconclusive.
-/// </summary>
 internal static class Program
 {
-    private sealed record SuiteResult(string Suite, int Passed, int Failed, int Other,
-        IReadOnlyList<string> MissingRequired);
-
-    private static readonly string[] AllSuites =
-    [
-        "Core", "Office", "Printing", "Images", "Revisions",
-        "Collaboration", "WopiGateway"
-    ];
-
     private static int Main(string[] args)
     {
-        if (args.Length != 2 ||
-            (args[1] != "linux" && args[1] != "windows") ||
+        if (args.Length == 1 && args[0] == "--self-test")
+            return ReleaseGateSelfTests.Run();
+
+        if (args.Length != 2 || (args[1] != "linux" && args[1] != "windows") ||
             !Directory.Exists(args[0]))
         {
-            Console.Error.WriteLine("Usage: GetDocument.ReleaseGate <trx-directory> <linux|windows>");
+            Console.Error.WriteLine(
+                "Usage: GetDocument.ReleaseGate <trx-directory> <linux|windows> | --self-test");
             return 2;
         }
 
+        string directory = Path.GetFullPath(args[0]);
         string platform = args[1];
-        var suites = platform == "windows"
-            ? AllSuites.Append("LegacyPdf")
-            : AllSuites.AsEnumerable();
-        var reports = new List<SuiteResult>();
-        bool success = true;
-        foreach (string suite in suites)
+        var suites = new List<SuiteResult>();
+
+        foreach (string suite in ReleaseReportEvaluator.ExpectedSuites(platform))
         {
-            var path = Path.Combine(args[0], suite + ".trx");
-            if (!File.Exists(path))
-            {
-                Console.Error.WriteLine($"FAIL: missing {suite}.trx");
-                success = false;
-                continue;
-            }
-            try
-            {
-                var doc = XDocument.Load(path, LoadOptions.None);
-                var results = doc.Descendants()
-                    .Where(node => node.Name.LocalName == "UnitTestResult")
-                    .Select(node => (
-                        Name: (string?)node.Attribute("testName") ?? "",
-                        Outcome: (string?)node.Attribute("outcome") ?? "Unknown"
-                    )).ToArray();
-
-                int passed = results.Count(x =>
-                    x.Outcome.Equals("Passed", StringComparison.OrdinalIgnoreCase));
-                int failed = results.Count(x =>
-                    x.Outcome.Equals("Failed", StringComparison.OrdinalIgnoreCase) ||
-                    x.Outcome.Equals("Error", StringComparison.OrdinalIgnoreCase) ||
-                    x.Outcome.Equals("Timeout", StringComparison.OrdinalIgnoreCase) ||
-                    x.Outcome.Equals("Aborted", StringComparison.OrdinalIgnoreCase));
-                int other = results.Length - passed - failed;
-
-                string[] required = suite switch
-                {
-                    "Core" =>
-                    [
-                        "SnapshotPrintBytesStayUnchangedAfterOriginalIsEdited",
-                        "TamperedStagedPdfIsRejected",
-                        "CupsReceiptIsBoundToExpectedQueueAndNumericJobId",
-                        "UsesArgumentListAndDoesNotInvokeShellOrPrinterDialog"
-                    ],
-                    "Printing" when platform == "linux" =>
-                    [
-                        "SubmitsExactArgumentVectorWithUnicodePdfPathAndFrozenDigest",
-                        "FullDocumentFourUpOmitsOutputPageRange",
-                        "MissingLocalLpIsDefiniteFailureBeforeSubmission",
-                        "ExcessivePrinterOutputIsRejectedWithoutUnboundedBuffering",
-                        "UnboundedDriverOutputIsFullyDrainedButNeverBuffered"
-                    ],
-                    "Printing" => ["UnboundedDriverOutputIsFullyDrainedButNeverBuffered"],
-                    "Office" when platform == "windows" =>
-                    [
-                        "UnsavedOfficeEditsAreFrozenIntoPdfSnapshotForGetPrintWizard"
-                    ],
-                    "Office" => ["SaveCopyFiltersFollowTheTargetExtension"],
-                    _ => []
-                };
-
-                string[] missing = required.Where(name => !results.Any(result =>
-                    result.Outcome.Equals("Passed", StringComparison.OrdinalIgnoreCase) &&
-                    result.Name.Contains(name, StringComparison.Ordinal))).ToArray();
-
-                reports.Add(new SuiteResult(suite, passed, failed, other, missing));
-                bool ok = passed > 0 && failed == 0 && missing.Length == 0;
-                Console.WriteLine($"{(ok ? "PASS" : "FAIL")} {suite}: " +
-                    $"passed={passed}, failed={failed}, other={other}, " +
-                    $"missing-critical={missing.Length}");
-                foreach (var name in missing)
-                    Console.Error.WriteLine("  critical test not passed: " + name);
-                if (!ok) success = false;
-            }
-            catch (Exception ex) when (ex is System.Xml.XmlException or IOException
-                or UnauthorizedAccessException or InvalidDataException)
-            {
-                Console.Error.WriteLine($"FAIL: unreadable {suite}.trx ({ex.GetType().Name})");
-                success = false;
-            }
+            SuiteResult report = ReleaseReportEvaluator.EvaluateFile(suite,
+                platform, Path.Combine(directory, suite + ".trx"));
+            suites.Add(report);
+            Console.WriteLine($"{(report.Approved ? "PASS" : "FAIL")} {suite}: " +
+                $"passed={report.Passed}, failed={report.Failed}, other={report.Other}, " +
+                $"required-not-passed={report.MissingRequired.Count}, " +
+                $"integrity-errors={report.IntegrityErrors.Count}");
+            foreach (string name in report.MissingRequired)
+                Console.Error.WriteLine("  required test not passed: " + name);
+            foreach (string message in report.IntegrityErrors)
+                Console.Error.WriteLine("  invalid report: " + message);
         }
+
+        bool approved = suites.Count ==
+            ReleaseReportEvaluator.ExpectedSuites(platform).Count &&
+            suites.All(x => x.Approved);
         var summary = new
         {
             Platform = platform,
-            Approved = success,
-            Suites = reports,
-            RequiredSuiteCount = platform == "windows"
-                ? AllSuites.Length + 1 : AllSuites.Length
+            Approved = approved,
+            Suites = suites,
+            RequiredSuiteCount = ReleaseReportEvaluator.ExpectedSuites(platform).Count
         };
-        File.WriteAllText(Path.Combine(args[0], "get-document-release-gate.json"),
-            JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
-        if (!success)
+
+        // Atomic replace prevents another local tool from mistaking half-written
+        // release evidence for a successfully completed acceptance run.
+        string destination = Path.Combine(directory, "get-document-release-gate.json");
+        string temp = Path.Combine(directory, "get-document-release-gate-" +
+            Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            File.WriteAllText(temp,
+                JsonSerializer.Serialize(summary, new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                }));
+            File.Move(temp, destination, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temp)) File.Delete(temp);
+        }
+
+        if (!approved)
             Console.Error.WriteLine(
-                "RELEASE BLOCKED: a required test/report failed, was skipped or did not run.");
+                "RELEASE BLOCKED: missing, malformed, inconclusive or failed mandatory tests.");
         else
-            Console.WriteLine("PASS: mandatory automated release tests completed. " +
-                              "Physical MFP/Office GUI acceptance still required.");
-        return success ? 0 : 1;
+            Console.WriteLine("PASS: automated test reports verified. " +
+                "Release still requires physical MFP and Office GUI acceptance.");
+        return approved ? 0 : 1;
     }
 }
