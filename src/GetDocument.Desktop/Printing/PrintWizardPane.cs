@@ -168,9 +168,9 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         side.Children.Add(_previewStatus);
         side.Children.Add(new TextBlock
         {
-            Text = "Показаны реальные первые страницы PDF в примерной раскладке. Фактические поля, " +
-                   "поворот и масштабирование могут отличаться у драйвера; диапазон страниц " +
-                   "на предпросмотр не влияет.",
+            Text = "Показаны выбранные страницы PDF на примерном макете листа. " +
+                   "Для 2/4 страниц на листе требуется весь документ. Фактические поля, " +
+                   "поворот и масштабирование могут отличаться у драйвера.",
             TextWrapping = TextWrapping.Wrap, FontSize = 12
         });
 
