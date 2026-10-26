@@ -4,6 +4,8 @@
 
 > **Продолжение GD-17B (26.10.2026):** подготовлены закрытый лабораторный compose со строго закрепляемым образом, HTTPS healthcheck, отдельный `GetDocument.EuroOfficeHost`, одноразовый launch ID, строго ограниченная CSP страница DocsAPI и контракт `ITrustedEuroOfficeLaunchStore` с DenyAll по умолчанию. Добавлены модульные тесты. **ГЭТ сервер, корпоративные SSO/ACL, trusted callback и immutable CAS по-прежнему отсутствуют.** См. [GD-17B: launch broker и стенд](GET_DOCUMENT_EURO_OFFICE_BROKER_GD17B_2026-10-26.md).
 
+> **GD-17C.1:** реализован клиент существующего GUP-2 tab-binding endpoint с SHA-256 и отдельной вкладкой ГЭТ; функциональность отключена до явного флага и серверного ACL. События GUP-2 сами по себе не разрешают Euro-Office совместное редактирование. Подробнее: [GD-17C.1](GET_DOCUMENT_GUP2_BINDING_GD17C_2026-10-26.md).
+
 ## 1. Приоритет движков
 
 1. **Euro-Office Document Server** — основной движок для DOCX/XLSX/PPTX в локальной сети и совместного редактирования. Это **не** файловый сервер, не система ACL и не замена ГЭТ Файлы/GUP-2.
