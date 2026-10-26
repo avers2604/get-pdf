@@ -40,6 +40,20 @@ public sealed class EuroOfficeCallbackAdmissionTests
     }
 
     [TestMethod]
+    public void AFullShiftCallbackSessionCanRemainValidButOverlongSessionIsRejected()
+    {
+        var now = new DateTimeOffset(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);
+        var shiftSession = new EuroOfficeCallbackSession(
+            Key, Origin, now.AddHours(8));
+        EuroOfficeCallbackAdmission.RequireCurrent(shiftSession, Origin, now);
+
+        var unrealistic = new EuroOfficeCallbackSession(
+            Key, Origin, now.AddHours(48));
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
+            EuroOfficeCallbackAdmission.RequireCurrent(unrealistic, Origin, now));
+    }
+
+    [TestMethod]
     public void DenyAllRevisionSinkCannotAcknowledgeAnyNewVersion()
     {
         ITrustedEuroOfficeCallbackRevisionSink sink = new DenyAllEuroOfficeCallbackRevisionSink();
