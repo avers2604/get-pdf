@@ -220,6 +220,23 @@ public sealed class LocalCupsSimulatorTests
     }
 
     [TestMethod]
+    public async Task ExcessivePrinterOutputIsRejectedWithoutUnboundedBuffering()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Fake CUPS executable tests require Linux.");
+
+        using var cups = new FakeCups();
+        cups.EmitOversizedReply();
+        using var frozen = await cups.CreateSnapshotAsync("test.pdf");
+        var plan = PrintJobPlan.Create("GET_SIMULATOR", 1, "", 1,
+            PrintDuplex.OneSided, PrintPaper.A4);
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+            LocalPrintBroker.SubmitPdfAsync(frozen.Path, plan,
+                CancellationToken.None, frozen.Sha256Hex));
+        Assert.IsTrue(File.Exists(cups.ArgumentsFile));
+    }
+
+    [TestMethod]
     public async Task FailedCupsCommandIsAmbiguousAndMustNotClaimPrinted()
     {
         if (!OperatingSystem.IsLinux())
@@ -249,6 +266,7 @@ public sealed class LocalCupsSimulatorTests
         private readonly string? _previousNoColor;
         private readonly string? _previousFullCaps;
         private readonly string? _previousNoReceipt;
+        private readonly string? _previousHugeReply;
         private readonly string _folder;
 
         public FakeCups()
@@ -286,6 +304,14 @@ public sealed class LocalCupsSimulatorTests
                 #!/bin/sh
                 printf '%s\n' "$@" > "$GETDOC_FAKE_CUPS_ARGS"
                 if [ "$GETDOC_FAKE_CUPS_REJECT" = "1" ]; then exit 1; fi
+                if [ "${GETDOC_FAKE_CUPS_HUGE_REPLY:-0}" = "1" ]; then
+                  count=0
+                  while [ "$count" -lt 5000 ]; do
+                    printf '12345678901234567890\n'
+                    count=$((count + 1))
+                  done
+                  exit 0
+                fi
                 if [ "${GETDOC_FAKE_CUPS_NO_RECEIPT:-0}" != "1" ]; then
                   printf 'request id is GET_SIMULATOR-42 (1 file(s))\n'
                 fi
@@ -297,6 +323,7 @@ public sealed class LocalCupsSimulatorTests
             _previousNoColor = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR");
             _previousFullCaps = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_FULL_CAPS");
             _previousNoReceipt = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_RECEIPT");
+            _previousHugeReply = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_HUGE_REPLY");
             Environment.SetEnvironmentVariable("PATH", _folder + Path.PathSeparator + _originalPath);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_ARGS", ArgumentsFile);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_REJECT", "0");
@@ -304,6 +331,7 @@ public sealed class LocalCupsSimulatorTests
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR", "0");
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_FULL_CAPS", "0");
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_RECEIPT", "0");
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_HUGE_REPLY", "0");
         }
 
         public string ArgumentsFile { get; }
@@ -322,6 +350,9 @@ public sealed class LocalCupsSimulatorTests
 
         public void SuppressReceipt() =>
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_RECEIPT", "1");
+
+        public void EmitOversizedReply() =>
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_HUGE_REPLY", "1");
 
         public async Task<PrintFileSnapshot> CreateSnapshotAsync(string name)
         {
@@ -351,6 +382,7 @@ public sealed class LocalCupsSimulatorTests
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR", _previousNoColor);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_FULL_CAPS", _previousFullCaps);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_RECEIPT", _previousNoReceipt);
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_HUGE_REPLY", _previousHugeReply);
             try { Directory.Delete(_folder, recursive: true); }
             catch (IOException) { }
         }
