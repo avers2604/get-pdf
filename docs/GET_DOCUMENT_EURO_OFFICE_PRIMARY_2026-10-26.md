@@ -15,6 +15,8 @@
 
 > **GD-17D.2b:** внутренний `commit_trusted_eurooffice_callback` в GUP-2 уже использует штатные CAS/AV/S3 VersionId/append-only историю, миграции 0041–0042 и replay receipt: [Draft PR #179](https://github.com/avers2604/Gup-2/pull/179). [Интеграционный контракт](GET_DOCUMENT_EUROOFFICE_COMMIT_GD17D2B_2026-10-26.md). В реальном `EuroOfficeHost` остаётся DenyAll, межсерверный write-grant ещё не подключён.
 
+> **GD-24:** исходники [парного C# server writeback](GET_DOCUMENT_EUROOFFICE_SAVE_TRANSPORT_GD24_2026-10-26.md) и [GUP-2 PR #182](https://github.com/avers2604/Gup-2/pull/182) содержат HMAC authorization с document.key, save-grants, выдачу CAS/immutable receipt. SSO issuer и DocumentServer безопасный output fetch должны быть подключены отдельно, редактор по умолчанию DenyAll.
+
 ## 1. Приоритет движков
 
 1. **Euro-Office Document Server** — основной движок для DOCX/XLSX/PPTX в локальной сети и совместного редактирования. Это **не** файловый сервер, не система ACL и не замена ГЭТ Файлы/GUP-2.
