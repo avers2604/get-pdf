@@ -31,7 +31,8 @@ public static class OfficePrintFiles
 
     public static void HardenExport(string path)
     {
-        if (!IsOwnedExport(path) || !File.Exists(path))
+        if (!IsOwnedExport(path) || !File.Exists(path) ||
+            (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidDataException("Недопустимый временный PDF.");
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
