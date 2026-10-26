@@ -38,7 +38,28 @@ catch (FormatException ex)
 }
 if (signingKey.Length < 32)
     throw new InvalidOperationException("Ключ Euro-Office должен содержать минимум 32 байта.");
-builder.Services.AddSingleton(new EuroOfficeHostSecrets(officeOrigin, signingKey));
+// Incoming editor config JWT and outgoing callback JWT may use different
+// Document Server secrets. Require an independent pinned outbox secret before
+// the callback route can ever be enabled.
+bool callbacksEnabled =
+    Environment.GetEnvironmentVariable("GET_EUROOFFICE_CALLBACKS_ENABLED") == "1";
+byte[]? outboxSigningKey = null;
+if (callbacksEnabled)
+{
+    try
+    {
+        outboxSigningKey = Convert.FromBase64String(
+            RequireEnvironment("GET_EUROOFFICE_OUTBOX_JWT_KEY_B64"));
+    }
+    catch (FormatException ex)
+    {
+        throw new InvalidOperationException("Неверный outbox JWT-ключ Euro-Office.", ex);
+    }
+    if (outboxSigningKey.Length < 32)
+        throw new InvalidOperationException("Euro-Office outbox JWT ключ слишком короткий.");
+}
+builder.Services.AddSingleton(new EuroOfficeHostSecrets(
+    officeOrigin, signingKey, outboxSigningKey));
 
 var app = builder.Build();
 
@@ -108,8 +129,6 @@ app.MapGet("/get-document/editor/launch/{launchId}", async (
 
 // Native Docs API callback is disabled independently of editor launch.
 // The default session store and revision sink both deny all corporate files.
-bool callbacksEnabled =
-    Environment.GetEnvironmentVariable("GET_EUROOFFICE_CALLBACKS_ENABLED") == "1";
 app.MapPost("/get-document/editor/callback/{callbackId}", async (
     string callbackId, HttpContext context,
     ITrustedEuroOfficeCallbackSessionStore sessions,
@@ -120,8 +139,10 @@ app.MapPost("/get-document/editor/callback/{callbackId}", async (
         return Results.NotFound();
     if (context.Request.Cookies.Count > 0 ||
         context.Request.Headers.ContainsKey("Origin") ||
-        context.Request.ContentType != "application/json" ||
-        context.Request.ContentLength is not > 0 and <= 65536)
+        !string.Equals(
+            context.Request.ContentType?.Split(';', 2)[0].Trim(),
+            "application/json", StringComparison.OrdinalIgnoreCase) ||
+        context.Request.ContentLength is null or <= 0 or > 65536)
         return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     // The session must come from trusted corporate storage, NOT a client
@@ -151,7 +172,7 @@ app.MapPost("/get-document/editor/callback/{callbackId}", async (
         string body = await reader.ReadToEndAsync(context.RequestAborted);
         EuroOfficeSaveCandidate? candidate = EuroOfficeNativeCallback.Plan(
             body, token, session.DocumentKey, session.TrustedDocumentServerOrigin,
-            secrets.SigningKey);
+            secrets.OutboxSigningKey!);
 
         // A correctly authenticated status 1/4 has no revision to save.
         if (candidate is null)
@@ -178,4 +199,5 @@ app.MapPost("/get-document/editor/callback/{callbackId}", async (
 
 app.Run();
 
-internal sealed record EuroOfficeHostSecrets(Uri OfficeOrigin, byte[] SigningKey);
+internal sealed record EuroOfficeHostSecrets(
+    Uri OfficeOrigin, byte[] SigningKey, byte[]? OutboxSigningKey);
