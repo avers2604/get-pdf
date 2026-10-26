@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Security.Cryptography;
 using GetDocument.Core.Printing;
 
 namespace GetDocument.Desktop.Printing;
@@ -67,7 +68,8 @@ internal static class LocalPrintBroker
     }
 
     public static async Task<string> SubmitPdfAsync(
-        string pdfPath, PrintJobPlan plan, CancellationToken ct)
+        string pdfPath, PrintJobPlan plan, CancellationToken ct,
+        string? expectedSha256 = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ct.ThrowIfCancellationRequested();
@@ -75,6 +77,22 @@ internal static class LocalPrintBroker
             throw new FileNotFoundException("PDF больше не доступен.");
         if (!string.Equals(Path.GetExtension(pdfPath), ".pdf", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Печатать можно только сохранённый PDF.");
+
+        if (expectedSha256 is not null)
+        {
+            if (expectedSha256.Length != 64 ||
+                expectedSha256.Any(c => c is not (>= '0' and <= '9'
+                    or >= 'a' and <= 'f')))
+                throw new ArgumentException("Некорректная контрольная сумма PDF.", nameof(expectedSha256));
+            await using var input = new FileStream(pdfPath, FileMode.Open, FileAccess.Read,
+                FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            if (input.Length is < 5 or > PrintFileSnapshot.MaxBytes)
+                throw new InvalidDataException("PDF превышает допустимый размер.");
+            var computed = await SHA256.HashDataAsync(input, ct);
+            if (!CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(expectedSha256), computed))
+                throw new InvalidDataException("PDF изменился перед отправкой на печать.");
+        }
 
         // Immediately re-check queue existence, not only the stale dropdown.
         var discovered = await PrintersAsync(ct);
@@ -109,7 +127,8 @@ internal static class LocalPrintBroker
             var request = new PrintWorkerRequest(
                 Path.GetFullPath(pdfPath), plan.PrinterName, plan.SourcePageCount,
                 plan.CupsPageRange, plan.Copies, plan.Duplex, plan.Paper,
-                plan.Orientation, plan.Color, plan.PagesPerSheet, plan.Tray);
+                plan.Orientation, plan.Color, plan.PagesPerSheet, plan.Tray,
+                expectedSha256);
             await RunAsync(WindowsWorker(), ["print"],
                 JsonSerializer.Serialize(request), ct);
             return "Задание передано в очередь Windows. Проверьте состояние принтера.";
@@ -202,5 +221,5 @@ internal static class LocalPrintBroker
     private sealed record PrintWorkerRequest(string PdfPath, string PrinterName,
         int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper,
         PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet,
-        PrintTrayOption? Tray);
+        PrintTrayOption? Tray, string? ExpectedSha256);
 }
