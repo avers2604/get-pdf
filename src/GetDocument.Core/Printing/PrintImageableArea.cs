@@ -20,7 +20,8 @@ public static class PrintImageableArea
             printableWidth is { } w && printableHeight is { } h &&
             double.IsFinite(x) && double.IsFinite(y) &&
             double.IsFinite(w) && double.IsFinite(h) &&
-            x >= 0 && y >= 0 && w > 0 && h > 0 &&
+            x >= 0 && y >= 0 && x < mediaWidth && y < mediaHeight &&
+            w > 0 && h > 0 &&
             x + w <= mediaWidth + 0.5 && y + h <= mediaHeight + 0.5)
             return new PrintRegion(x, y, Math.Min(w, mediaWidth - x),
                 Math.Min(h, mediaHeight - y));
