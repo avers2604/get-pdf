@@ -44,6 +44,7 @@ public sealed class MainWindow : Window
     private readonly OfficeReturnPolicy _officeReturnPolicy = OfficeReturnPolicy.LoadLocal();
     private TabItem? _officeReturnTab;
     private TabItem? _officeBindingTab;
+    private Guid? _officeBindingSourceId;
     private TabItem? _printTab;
     private readonly DocumentHistory _history = new();
     private readonly StackPanel _homeLists = new() { Spacing = 4 };
@@ -664,6 +665,7 @@ public sealed class MainWindow : Window
     private void CloseDocument(Guid id)
     {
         if (!_views.TryGetValue(id, out var view)) return;
+        if (_officeBindingSourceId == id) CloseOfficeBinding();
         _views.Remove(id);
         _workspace.Close(id);
         if (view.Content is IDisposable disposable) disposable.Dispose();
@@ -718,6 +720,13 @@ public sealed class MainWindow : Window
             _status.Text = "Для привязки сначала откройте рабочий DOCX/XLSX во вкладке.";
             return;
         }
+        if (_views.TryGetValue(documentId, out var activeView) &&
+            HasUnsaved(activeView.Content))
+        {
+            _status.Text = "Сначала сохраните изменения рабочей копии. SHA-256 проверяется по файлу на диске.";
+            return;
+        }
+        _officeBindingSourceId = documentId;
         _officeBindingTab = new TabItem
         {
             Header = TabHeader("Связь GUP-2", CloseOfficeBinding),
@@ -733,6 +742,7 @@ public sealed class MainWindow : Window
         if (_officeBindingTab.Content is IDisposable pane) pane.Dispose();
         _items.Remove(_officeBindingTab);
         _officeBindingTab = null;
+        _officeBindingSourceId = null;
         _tabs.SelectedIndex = 0;
     }
 
