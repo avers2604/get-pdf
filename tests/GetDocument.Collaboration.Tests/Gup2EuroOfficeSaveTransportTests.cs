@@ -87,13 +87,16 @@ public sealed class Gup2EuroOfficeSaveTransportTests
         Assert.ThrowsExactly<ArgumentException>(() =>
             Gup2EuroOfficeSaveTransportClient.CreateSignedRequest(
                 new Uri("http://gup2.get.intra/documents/"), Grant,
-                Employee, Secret, Now, Content, Fingerprint));
+                Employee, DocumentKey, Secret, Now, Content, Fingerprint));
         Assert.ThrowsExactly<ArgumentException>(() =>
             Gup2EuroOfficeSaveTransportClient.CreateSignedRequest(
                 Gup2, Grant, Employee, DocumentKey, new byte[16], Now, Content, Fingerprint));
         Assert.ThrowsExactly<ArgumentException>(() =>
             Gup2EuroOfficeSaveTransportClient.CreateSignedRequest(
                 Gup2, "bad", Employee, DocumentKey, Secret, Now, Content, Fingerprint));
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            Gup2EuroOfficeSaveTransportClient.CreateSignedRequest(
+                Gup2, Grant, Employee, "not-a-document-key", Secret, Now, Content, Fingerprint));
         Assert.ThrowsExactly<ArgumentException>(() =>
             Gup2EuroOfficeSaveTransportClient.CreateSignedRequest(
                 Gup2, Grant, Employee, DocumentKey, Secret, Now, [], Fingerprint));
