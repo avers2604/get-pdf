@@ -6,7 +6,8 @@ namespace GetDocument.Core.Integration;
 /// Admin-controlled, disabled-by-default native Office return policy.
 /// No user-entered URL or credentials are accepted by the upload UI.
 /// </summary>
-public sealed record OfficeReturnPolicy(bool Enabled, Uri? DocumentsUri, long MaxUploadBytes)
+public sealed record OfficeReturnPolicy(bool Enabled, Uri? DocumentsUri, long MaxUploadBytes,
+    bool AllowGup2TabBinding = false)
 {
     public const long DefaultMaxUploadBytes = 150L * 1024 * 1024;
     public const long AbsoluteMaxUploadBytes = 256L * 1024 * 1024;
@@ -19,6 +20,17 @@ public sealed record OfficeReturnPolicy(bool Enabled, Uri? DocumentsUri, long Ma
             MaxUploadBytes <= 0 || MaxUploadBytes > AbsoluteMaxUploadBytes)
             throw new InvalidOperationException("Возврат в GUP-2 запрещён политикой ИТ.");
         return new Uri(DocumentsUri, "getdocument/office-return/");
+    }
+
+    public Uri BindingDestination()
+    {
+        // GUP-2 binding is read-only metadata verification, independent of
+        // the write-capable desktop Office return feature flag.
+        if (!AllowGup2TabBinding || DocumentsUri is null ||
+            !IsTrustedDocumentsUri(DocumentsUri) ||
+            MaxUploadBytes <= 0 || MaxUploadBytes > AbsoluteMaxUploadBytes)
+            throw new InvalidOperationException("Привязка вкладок к GUP-2 запрещена политикой ИТ.");
+        return new Uri(DocumentsUri, "getdocument/tab-binding/redeem/");
     }
 
     private static bool IsTrustedDocumentsUri(Uri? uri) =>
@@ -42,7 +54,9 @@ public sealed record OfficeReturnPolicy(bool Enabled, Uri? DocumentsUri, long Ma
 
         bool enabled = root.TryGetProperty("AllowGup2OfficeReturn", out var flag) &&
                        flag.ValueKind == JsonValueKind.True;
-        if (!enabled) return Disabled;
+        bool binding = root.TryGetProperty("AllowGup2TabBinding", out var bindFlag) &&
+                       bindFlag.ValueKind == JsonValueKind.True;
+        if (!enabled && !binding) return Disabled;
 
         if (!root.TryGetProperty("Gup2DocumentsUrl", out var destination) ||
             destination.ValueKind != JsonValueKind.String)
@@ -60,7 +74,7 @@ public sealed record OfficeReturnPolicy(bool Enabled, Uri? DocumentsUri, long Ma
                 limit <= 0 || limit > AbsoluteMaxUploadBytes)
                 throw new InvalidDataException("Недопустимый предел размера рабочего документа.");
         }
-        return new OfficeReturnPolicy(true, uri, limit);
+        return new OfficeReturnPolicy(enabled, uri, limit, binding);
     }
 
     /// <summary>
