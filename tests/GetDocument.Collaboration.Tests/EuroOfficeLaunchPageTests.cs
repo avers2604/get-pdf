@@ -160,7 +160,7 @@ public sealed class EuroOfficeLaunchPageTests
             string launchId, ClaimsPrincipal authenticatedUser, CancellationToken cancellationToken)
         {
             Calls++;
-            if (authenticatedUser.FindFirstValue(ClaimTypes.NameIdentifier) != "user-17")
+            if (authenticatedUser.FindFirst(ClaimTypes.NameIdentifier)?.Value != "user-17")
                 return ValueTask.FromResult<EuroOfficeAuthorizedLaunch?>(null);
             var result = _available;
             _available = null;
