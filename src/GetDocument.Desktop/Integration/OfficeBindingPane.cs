@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
-using Avalonia.Platform.Storage;
 using GetDocument.Core.Integration;
 
 namespace GetDocument.Desktop.Integration;
@@ -33,7 +32,7 @@ public sealed class OfficeBindingPane : UserControl, IDisposable
 
     public Gup2OfficeTabBinding? BoundMetadata { get; private set; }
 
-    public OfficeBindingPane(Window owner, OfficeReturnPolicy policy)
+    public OfficeBindingPane(Window owner, OfficeReturnPolicy policy, string openedFilePath)
     {
         _owner = owner;
         _policy = policy.AllowGup2TabBinding ? policy
@@ -54,7 +53,7 @@ public sealed class OfficeBindingPane : UserControl, IDisposable
         });
         content.Children.Add(new TextBlock
         {
-            Text = "Выберите сохранённый DOCX/XLSX, затем в карточке GUP-2 " +
+            Text = "Откройте сохранённый DOCX/XLSX во вкладке ГЭТ Документы, затем в карточке GUP-2 " +
                    "получите одноразовый код «Привязать вкладку». " +
                    "Приложение проверит SHA-256, актуальную версию и права доступа. " +
                    "Привязка не сохраняет файл на сервере, не выдаёт права на редактирование " +
@@ -62,41 +61,12 @@ public sealed class OfficeBindingPane : UserControl, IDisposable
             TextWrapping = Avalonia.Media.TextWrapping.Wrap
         });
 
-        var choose = new Button { Content = "Выбрать DOCX/XLSX" };
-        choose.Click += async (_, _) =>
-        {
-            if (_disposed || _busy) return;
-            try
-            {
-                var picked = await _owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-                {
-                    Title = "Выберите текущую рабочую копию",
-                    AllowMultiple = false,
-                    FileTypeFilter = [new FilePickerFileType("Office")
-                    {
-                        Patterns = ["*.docx", "*.xlsx"]
-                    }]
-                });
-                var file = picked.FirstOrDefault();
-                if (file is null) return;
-                if (!file.Path.IsFile ||
-                    !OfficeReturnClient.IsSupportedCopy(file.Path.LocalPath))
-                {
-                    _status.Text = "Требуется сохранённый локальный или сетевой DOCX/XLSX.";
-                    return;
-                }
-                _selectedPath = file.Path.LocalPath;
-                BoundMetadata = null;
-                _selected.Text = "Выбрано: " + Path.GetFileName(_selectedPath);
-                _status.Text = "";
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
-                ArgumentException or InvalidOperationException or NotSupportedException)
-            {
-                _status.Text = "Не удалось выбрать файл.";
-            }
-        };
-        content.Children.Add(choose);
+        if (string.IsNullOrWhiteSpace(openedFilePath) ||
+            !OfficeReturnClient.IsSupportedCopy(openedFilePath) ||
+            openedFilePath.Contains("://", StringComparison.Ordinal))
+            throw new ArgumentException("Необходима открытая вкладка DOCX/XLSX.", nameof(openedFilePath));
+        _selectedPath = Path.GetFullPath(openedFilePath);
+        _selected.Text = "Открытая вкладка: " + Path.GetFileName(_selectedPath);
         content.Children.Add(_selected);
         content.Children.Add(_code);
         var bind = new Button { Content = "Проверить привязку в GUP-2" };
@@ -105,13 +75,12 @@ public sealed class OfficeBindingPane : UserControl, IDisposable
             if (_disposed || _busy) return;
             if (_selectedPath is null)
             {
-                _status.Text = "Сначала выберите рабочую копию.";
+                _status.Text = "Открытая рабочая копия недоступна.";
                 return;
             }
             string code = _code.Text?.Trim() ?? "";
             _code.Text = string.Empty;
             _busy = true;
-            choose.IsEnabled = false;
             bind.IsEnabled = false;
             BoundMetadata = null;
             _status.Text = "Проверяется SHA-256 и права доступа…";
@@ -138,7 +107,6 @@ public sealed class OfficeBindingPane : UserControl, IDisposable
                 _busy = false;
                 if (!_disposed)
                 {
-                    choose.IsEnabled = true;
                     bind.IsEnabled = true;
                 }
                 else _lifetime.Dispose();
