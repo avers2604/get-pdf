@@ -247,7 +247,16 @@ internal static class LocalPrintBroker
             ProcessOutput response = await stdOut;
             _ = await stdErr; // Never surface arbitrary driver stderr/paths to end-user.
             if (response.WasTruncated)
+            {
+                // A print process may have queued its job before emitting
+                // overflowing stdout. This is NOT a corrupted PDF and must
+                // never invite a blind retry of the same print job.
+                if (isPrintJob)
+                    throw new PrintSubmissionException(argv[0] == "print"
+                        ? PrintSpoolFailurePolicy.FromWindowsWorker(5)
+                        : PrintSpoolFailurePolicy.FromCupsFailure());
                 throw new InvalidDataException("Ответ службы печати превышает ограничение размера.");
+            }
             string output = response.Value;
             if (process.ExitCode != 0)
             {
