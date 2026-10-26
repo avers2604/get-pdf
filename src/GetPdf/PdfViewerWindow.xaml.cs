@@ -448,7 +448,7 @@ public partial class PdfViewerWindow : UserControl
             SessionStorage.CleanupExpired(TimeSpan.FromDays(2), _sessionFolder);
             _context = new ScanningContext(new WpfImageContext());
             _context.FileStorageManager = FileStorageManager.CreateFolder(_sessionFolder);
-            _pageStore = new PdfLazyPageStore(_context, _sourcePath);
+            _pageStore = new PdfLazyPageStore(_sourcePath);
             _thumbnailCache = new PdfLruCache<(int, int), BitmapSource>(12, _ => { },
                 48L * 1024 * 1024, EstimateBitmapBytes);
             if (_closing) return;
@@ -625,7 +625,7 @@ public partial class PdfViewerWindow : UserControl
                 string destination = Path.Combine(_sessionFolder!, "text-master-" + Guid.NewGuid().ToString("N") + ".pdf");
                 File.Copy(working, destination);
                 _pageStore.Dispose(); _sourcePath = destination;
-                _pageStore = new PdfLazyPageStore(_context!, destination);
+                _pageStore = new PdfLazyPageStore(destination);
                 while (_plan.SourcePageCount < restored.SourcePageCount) _plan.RegisterSourcePage();
                 _markupAllowed = PdfMarkupPolicy.ReadEligibleSourcePages(destination);
                 ReadContinuousPageSizes();
@@ -1333,13 +1333,13 @@ public partial class PdfViewerWindow : UserControl
                         item.Thumbnail = cached;
                         continue;
                     }
-                    // Reuse the same PDFium importer/store; never prefetch hidden pages.
-                    var page = await store.GetPageAsync(item.SourcePage, token);
-                    if (token.IsCancellationRequested || _closing || !_visibleThumbnails.Contains(item) ||
-                        !_thumbnailItems.Contains(item)) continue;
-                    // Full-page decode + downscale off the UI thread (scanned pages are multi-megapixel).
-                    int rotation = item.Rotation;
-                    var bitmap = await Task.Run(() => PdfThumbnailRenderer.Render(page, rotation), token);
+                    // Rendered straight at thumbnail size; never prefetch hidden pages.
+                    BitmapSource bitmap = await store.RenderThumbnailAsync(item.SourcePage, token);
+                    if (item.Rotation != 0)
+                    {
+                        bitmap = new TransformedBitmap(bitmap, new RotateTransform(item.Rotation));
+                        bitmap.Freeze();
+                    }
                     if (token.IsCancellationRequested || _closing || !_visibleThumbnails.Contains(item) ||
                         !_thumbnailItems.Contains(item)) continue;
                     _thumbnailCache?.Add(item.CacheKey, bitmap);

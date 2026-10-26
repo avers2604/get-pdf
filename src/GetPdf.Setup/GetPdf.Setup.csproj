@@ -13,7 +13,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>GetPdf.Setup</AssemblyName>
     <RootNamespace>GetPdf.Setup</RootNamespace>
-    <Version>0.1.2</Version>
+    <Version>0.1.3</Version>
     <Product>ГЭТ PDF</Product>
     <Company>SPb GUP Gorelektrotrans</Company>
     <AssemblyTitle>Установка ГЭТ PDF</AssemblyTitle>

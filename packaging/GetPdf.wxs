@@ -1,7 +1,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <!-- Separate product identity from GUP Scan: installations can coexist. -->
-  <Package Name="ГЭТ PDF" Language="1049" Codepage="1251" Version="0.1.2.0"
+  <Package Name="ГЭТ PDF" Language="1049" Codepage="1251" Version="0.1.3.0"
            Manufacturer="SPb GUP Gorelektrotrans"
            UpgradeCode="BE5C1496-701B-4ED4-937E-DA3B41C2A770" Scope="perMachine">
     <!-- Same-version rebuilds replace each other instead of appearing twice in Apps & Features. -->

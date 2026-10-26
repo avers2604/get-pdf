@@ -80,7 +80,7 @@ public partial class PdfViewerWindow
 
             await StopThumbnailWorkerAsync();
             await DocumentView.StopAsync();
-            replacement = new PdfLazyPageStore(_context, master);
+            replacement = new PdfLazyPageStore(master);
             if (replacement.PageCount != sizes.Length)
                 throw new InvalidDataException("Количество импортированных страниц изменилось.");
 

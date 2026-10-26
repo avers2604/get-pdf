@@ -4,8 +4,8 @@
 
 | Файл | Для кого | Что это |
 |---|---|---|
-| `GetPdf-0.1.2-Setup.exe` | пользователи | Мастер установки в стиле GET DS 4.1, внутри — MSI |
-| `GetPdf-0.1.2-win-x64.msi` | ИТ-служба | Тот же продукт для GPO / SCCM / `msiexec /qn` |
+| `GetPdf-0.1.3-Setup.exe` | пользователи | Мастер установки в стиле GET DS 4.1, внутри — MSI |
+| `GetPdf-0.1.3-win-x64.msi` | ИТ-служба | Тот же продукт для GPO / SCCM / `msiexec /qn` |
 
 ## Сборка
 
@@ -19,7 +19,7 @@ wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
 
 Скрипт выполняет restore → build → MSTest (порог 192) → чистый self-contained publish →
 qpdf → `wix build` (`-culture ru-RU`) → мастер `GetPdf.Setup` с MSI внутри и пишет в `dist\release`
-`GetPdf-0.1.2-Setup.exe`, `GetPdf-0.1.2-win-x64.msi` и `release-manifest.json`.
+`GetPdf-0.1.3-Setup.exe`, `GetPdf-0.1.3-win-x64.msi` и `release-manifest.json`.
 
 ### qpdf в составе установки
 
@@ -92,11 +92,11 @@ Windows 10/11 защищает выбор приложения по умолча
 Тихая установка для развёртывания (без мастера и без открытия параметров):
 
 ```bat
-msiexec /i GetPdf-0.1.2-win-x64.msi /qn /l*v getpdf-install.log
+msiexec /i GetPdf-0.1.3-win-x64.msi /qn /l*v getpdf-install.log
 ```
 
-Удаление: «Параметры › Приложения», повторный запуск `GetPdf-0.1.2-Setup.exe` → «Удалить ГЭТ PDF»
-или `msiexec /x GetPdf-0.1.2-win-x64.msi /qn`.
+Удаление: «Параметры › Приложения», повторный запуск `GetPdf-0.1.3-Setup.exe` → «Удалить ГЭТ PDF»
+или `msiexec /x GetPdf-0.1.3-win-x64.msi /qn`.
 Регистрация удаляется вместе с программой.
 
 ## Проверено (22.10.2026, Windows 11, 125 % DPI)
