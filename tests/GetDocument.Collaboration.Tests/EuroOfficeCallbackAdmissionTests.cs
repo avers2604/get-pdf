@@ -70,7 +70,15 @@ public sealed class EuroOfficeCallbackAdmissionTests
     {
         Assert.AreEqual(1, EuroOfficeCallbackAdmission.ResponseError(
             new EuroOfficeCallbackCommitReceipt(false)));
-        Assert.AreEqual(0, EuroOfficeCallbackAdmission.ResponseError(
+        // A boolean success flag alone is not proof of a committed GUP-2
+        // revision. Missing or malformed revision metadata must fail closed.
+        Assert.AreEqual(1, EuroOfficeCallbackAdmission.ResponseError(
             new EuroOfficeCallbackCommitReceipt(true)));
+        Assert.AreEqual(1, EuroOfficeCallbackAdmission.ResponseError(
+            new EuroOfficeCallbackCommitReceipt(true, "0", new string('a', 64))));
+        Assert.AreEqual(1, EuroOfficeCallbackAdmission.ResponseError(
+            new EuroOfficeCallbackCommitReceipt(true, "42", "not-a-sha")));
+        Assert.AreEqual(0, EuroOfficeCallbackAdmission.ResponseError(
+            new EuroOfficeCallbackCommitReceipt(true, "42", new string('a', 64))));
     }
 }
