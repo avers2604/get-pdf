@@ -92,18 +92,8 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         _closeTab = closeTab;
         // Only an Office-generated PDF in the known print export directory is
         // deletable by this pane. Source/user PDFs must NEVER be deleted.
-        if (deleteOwnedInput)
-        {
-            string expectedFolder = Path.GetFullPath(
-                Path.Combine(Path.GetTempPath(), "GET-Document-print"));
-            string full = Path.GetFullPath(pdfPath);
-            if (string.Equals(Path.GetDirectoryName(full), expectedFolder,
-                    OperatingSystem.IsWindows()
-                        ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
-                string.Equals(Path.GetExtension(full), ".pdf",
-                    StringComparison.OrdinalIgnoreCase))
-                _ownedInputPath = full;
-        }
+        if (deleteOwnedInput && OfficePrintFiles.IsOwnedExport(pdfPath))
+            _ownedInputPath = Path.GetFullPath(pdfPath);
         Background = Palette("#F4F5F9");
         Foreground = Palette("#141A33");
         StyleField(_printer);
@@ -707,13 +697,8 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         finally { PdfNativeGate.Instance.Release(); }
     }
 
-    private void DeleteOwnedInput()
-    {
-        if (_ownedInputPath is null) return;
-        try { File.Delete(_ownedInputPath); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-    }
+    private void DeleteOwnedInput() =>
+        OfficePrintFiles.DeleteOwnedExport(_ownedInputPath);
 
     public void Dispose()
     {
