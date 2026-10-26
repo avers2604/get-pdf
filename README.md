@@ -88,3 +88,5 @@ PDF-вкладка получила **перелистывание первой/
 
 
 **GD-17C.1:** [привязка текущей вкладки к GUP-2](docs/GET_DOCUMENT_GUP2_BINDING_GD17C_2026-10-26.md) через существующий одноразовый код и проверку SHA-256 для сохранённых DOCX/XLSX. Запрещённая по умолчанию отдельная ИТ-политика `AllowGup2TabBinding`; без передачи файла и без повышения прав. **Это проверка метаданных, а не работающая SSO-сессия Euro-Office**. 
+
+**GD-17C.2:** [сервисный протокол аттестации GUP-2](docs/GET_DOCUMENT_EUROOFFICE_ATTESTATION_GD17C2_2026-10-26.md) с HMAC и строгой проверкой read-only метаданных; сопряжённый [GUP-2 PR #174](https://github.com/avers2604/Gup-2/pull/174). Вход в Euro-Office и выдача файлов ещё намеренно запрещены до реального SSO, ACL content gateway и immutable revision sink.
