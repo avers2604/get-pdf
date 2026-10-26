@@ -6,6 +6,20 @@ using System.Text.Json;
 namespace GetDocument.Collaboration;
 
 /// <summary>
+/// Cryptographically unpredictable 128-bit one-time launch handle.
+/// The enterprise store MUST consume this handle atomically and bind it
+/// to the authenticated user, document and authorization window.
+/// </summary>
+public static class EuroOfficeLaunchId
+{
+    public static string New() =>
+        Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+
+    public static bool IsValid(string? id) =>
+        id is { Length: 32 } && id.All(ch => ch is >= '0' and <= '9' or >= 'a' and <= 'f');
+}
+
+/// <summary>
 /// Issued ONLY by a trusted GUP-2/SSO backend after authentication, ACL lookup
 /// and document/revision authorization. The host MUST consume its random
 /// 128-bit launch identifier once, not retrieve a reusable session by file ID.
