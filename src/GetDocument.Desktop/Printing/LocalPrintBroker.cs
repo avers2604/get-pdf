@@ -133,8 +133,11 @@ internal static class LocalPrintBroker
                     "Принтер не подтверждает бумагу A3/A4 или двустороннюю печать.");
 
             var args = CupsPrintArguments.Create(plan, Path.GetFullPath(pdfPath));
-            await RunAsync("lp", args, null, ct);
-            return "Задание передано в очередь CUPS. Проверьте состояние принтера.";
+            string receipt = await RunAsync("lp", args, null, ct);
+            string? job = PrintSubmissionReceipt.CupsJobId(receipt, plan.PrinterName);
+            if (job is null)
+                throw new PrintSubmissionException(PrintSpoolFailurePolicy.FromCupsFailure());
+            return "Задание " + job + " принято в очередь CUPS. Фактическую печать проверьте на принтере.";
         }
         if (OperatingSystem.IsWindows())
         {
@@ -150,9 +153,12 @@ internal static class LocalPrintBroker
                 throw new PrintSubmissionException(
                     PrintSpoolFailurePolicy.UnavailableBeforeSubmit());
             }
-            await RunAsync(worker, ["print"],
+            string acknowledgement = await RunAsync(worker, ["print"],
                 JsonSerializer.Serialize(request), ct);
-            return "Задание передано в очередь Windows. Проверьте состояние принтера.";
+            if (!PrintSubmissionReceipt.WindowsAccepted(acknowledgement))
+                throw new PrintSubmissionException(
+                    PrintSpoolFailurePolicy.FromWindowsWorker(5));
+            return "Windows принял задание в очередь. Фактическую печать проверьте на принтере.";
         }
         throw new PlatformNotSupportedException();
     }
@@ -209,8 +215,9 @@ internal static class LocalPrintBroker
             CreateNoWindow = true
         };
         foreach (string arg in argv) start.ArgumentList.Add(arg);
-        if (OperatingSystem.IsLinux() && program == "lpstat")
-            start.Environment["LC_ALL"] = "C"; // predictable fallback parsing across locales
+        if (OperatingSystem.IsLinux() &&
+            (program == "lpstat" || program == "lpoptions" || program == "lp"))
+            start.Environment["LC_ALL"] = "C"; // canonical CUPS command output for parsing
         Process process;
         try
         {
