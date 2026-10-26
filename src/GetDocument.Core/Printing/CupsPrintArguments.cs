@@ -15,14 +15,7 @@ public static class CupsPrintArguments
         var argv = new List<string>
         {
             "-d", plan.PrinterName,
-            "-n", plan.Copies.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            "-o", plan.Paper == PrintPaper.A3 ? "media=A3" : "media=A4",
-            "-o", plan.Duplex switch
-            {
-                PrintDuplex.LongEdge => "sides=two-sided-long-edge",
-                PrintDuplex.ShortEdge => "sides=two-sided-short-edge",
-                _ => "sides=one-sided"
-            }
+            "-n", plan.Copies.ToString(System.Globalization.CultureInfo.InvariantCulture)
         };
         // CUPS -P addresses OUTPUT sheets, not original PDF pages when
         // number-up is active. The N-up policy already allows all pages only;
@@ -32,6 +25,15 @@ public static class CupsPrintArguments
             argv.Add("-P");
             argv.Add(plan.CupsPageRange);
         }
+        argv.Add("-o");
+        argv.Add(plan.Paper == PrintPaper.A3 ? "media=A3" : "media=A4");
+        argv.Add("-o");
+        argv.Add(plan.Duplex switch
+        {
+            PrintDuplex.LongEdge => "sides=two-sided-long-edge",
+            PrintDuplex.ShortEdge => "sides=two-sided-short-edge",
+            _ => "sides=one-sided"
+        });
         if (plan.Orientation != PrintOrientation.Automatic)
         {
             argv.Add("-o");
