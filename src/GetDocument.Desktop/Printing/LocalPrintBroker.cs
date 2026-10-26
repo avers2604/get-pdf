@@ -70,7 +70,7 @@ internal static class LocalPrintBroker
 
     public static async Task<string> SubmitPdfAsync(
         string pdfPath, PrintJobPlan plan, CancellationToken ct,
-        string? expectedSha256 = null)
+        string expectedSha256)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ct.ThrowIfCancellationRequested();
@@ -79,14 +79,14 @@ internal static class LocalPrintBroker
         if (!string.Equals(Path.GetExtension(pdfPath), ".pdf", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Печатать можно только сохранённый PDF.");
 
-        if (expectedSha256 is not null)
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedSha256);
+        if (expectedSha256.Length != 64 ||
+            expectedSha256.Any(c => c is not (>= '0' and <= '9'
+                or >= 'a' and <= 'f')))
+            throw new ArgumentException("Некорректная контрольная сумма PDF.", nameof(expectedSha256));
+        await using (var input = new FileStream(pdfPath, FileMode.Open, FileAccess.Read,
+                         FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan))
         {
-            if (expectedSha256.Length != 64 ||
-                expectedSha256.Any(c => c is not (>= '0' and <= '9'
-                    or >= 'a' and <= 'f')))
-                throw new ArgumentException("Некорректная контрольная сумма PDF.", nameof(expectedSha256));
-            await using var input = new FileStream(pdfPath, FileMode.Open, FileAccess.Read,
-                FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
             if (input.Length is < 5 or > PrintFileSnapshot.MaxBytes)
                 throw new InvalidDataException("PDF превышает допустимый размер.");
             var computed = await SHA256.HashDataAsync(input, ct);
@@ -245,5 +245,5 @@ internal static class LocalPrintBroker
     private sealed record PrintWorkerRequest(string PdfPath, string PrinterName,
         int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper,
         PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet,
-        PrintTrayOption? Tray, string? ExpectedSha256);
+        PrintTrayOption? Tray, string ExpectedSha256);
 }
