@@ -92,6 +92,30 @@ public sealed class EuroOfficeLaunchPageTests
     }
 
     [TestMethod]
+    public void LaunchIdsAreUnpredictableAndMatchTheNativeWebViewPathContract()
+    {
+        var a = EuroOfficeLaunchId.New();
+        var b = EuroOfficeLaunchId.New();
+        Assert.IsTrue(EuroOfficeLaunchId.IsValid(a));
+        Assert.IsTrue(EuroOfficeLaunchId.IsValid(b));
+        Assert.HasCount(32, a);
+        Assert.AreNotEqual(a, b);
+        Assert.IsFalse(EuroOfficeLaunchId.IsValid(a.ToUpperInvariant()));
+    }
+
+    [DataTestMethod]
+    [DataRow("")]
+    [DataRow("0000000000000000000000000000000")]
+    [DataRow("000000000000000000000000000000000")]
+    [DataRow("0123456789ABCDEF0123456789ABCDEF")]
+    [DataRow("0123456789abcdef0123456789abcdez")]
+    [DataRow("../secrets/00000000000000000000000")]
+    public void RejectsInvalidOrNoncanonicalLaunchIds(string value)
+    {
+        Assert.IsFalse(EuroOfficeLaunchId.IsValid(value));
+    }
+
+    [TestMethod]
     public async Task DenyAllStoreCannotProvideAnySession()
     {
         ITrustedEuroOfficeLaunchStore store = new DenyAllEuroOfficeLaunchStore();
