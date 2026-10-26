@@ -156,20 +156,17 @@ app.MapPost("/get-document/editor/callback/{callbackId}", async (
         EuroOfficeCallbackAdmission.RequireCurrent(
             session, secrets.OfficeOrigin, clock.GetUtcNow());
 
-        // Only an explicitly configured outbound JWT header is accepted.
-        // Default matches the internal Euro-Office server lab policy;
-        // actual header format must be verified with the pinned release.
-        string token = context.Request.Headers["AuthorizationJWT"].ToString();
-        if (token.StartsWith("Bearer ", StringComparison.Ordinal))
-            token = token["Bearer ".Length..];
-        if (string.IsNullOrEmpty(token) || token.Length > 65536)
-            return Results.StatusCode(StatusCodes.Status403Forbidden);
-
+        // Euro-Office (Docs API) sends JWT in "Authorization: Bearer"
+        // and/or in JSON body "token"; the signed body token takes priority.
+        // The previous custom "AuthorizationJWT" header was a demo default,
+        // not the standard configured Euro-Office header.
         using var reader = new StreamReader(
             context.Request.Body, System.Text.Encoding.UTF8,
             detectEncodingFromByteOrderMarks: false, bufferSize: 8192,
             leaveOpen: true);
         string body = await reader.ReadToEndAsync(context.RequestAborted);
+        string token = EuroOfficeCallbackToken.Select(
+            body, context.Request.Headers.Authorization.ToString());
         EuroOfficeSaveCandidate? candidate = EuroOfficeNativeCallback.Plan(
             body, token, session.DocumentKey, session.TrustedDocumentServerOrigin,
             secrets.OutboxSigningKey!);

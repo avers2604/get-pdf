@@ -139,6 +139,7 @@ public static class Gup2EuroOfficeSaveTransportClient
         using var handler = new HttpClientHandler
         {
             UseCookies = false,
+            UseProxy = false,
             AllowAutoRedirect = false,
             UseDefaultCredentials = false,
             PreAuthenticate = false
