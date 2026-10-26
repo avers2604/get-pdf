@@ -28,6 +28,44 @@ public sealed class PrintFileSnapshot : IDisposable
     public long Length { get; }
     public string Sha256Hex => Convert.ToHexStringLower(_sha256);
 
+    public static string GetPrivateJobsDirectory()
+    {
+        string userData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(userData))
+            throw new IOException("Не найден локальный каталог пользователя.");
+        return System.IO.Path.Combine(userData, "GET-Document", "PrintJobs");
+    }
+
+    private static void DeleteExpiredOwnedJobs(string root)
+    {
+        // This directory is owned by the current OS user, not a shared spooler.
+        // Never walk outside it, follow reparse points, or delete unknown content.
+        foreach (string folder in Directory.EnumerateDirectories(root, "job-*",
+                     SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                string name = System.IO.Path.GetFileName(folder);
+                if (name.Length != 36 || !name.StartsWith("job-", StringComparison.Ordinal) ||
+                    !Guid.TryParseExact(name[4..], "N", out _))
+                    continue;
+                var info = new DirectoryInfo(folder);
+                if ((info.Attributes & FileAttributes.ReparsePoint) != 0 ||
+                    info.LastWriteTimeUtc > DateTime.UtcNow.AddDays(-7))
+                    continue;
+                string[] entries = Directory.GetFileSystemEntries(folder);
+                if (entries.Length > 1 ||
+                    entries.Any(path =>
+                        System.IO.Path.GetFileName(path) != "document.pdf" ||
+                        (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0))
+                    continue;
+                Directory.Delete(folder, recursive: true);
+            }
+            catch (IOException) { } // A different still-active printer may own the file.
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
     public static async Task<PrintFileSnapshot> CreateAsync(string sourcePath, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -37,13 +75,11 @@ public sealed class PrintFileSnapshot : IDisposable
             throw new ArgumentException("Требуется путь к существующему PDF.", nameof(sourcePath));
         ct.ThrowIfCancellationRequested();
 
-        string userData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(userData))
-            throw new IOException("Не найден локальный каталог пользователя.");
-        string root = System.IO.Path.Combine(userData, "GET-Document", "PrintJobs");
+        string root = GetPrivateJobsDirectory();
         Directory.CreateDirectory(root);
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        DeleteExpiredOwnedJobs(root);
 
         string directory = System.IO.Path.Combine(root, "job-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -83,7 +119,7 @@ public sealed class PrintFileSnapshot : IDisposable
                     await destination.WriteAsync(buffer.AsMemory(0, count), ct);
                 }
             }
-            finally { ArrayPool<byte>.Shared.Return(buffer); }
+            finally { ArrayPool<byte>.Shared.Return(buffer, clearArray: true); }
             await destination.FlushAsync(ct);
             if (total != source.Length || total < 5)
                 throw new InvalidDataException("Исходный PDF изменился во время создания копии.");
