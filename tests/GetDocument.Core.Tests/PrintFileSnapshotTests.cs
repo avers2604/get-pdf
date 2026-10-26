@@ -59,6 +59,32 @@ public sealed class PrintFileSnapshotTests
     }
 
     [TestMethod]
+    public async Task OldAbandonedPrivatePrintJobIsCleanedWithoutTouchingOtherFolders()
+    {
+        string original = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".pdf");
+        string root = PrintFileSnapshot.GetPrivateJobsDirectory();
+        string orphan = Path.Combine(root, "job-" + Guid.NewGuid().ToString("N"));
+        string unrelated = Path.Combine(root, "user-data");
+        try
+        {
+            await File.WriteAllTextAsync(original, "%PDF-1.5\n");
+            Directory.CreateDirectory(orphan);
+            await File.WriteAllTextAsync(Path.Combine(orphan, "document.pdf"), "%PDF-1.4\nold");
+            Directory.SetLastWriteTimeUtc(orphan, DateTime.UtcNow.AddDays(-10));
+            Directory.CreateDirectory(unrelated);
+            using var current = await PrintFileSnapshot.CreateAsync(original, CancellationToken.None);
+            Assert.IsFalse(Directory.Exists(orphan));
+            Assert.IsTrue(Directory.Exists(unrelated));
+        }
+        finally
+        {
+            File.Delete(original);
+            if (Directory.Exists(orphan)) Directory.Delete(orphan, recursive: true);
+            if (Directory.Exists(unrelated)) Directory.Delete(unrelated);
+        }
+    }
+
+    [TestMethod]
     public async Task InvalidOrTooLargePdfCannotBeStaged()
     {
         string original = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".pdf");
