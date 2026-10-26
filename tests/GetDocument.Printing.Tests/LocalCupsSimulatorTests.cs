@@ -111,6 +111,58 @@ public sealed class LocalCupsSimulatorTests
     }
 
     [TestMethod]
+    public async Task QueueDisappearsBeforeSubmissionAndNeverCallsLp()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Fake CUPS executable tests require Linux.");
+
+        using var cups = new FakeCups();
+        using var frozen = await cups.CreateSnapshotAsync("test.pdf");
+        cups.HideQueue();
+        var plan = PrintJobPlan.Create("GET_SIMULATOR", 1, "", 1,
+            PrintDuplex.OneSided, PrintPaper.A4);
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            LocalPrintBroker.SubmitPdfAsync(frozen.Path, plan,
+                CancellationToken.None, frozen.Sha256Hex));
+        Assert.IsFalse(File.Exists(cups.ArgumentsFile));
+    }
+
+    [TestMethod]
+    public async Task UnadvertisedColorIsDeniedBeforeSpooling()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Fake CUPS executable tests require Linux.");
+
+        using var cups = new FakeCups();
+        using var frozen = await cups.CreateSnapshotAsync("test.pdf");
+        cups.DenyColor();
+        var plan = PrintJobPlan.Create("GET_SIMULATOR", 1, "", 1,
+            PrintDuplex.OneSided, PrintPaper.A4, color: PrintColorMode.Color);
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            LocalPrintBroker.SubmitPdfAsync(frozen.Path, plan,
+                CancellationToken.None, frozen.Sha256Hex));
+        Assert.IsFalse(File.Exists(cups.ArgumentsFile));
+    }
+
+    [TestMethod]
+    public async Task AlreadyCancelledPrintCannotReachAnyPrinterCommand()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Fake CUPS executable tests require Linux.");
+
+        using var cups = new FakeCups();
+        using var frozen = await cups.CreateSnapshotAsync("test.pdf");
+        var plan = PrintJobPlan.Create("GET_SIMULATOR", 1, "", 1,
+            PrintDuplex.OneSided, PrintPaper.A4);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsExactlyAsync<OperationCanceledException>(() =>
+            LocalPrintBroker.SubmitPdfAsync(frozen.Path, plan,
+                cancellation.Token, frozen.Sha256Hex));
+        Assert.IsFalse(File.Exists(cups.ArgumentsFile));
+    }
+
+    [TestMethod]
     public async Task FailedCupsCommandIsAmbiguousAndMustNotClaimPrinted()
     {
         if (!OperatingSystem.IsLinux())
@@ -136,6 +188,8 @@ public sealed class LocalCupsSimulatorTests
         private readonly string _originalPath;
         private readonly string? _previousArgsPath;
         private readonly string? _previousReject;
+        private readonly string? _previousNoQueue;
+        private readonly string? _previousNoColor;
         private readonly string _folder;
 
         public FakeCups()
@@ -148,7 +202,7 @@ public sealed class LocalCupsSimulatorTests
             WriteExecutable("lpstat", """
                 #!/bin/sh
                 case "$1" in
-                  -e) printf 'GET_SIMULATOR\n' ;;
+                  -e) if [ "${GETDOC_FAKE_CUPS_NO_QUEUE:-0}" != "1" ]; then printf 'GET_SIMULATOR\n'; fi ;;
                   -d) printf 'system default destination: GET_SIMULATOR\n' ;;
                   -p) printf 'printer GET_SIMULATOR is idle.\n' ;;
                   *) exit 2 ;;
@@ -158,7 +212,9 @@ public sealed class LocalCupsSimulatorTests
                 #!/bin/sh
                 if [ "$1" != "-p" ] || [ "$2" != "GET_SIMULATOR" ] || [ "$3" != "-l" ]; then exit 2; fi
                 printf 'InputSlot/Paper Source: *Auto Tray1\n'
-                printf 'print-color-mode/Color Mode: *monochrome color\n'
+                if [ "${GETDOC_FAKE_CUPS_NO_COLOR:-0}" != "1" ]; then
+                  printf 'print-color-mode/Color Mode: *monochrome color\n'
+                fi
                 """);
             WriteExecutable("lp", """
                 #!/bin/sh
@@ -169,15 +225,25 @@ public sealed class LocalCupsSimulatorTests
             _originalPath = Environment.GetEnvironmentVariable("PATH") ?? "";
             _previousArgsPath = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_ARGS");
             _previousReject = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_REJECT");
+            _previousNoQueue = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_QUEUE");
+            _previousNoColor = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR");
             Environment.SetEnvironmentVariable("PATH", _folder + Path.PathSeparator + _originalPath);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_ARGS", ArgumentsFile);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_REJECT", "0");
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_QUEUE", "0");
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR", "0");
         }
 
         public string ArgumentsFile { get; }
 
         public void RejectPrint() =>
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_REJECT", "1");
+
+        public void HideQueue() =>
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_QUEUE", "1");
+
+        public void DenyColor() =>
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR", "1");
 
         public async Task<PrintFileSnapshot> CreateSnapshotAsync(string name)
         {
@@ -203,6 +269,8 @@ public sealed class LocalCupsSimulatorTests
             Environment.SetEnvironmentVariable("PATH", _originalPath);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_ARGS", _previousArgsPath);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_REJECT", _previousReject);
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_QUEUE", _previousNoQueue);
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_COLOR", _previousNoColor);
             try { Directory.Delete(_folder, recursive: true); }
             catch (IOException) { }
         }
