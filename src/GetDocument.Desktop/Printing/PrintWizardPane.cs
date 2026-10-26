@@ -86,7 +86,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         _summary.Foreground = Palette("#141A33");
         _status.Foreground = Palette("#565C7B");
         _previewStatus.Foreground = Palette("#565C7B");
-        var left = new StackPanel { Spacing = 18, Width = 680 };
+        var left = new StackPanel { Spacing = 18 };
         left.Children.Add(new TextBlock
         {
             Text = "Мастер печати ГЭТ",
@@ -109,6 +109,9 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         left.Children.Add(controls);
         var leftCard = new Border
         {
+            MinWidth = 520,
+            MaxWidth = 720,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             Background = Palette("#FFFFFF"),
             BorderBrush = Palette("#E1E4EE"),
             BorderThickness = new Thickness(1),
