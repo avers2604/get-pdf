@@ -17,6 +17,8 @@ GUP-2 internal `commit_trusted_eurooffice_callback(session, uploaded)` прин�
 
 На GUP-2 повторно проверяются ACL, статус черновика, WORM, S3 VersionId, AV/OOXML, конфликт CAS. Применяется штатный `services.update_document` и `archive_copy`. Новая версия, SHA-256, append-only `OfficeWorkingRevision`, receipt и событие outbox фиксируются совместно в PostgreSQL; WORM original не переписывается. Повтор точно этого же callback не дублирует редакцию; конфликт другого события со старой версией отвергается.
 
+В `EuroOfficeCallbackAdmission.ResponseError` усилено условие успешного HTTP-подтверждения: `Committed=true` **не является достаточным**. Требуются подтверждённые сервером номер новой ревизии (целое положительное число) и lowercase SHA-256 (64 hex). До появления авторизованного транспорта `DenyAll` возвращает `error=1` и HTTP 503 для save-кандидата. Добавлены негативные MSTest-кейсы на ложную success-подпись.
+
 ## Непреодолённая граница доверия
 
 `TrustedEuroOfficeWriteSession` — Python объект, **не секрет и не авторизация**. Нельзя заполнять его из браузерного JSON или простого `document.key`. `EuroOfficeHost` по-прежнему использует `DenyAllEuroOfficeCallbackSessionStore` и `DenyAllEuroOfficeCallbackRevisionSink`. Следовательно, **реального автосохранения и рабочей совместной сессии нет**.
