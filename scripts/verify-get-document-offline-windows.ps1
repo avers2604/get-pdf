@@ -22,9 +22,13 @@ if (($feedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
     throw 'OfflineNuGetFeed cannot be a symlink or junction.'
 }
 $root = [IO.Path]::GetPathRoot($feed)
-if ([string]::IsNullOrWhiteSpace($root) -or
-    ([IO.DriveInfo]::new($root)).DriveType -ne [IO.DriveType]::Fixed) {
-    throw 'OfflineNuGetFeed must be on a local fixed disk.'
+if ([string]::IsNullOrWhiteSpace($root)) {
+    throw 'OfflineNuGetFeed must use a local drive.'
+}
+$driveType = ([IO.DriveInfo]::new($root)).DriveType
+if ($driveType -ne [IO.DriveType]::Fixed -and
+    $driveType -ne [IO.DriveType]::Removable) {
+    throw 'OfflineNuGetFeed must be on a local fixed or removable drive.'
 }
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw '.NET 10 SDK not installed.'
