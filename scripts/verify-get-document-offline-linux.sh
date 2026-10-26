@@ -8,10 +8,26 @@ if [[ -z "$feed" || "$feed" != /* || ! -d "$feed" ]]; then
   echo "ERROR: provide an existing ABSOLUTE local NuGet feed directory." >&2
   exit 2
 fi
-if [[ "$feed" == *"://"* ]]; then
-  echo "ERROR: network NuGet sources are prohibited in this validation." >&2
+if [[ "$feed" == *"://"* ]] || [[ -L "$feed" ]]; then
+  echo "ERROR: network NuGet sources and symlink feeds are prohibited." >&2
   exit 2
 fi
+# A path beginning with '/' can still be NFS, CIFS, or another network mount.
+# Astra/ALT/RED Linux provide util-linux findmnt in standard installations.
+if ! command -v findmnt >/dev/null 2>&1; then
+  echo "ERROR: findmnt is required to confirm the package feed mount type." >&2
+  exit 2
+fi
+filesystem="$(findmnt -T "$feed" --noheadings --output FSTYPE | head -n 1)"
+if [[ -z "$filesystem" ]]; then
+  echo "ERROR: cannot determine the offline feed filesystem." >&2
+  exit 2
+fi
+case "$filesystem" in
+  nfs*|cifs|smb*|sshfs|fuse.*|davfs*|9p|ceph|glusterfs|lustre)
+    echo "ERROR: NuGet feed resides on a potentially network-backed mount ($filesystem)." >&2
+    exit 2 ;;
+esac
 if ! command -v dotnet >/dev/null 2>&1; then
   echo "ERROR: local .NET 10 SDK not installed." >&2
   exit 127
