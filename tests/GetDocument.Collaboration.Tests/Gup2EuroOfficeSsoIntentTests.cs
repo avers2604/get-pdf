@@ -69,6 +69,20 @@ public sealed class Gup2EuroOfficeSsoIntentTests
     }
 
     [TestMethod]
+    public void Gup2InitialWorkingRevisionZeroHasAValidEditorKey()
+    {
+        string initialKey = Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes(Document + "\n0"))).ToLowerInvariant();
+        string zeroRevision = Sample().Replace(
+            "\"edit_version\":7", "\"edit_version\":0")
+            .Replace(EditorKey, initialKey);
+        var response = Gup2EuroOfficeSsoIntentClient.ParseRedemption(
+            HttpStatusCode.OK, zeroRevision, Actor);
+        Assert.AreEqual(0, response.EditVersion);
+        Assert.AreEqual(initialKey, response.DocumentKey);
+    }
+
+    [TestMethod]
     public void RejectsForgedActorAndRewrittenOfficeDocumentKey()
     {
         var other = "22222222-2222-4333-8444-555555555555";
