@@ -30,12 +30,12 @@ internal static class ReleaseReportEvaluator
     internal static SuiteResult EvaluateFile(string suite, string platform, string file)
     {
         if (!File.Exists(file))
-            return FailedReport(suite, "Отсутствует TRX-отчёт.");
+            return FailedReport(suite, platform, "Отсутствует TRX-отчёт.");
         try
         {
             var info = new FileInfo(file);
             if (info.Length is <= 0 or > MaxReportBytes)
-                return FailedReport(suite, "TRX имеет недопустимый размер.");
+                return FailedReport(suite, platform, "TRX имеет недопустимый размер.");
 
             using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
             using var reader = XmlReader.Create(stream, new XmlReaderSettings
@@ -43,7 +43,7 @@ internal static class ReleaseReportEvaluator
                 DtdProcessing = DtdProcessing.Prohibit,
                 XmlResolver = null,
                 MaxCharactersInDocument = MaxReportBytes,
-                MaxCharactersFromEntities = 0,
+                MaxCharactersFromEntities = 4096, // DTD is prohibited; ordinary XML escapes are allowed.
                 IgnoreComments = true
             });
             var document = XDocument.Load(reader, LoadOptions.None);
@@ -52,7 +52,7 @@ internal static class ReleaseReportEvaluator
         catch (Exception ex) when (ex is XmlException or IOException or UnauthorizedAccessException
             or InvalidDataException or ArgumentException)
         {
-            return FailedReport(suite, "Повреждённый или недоступный TRX.");
+            return FailedReport(suite, platform, "Повреждённый или недоступный TRX.");
         }
     }
 
@@ -60,7 +60,7 @@ internal static class ReleaseReportEvaluator
     {
         var errors = new List<string>();
         if (document.Root?.Name != XName.Get("TestRun", TrxNamespace))
-            return FailedReport(suite, "Корневой элемент не является стандартным TestRun TRX.");
+            return FailedReport(suite, platform, "Корневой элемент не является стандартным TestRun TRX.");
 
         XNamespace ns = TrxNamespace;
         var resultsRoot = document.Root.Element(ns + "Results");
@@ -70,6 +70,11 @@ internal static class ReleaseReportEvaluator
         if (resultsRoot is null) errors.Add("Отсутствует раздел Results.");
         if (summary is null || counters is null)
             errors.Add("Отсутствует ResultSummary/Counters.");
+        string summaryOutcome = ((string?)summary?.Attribute("outcome") ?? "").Trim();
+        if (summaryOutcome.Equals("Failed", StringComparison.OrdinalIgnoreCase) ||
+            summaryOutcome.Equals("Aborted", StringComparison.OrdinalIgnoreCase) ||
+            summaryOutcome.Equals("Error", StringComparison.OrdinalIgnoreCase))
+            errors.Add("ResultSummary сообщает об ошибке выполнения тестов.");
 
         var results = resultsRoot?.Elements(ns + "UnitTestResult").Select(element =>
             new TestOutcome(
@@ -80,6 +85,11 @@ internal static class ReleaseReportEvaluator
         if (results.Length == 0) errors.Add("Нет результатов UnitTestResult.");
         if (results.Any(x => x.Name.Length == 0))
             errors.Add("TRX содержит тесты без идентификатора.");
+        string[] knownOutcomes = ["Passed", "Failed", "Error", "Timeout", "Aborted",
+            "Inconclusive", "NotExecuted", "Skipped", "Pending"];
+        if (results.Any(x => !knownOutcomes.Contains(x.Status,
+                StringComparer.OrdinalIgnoreCase)))
+            errors.Add("TRX содержит неизвестный статус выполнения теста.");
 
         int passed = results.Count(x => x.Status.Equals("Passed", StringComparison.OrdinalIgnoreCase));
         int failed = results.Count(x => x.Status.Equals("Failed", StringComparison.OrdinalIgnoreCase) ||
@@ -103,9 +113,13 @@ internal static class ReleaseReportEvaluator
         }
 
         string[] required = RequiredTests(suite, platform);
-        string[] missing = required.Where(name => !results.Any(result =>
-            result.Status.Equals("Passed", StringComparison.OrdinalIgnoreCase) &&
-            MatchesExactTestName(result.Name, name))).ToArray();
+        string[] missing = required.Where(name =>
+        {
+            var matched = results.Where(result =>
+                MatchesExactTestName(result.Name, name)).ToArray();
+            return matched.Length == 0 || matched.Any(result =>
+                !result.Status.Equals("Passed", StringComparison.OrdinalIgnoreCase));
+        }).ToArray();
 
         return new SuiteResult(suite, passed, failed, other, missing, errors);
     }
@@ -140,6 +154,6 @@ internal static class ReleaseReportEvaluator
         _ => []
     };
 
-    private static SuiteResult FailedReport(string suite, string message) =>
-        new(suite, 0, 0, 0, RequiredTests(suite, "windows"), [message]);
+    private static SuiteResult FailedReport(string suite, string platform, string message) =>
+        new(suite, 0, 0, 0, RequiredTests(suite, platform), [message]);
 }
