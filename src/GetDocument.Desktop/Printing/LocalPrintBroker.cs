@@ -71,15 +71,17 @@ internal static class LocalPrintBroker
     {
         ArgumentNullException.ThrowIfNull(plan);
         ct.ThrowIfCancellationRequested();
+        // Everything up to the actual lp / XpsDocumentWriter call is refused with
+        // PrintNotSubmittedException: nothing is queued, so the user may simply retry.
         if (!File.Exists(pdfPath))
-            throw new FileNotFoundException("PDF больше не доступен.");
+            throw new PrintNotSubmittedException("PDF больше не доступен. Задание не отправлено.");
         if (!string.Equals(Path.GetExtension(pdfPath), ".pdf", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Печатать можно только сохранённый PDF.");
+            throw new PrintNotSubmittedException("Печатать можно только сохранённый PDF.");
 
         // Immediately re-check queue existence, not only the stale dropdown.
         var discovered = await PrintersAsync(ct);
         if (!discovered.Contains(plan.PrinterName, StringComparer.Ordinal))
-            throw new InvalidOperationException("Принтер не найден. Обновите список устройств.");
+            throw new PrintNotSubmittedException("Принтер не найден. Задание не отправлено: обновите список устройств.");
 
         if (plan.Tray is { } requestedTray)
         {
@@ -96,9 +98,9 @@ internal static class LocalPrintBroker
                 string advertised = await RunAsync("lpoptions",
                     ["-p", plan.PrinterName, "-l"], null, ct);
                 if (!CupsColorCapabilities.Supports(advertised, plan.Color))
-                    throw new InvalidOperationException(
-                        "Этот принтер не подтверждает выбранный цветовой режим. " +
-                        "Используйте настройки принтера или другое устройство.");
+                    throw new PrintNotSubmittedException(
+                        $"Принтер «{plan.PrinterName}» не подтверждает выбранный цветовой режим. " +
+                        "Задание не отправлено: выберите «Настройка принтера» или другое устройство.");
             }
             var args = CupsPrintArguments.Create(plan, Path.GetFullPath(pdfPath));
             await RunAsync("lp", args, null, ct);
@@ -111,7 +113,7 @@ internal static class LocalPrintBroker
                 plan.CupsPageRange, plan.Copies, plan.Duplex, plan.Paper,
                 plan.Orientation, plan.Color, plan.PagesPerSheet, plan.Tray);
             await RunAsync(WindowsWorker(), ["print"],
-                JsonSerializer.Serialize(request), ct);
+                JsonSerializer.Serialize(request), ct, plan.PrinterName);
             return "Задание передано в очередь Windows. Проверьте состояние принтера.";
         }
         throw new PlatformNotSupportedException();
@@ -155,7 +157,7 @@ internal static class LocalPrintBroker
     }
 
     private static async Task<string> RunAsync(string program, IReadOnlyList<string> argv,
-        string? stdin, CancellationToken cancel)
+        string? stdin, CancellationToken cancel, string? printWorkerQueue = null)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         bool isPrintJob = (argv.Count > 0 && (argv[0] == "-d" || argv[0] == "print"));
@@ -185,6 +187,9 @@ internal static class LocalPrintBroker
             await process.WaitForExitAsync(timeout.Token);
             string output = await stdOut;
             _ = await stdErr; // Never surface arbitrary driver stderr/paths to end-user.
+            if (printWorkerQueue is not null &&
+                PrintRejection.Describe(process.ExitCode, output.Length <= 256 ? output : "", printWorkerQueue) is { } refused)
+                throw new PrintNotSubmittedException(refused);
             if (process.ExitCode != 0)
                 throw new IOException("Служба печати отклонила задание либо недоступна.");
             if (output.Length > 65536)

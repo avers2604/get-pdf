@@ -249,10 +249,10 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
                 _summary.Text = $"Принтер: {plan!.PrinterName}\n" +
                     $"Страницы: {plan.CupsPageRange}\n" +
                     $"Копии: {plan.Copies}; всего страниц отпечатков: {plan.PageCountToPrint}\n" +
-                    $"Бумага: {plan.Paper}; режим: {DuplexText(plan.Duplex)}\n" +
-                    $"Ориентация: {plan.Orientation}; цвет: {plan.Color}\n" +
-                    $"На листе: {(int)plan.PagesPerSheet}; печатных сторон: {plan.SheetSidesToPrint}\n" +
-                    $"Лоток: {plan.Tray?.Label ?? "Устройство по умолчанию"}\n" +
+                    $"Бумага: {PrintRejection.Paper(plan.Paper)}; режим: {DuplexText(plan.Duplex)}\n" +
+                    $"Ориентация: {PrintRejection.Orientation(plan.Orientation)}; цвет: {PrintRejection.Color(plan.Color)}\n" +
+                    $"Страниц на листе: {(int)plan.PagesPerSheet}; печатных сторон: {plan.SheetSidesToPrint}\n" +
+                    $"Лоток: {plan.Tray?.Label ?? "выбор принтера (автоматически)"}\n" +
                     "Проверьте бумагу, права и готовность принтера перед отправкой.";
         }
     }
@@ -331,6 +331,17 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             }
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (PrintNotSubmittedException ex)
+        {
+            // Refused before anything was queued: no risk of duplicate copies, so allow a retry.
+            _submitted = false;
+            _busy = false;
+            if (!_disposed)
+            {
+                RenderStage();
+                _status.Text = ex.Message;
+            }
+        }
         catch (Exception)
         {
             if (!_disposed)
