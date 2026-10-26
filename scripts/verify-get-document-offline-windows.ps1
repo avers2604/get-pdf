@@ -12,6 +12,20 @@ $feed = $resolved.ProviderPath
 if (-not (Test-Path -LiteralPath $feed -PathType Container)) {
     throw 'OfflineNuGetFeed must be an existing local directory.'
 }
+# A UNC share, mapped network drive or junction can contact external servers.
+# The release-acceptance feed must reside on a physical local volume.
+if ($feed.StartsWith('\\') -or $feed.StartsWith('//')) {
+    throw 'OfflineNuGetFeed cannot be a UNC network path.'
+}
+$feedItem = Get-Item -LiteralPath $feed -Force
+if (($feedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'OfflineNuGetFeed cannot be a symlink or junction.'
+}
+$root = [IO.Path]::GetPathRoot($feed)
+if ([string]::IsNullOrWhiteSpace($root) -or
+    ([IO.DriveInfo]::new($root)).DriveType -ne [IO.DriveType]::Fixed) {
+    throw 'OfflineNuGetFeed must be on a local fixed disk.'
+}
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw '.NET 10 SDK not installed.'
 }
