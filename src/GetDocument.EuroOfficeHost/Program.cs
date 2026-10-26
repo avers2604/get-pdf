@@ -71,8 +71,7 @@ app.MapGet("/get-document/editor/launch/{launchId}", async (
     if (context.User.Identity?.IsAuthenticated != true)
         return Results.Unauthorized();
 
-    if (launchId is null || !Regex.IsMatch(launchId, @"\A[0-9a-f]{32}\z",
-            RegexOptions.CultureInvariant))
+    if (!EuroOfficeLaunchId.IsValid(launchId))
         return Results.NotFound();
 
     // MUST be an atomic, single-use lookup tied to this exact identity.
