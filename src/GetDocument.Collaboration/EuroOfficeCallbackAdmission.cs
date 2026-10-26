@@ -35,7 +35,8 @@ public sealed class DenyAllEuroOfficeCallbackSessionStore :
 /// A positive receipt MUST only be created after GUP-2 confirms a new
 /// version through its existing archive/CAS/update_document pipeline.
 /// </summary>
-public sealed record EuroOfficeCallbackCommitReceipt(bool Committed);
+public sealed record EuroOfficeCallbackCommitReceipt(
+    bool Committed, string? RevisionId = null, string? Sha256 = null);
 
 /// <summary>
 /// Never substitute the filesystem prototype store for the real GUP-2
@@ -87,6 +88,16 @@ public static class EuroOfficeCallbackAdmission
                 "Callback Euro-Office не связан с действующей доверенной сессией.");
     }
 
-    public static int ResponseError(EuroOfficeCallbackCommitReceipt receipt) =>
-        receipt?.Committed == true ? 0 : 1;
+    public static int ResponseError(EuroOfficeCallbackCommitReceipt receipt)
+    {
+        // A real GUP-2 commit must return a verified, nonzero revision and
+        // the SHA of the newly archived working copy. A positive boolean alone
+        // is insufficient evidence to tell Document Server it can clear edits.
+        if (receipt?.Committed != true ||
+            !int.TryParse(receipt.RevisionId, out int revision) || revision <= 0 ||
+            receipt.Sha256 is not { Length: 64 } digest ||
+            !digest.All(ch => ch is >= 'a' and <= 'f' or >= '0' and <= '9'))
+            return 1;
+        return 0;
+    }
 }
