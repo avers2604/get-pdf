@@ -43,6 +43,13 @@ public static class CupsPrintArguments
             argv.Add("number-up=" + ((int)plan.PagesPerSheet)
                 .ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
+        if (plan.Tray is { } tray)
+        {
+            if (tray.Option is not ("InputSlot" or "media-source"))
+                throw new ArgumentException("CUPS не поддерживает выбранный идентификатор лотка.");
+            argv.Add("-o");
+            argv.Add(tray.Option + "=" + tray.Value);
+        }
         argv.Add("--");
         argv.Add(pdfPath);
         return argv;
