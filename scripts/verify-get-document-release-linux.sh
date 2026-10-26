@@ -26,7 +26,7 @@ echo "Local TRX reports: $reports"
 for suite in Core Office Printing Images Revisions Collaboration WopiGateway; do
   project="tests/GetDocument.${suite}.Tests/GetDocument.${suite}.Tests.csproj"
   # MSTest.Sdk 4.5 uses Microsoft.Testing.Platform, not the old --logger trx.
-  dotnet test "$project" -c Release --no-restore -- \
+  dotnet test --project "$project" -c Release --no-restore -- \
     --report-trx --report-trx-filename "${suite}.trx" \
     --results-directory "$reports"
 done
