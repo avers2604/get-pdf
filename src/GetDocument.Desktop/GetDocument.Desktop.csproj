@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>GetDocument.Desktop</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>Assets\get-document.ico</ApplicationIcon>
+    <Product>ГЭТ Документ</Product>
+    <Company>SPb GUP Gorelektrotrans</Company>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
@@ -17,6 +20,9 @@
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets/get-mark.png" />
+    <AvaloniaResource Include="Assets/get-document.ico" />
+    <!-- File-type icons referenced by the installer's ProgIDs (DefaultIcon). -->
+    <None Include="Assets/*-document.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../GetDocument.Core/GetDocument.Core.csproj" />

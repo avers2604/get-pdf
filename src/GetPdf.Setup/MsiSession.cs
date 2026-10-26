@@ -11,8 +11,8 @@ namespace GetPdf.Setup;
 /// </summary>
 internal sealed class MsiSession
 {
-    // Same UpgradeCode as packaging/GetPdf.wxs: identifies every ГЭТ PDF version.
-    internal const string UpgradeCode = "{BE5C1496-701B-4ED4-937E-DA3B41C2A770}";
+    // Same UpgradeCode as the product's .wxs: identifies every version of the product.
+    internal const string UpgradeCode = Product.UpgradeCode;
 
     private const int InstallUiLevelNone = 2;
     private const uint MessageFatalExit = 0x00000000, MessageError = 0x01000000, MessageWarning = 0x02000000,
@@ -41,7 +41,7 @@ internal sealed class MsiSession
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int MessageBoxW(IntPtr owner, string text, string caption, uint type);
 
-    /// <summary>Installed ГЭТ PDF (any version) or null.</summary>
+    /// <summary>Installed product (any version) or null.</summary>
     internal static (string ProductCode, Version Version, string Location)? FindInstalled()
     {
         var code = new StringBuilder(39);
@@ -119,7 +119,7 @@ internal sealed class MsiSession
             case MessageFatalExit:
                 if (string.IsNullOrEmpty(message)) return 0;
                 // Low bits carry MB_* buttons/icons; the native box returns the matching ID*.
-                return MessageBoxW(_owner, message!, "Установка ГЭТ PDF", messageType & 0x00FFFFFF);
+                return MessageBoxW(_owner, message!, "Установка " + Product.Name, messageType & 0x00FFFFFF);
             default:
                 return 0;
         }

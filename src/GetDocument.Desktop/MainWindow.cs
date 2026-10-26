@@ -51,6 +51,7 @@ public sealed class MainWindow : Window
     public MainWindow()
     {
         Title = "ГЭТ Документ";
+        Icon = new WindowIcon(Avalonia.Platform.AssetLoader.Open(new Uri("avares://GetDocument.Desktop/Assets/get-document.ico")));
         Width = 1320;
         Height = 850;
         MinWidth = 940;
