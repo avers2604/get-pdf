@@ -94,7 +94,11 @@ public static class EuroOfficeCallbackAdmission
         // the SHA of the newly archived working copy. A positive boolean alone
         // is insufficient evidence to tell Document Server it can clear edits.
         if (receipt?.Committed != true ||
-            !int.TryParse(receipt.RevisionId, out int revision) || revision <= 0 ||
+            receipt.RevisionId is not { Length: > 0 and <= 12 } revisionText ||
+            !revisionText.All(char.IsAsciiDigit) ||
+            !int.TryParse(revisionText, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out int revision) ||
+            revision <= 0 ||
             receipt.Sha256 is not { Length: 64 } digest ||
             !digest.All(ch => ch is >= 'a' and <= 'f' or >= '0' and <= '9'))
             return 1;
