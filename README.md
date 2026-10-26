@@ -79,3 +79,8 @@ PDF-вкладка получила **перелистывание первой/
 Код, ограничения, сборка Windows и аппаратная приёмка: [GD-16 GET Print Wizard](docs/GET_DOCUMENT_GD16_CUSTOM_PRINT_WIZARD_2026-10-25.md). .NET SDK отсутствует в доступном исполнителе, сборка/MSTest не подтверждены.
 
 План завершения с критериями приёмки: [GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md](docs/GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md). Исходное описание ГЭТ PDF: [LEGACY_GET_PDF_README_2026-10-24.md](docs/LEGACY_GET_PDF_README_2026-10-24.md).
+
+## GD-17 — Euro-Office основной серверный движок (26.10.2026)
+
+Для **ГЭТ Документы** основным редактором DOCX/XLSX/PPTX выбран **Euro-Office Document Server** (внутренний сервер, совместное редактирование). LibreOffice остаётся локальным автономным вариантом; ONLYOFFICE и Collabora — только legacy/альтернативные адаптеры. В отдельной Draft-ветке GD-17 добавлены `OfficeServerEnginePolicy`, `EuroOfficeSessionFactory` и MSTest: повторно используется контракт подписанной Docs API-конфигурации, но **без подключённого сервера/SSO/GUP-2 сохранения редакций сессии работают только в режиме просмотра**. Имеющийся PDF viewer и мастер печати остаются независимыми от Office-сервера. [Решение, безопасность и последовательность приёмки](docs/GET_DOCUMENT_EURO_OFFICE_PRIMARY_2026-10-26.md).
+
