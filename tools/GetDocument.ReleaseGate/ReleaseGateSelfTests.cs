@@ -49,6 +49,22 @@ internal static class ReleaseGateSelfTests
                 MakeTrx(requiredCore.Select(name =>
                     (Name: name, Status: name == requiredCore[0]
                         ? "Inconclusive" : "Passed")))).Approved);
+        Check("duplicated mandatory result with inconclusive blocks", () =>
+            !ReleaseReportEvaluator.EvaluateDocument("Core", "linux",
+                MakeTrx(requiredCore.Select(x => (x, "Passed"))
+                    .Append((requiredCore[0], "Inconclusive")))).Approved);
+        Check("unknown test outcome blocks", () =>
+            !ReleaseReportEvaluator.EvaluateDocument("Core", "linux",
+                MakeTrx(requiredCore.Select(x => (x, "Passed"))
+                    .Append(("UnknownTask", "SuccessMaybe")))).Approved);
+        Check("summary Failed blocks even if individual tests passed", () =>
+        {
+            var doc = MakeTrx(requiredCore.Select(x => (x, "Passed")));
+            XNamespace ns = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
+            doc.Root!.Element(ns + "ResultSummary")!
+                .SetAttributeValue("outcome", "Failed");
+            return !ReleaseReportEvaluator.EvaluateDocument("Core", "linux", doc).Approved;
+        });
         Check("failed optional test blocks", () =>
             !ReleaseReportEvaluator.EvaluateDocument("Core", "linux",
                 MakeTrx(requiredCore.Select(x => (x, "Passed"))
