@@ -80,9 +80,10 @@ internal static class Program
             // the only thing they do. Two-sided must be advertised explicitly.
             bool duplexSupported = PrintCapabilityPolicy.SupportsDuplexing(
                 capabilities.DuplexingCapability.Select(x => x.ToString()).ToArray(), duplex.ToString());
-            if (!duplexSupported ||
-                !capabilities.PageMediaSizeCapability.Any(x => x.PageMediaSizeName == paper))
-                return 4; // Unsupported by the actual driver; never silently downgrade.
+            // Unsupported by the actual driver: never silently downgrade, and say which setting.
+            if (!duplexSupported) return Unsupported("duplex");
+            if (!capabilities.PageMediaSizeCapability.Any(x => x.PageMediaSizeName == paper))
+                return Unsupported("paper");
 
             var ticket = new PrintTicket
             {
@@ -97,7 +98,7 @@ internal static class Program
                     ? PageOrientation.Landscape : PageOrientation.Portrait;
                 if (capabilities.PageOrientationCapability is null ||
                     !capabilities.PageOrientationCapability.Contains(orientation))
-                    return 4; // Never claim custom orientation unless driver supports it.
+                    return Unsupported("orientation"); // Never claim it unless the driver supports it.
                 ticket.PageOrientation = orientation;
             }
             if (plan.Color != PrintColorMode.PrinterDefault)
@@ -106,7 +107,7 @@ internal static class Program
                     ? OutputColor.Color : OutputColor.Monochrome;
                 if (capabilities.OutputColorCapability is null ||
                     !capabilities.OutputColorCapability.Contains(color))
-                    return 4;
+                    return Unsupported("color");
                 ticket.OutputColor = color;
             }
             if (plan.PagesPerSheet != PrintPagesPerSheet.One)
@@ -114,7 +115,7 @@ internal static class Program
                 int pagesPerSheet = (int)plan.PagesPerSheet;
                 if (capabilities.PagesPerSheetCapability is null ||
                     !capabilities.PagesPerSheetCapability.Contains(pagesPerSheet))
-                    return 4;
+                    return Unsupported("nup");
                 ticket.PagesPerSheet = pagesPerSheet;
             }
             // Read raster pages lazily. Do not decode a 1,000 page job into RAM.
@@ -134,6 +135,13 @@ internal static class Program
             // Never expose them in stdout/stderr to a separate untrusted process.
             return 5;
         }
+    }
+
+    /// <summary>Refusal before anything is spooled; the wizard lets the user change the setting.</summary>
+    private static int Unsupported(string feature)
+    {
+        Console.Write(PrintRejection.UnsupportedPrefix + feature);
+        return PrintRejection.Unsupported;
     }
 
     private sealed record PrintRequest(string PdfPath, string PrinterName,
