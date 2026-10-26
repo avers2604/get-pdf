@@ -154,4 +154,22 @@ pwsh -File scripts/verify-get-document-offline-windows.ps1 -OfflineNuGetFeed 'D:
 
 **GD-24 — Draft:** .NET-сборка и MSTest в текущем окружении не запускались, аппаратная приёмка не проведена.
 
+## GD-25 — формальная локальная приёмка по TRX (26.10.2026)
+
+После офлайн сборки и тестов добавлен отдельный **release gate**, который читает реальные TRX-отчёты `MSTest.Sdk` / `Microsoft.Testing.Platform`. Он блокирует готовность релиза, если не выполнены критические проверки PDF snapshot/SHA-256, защиты очереди печати, локального CUPS (Linux), Office с несохранёнными правками (Windows) или регрессии старого `GetPdf`.
+
+Локальные команды:
+
+```bash
+bash scripts/verify-get-document-release-linux.sh /srv/get/nuget-feed
+```
+
+```powershell
+pwsh -File scripts/verify-get-document-release-windows.ps1 -OfflineNuGetFeed 'D:\GET\NuGetOffline'
+```
+
+Результаты сохраняются **в частном каталоге пользователя**, не в общей папке репозитория. Выход — `get-document-release-gate.json` с `Approved`, фактически прошедшими и недостающими тестами. [GD-25: методика и критерии приёмки](docs/GET_DOCUMENT_GD25_RELEASE_GATES_2026-10-26.md).
+
+**Ещё не пройдено:** сборка и MSTest в этой среде (нет .NET 10 SDK), реальные Windows/Astra Linux МФУ и серверный Euro-Office. PR остаётся Draft.
+
 План завершения с критериями приёмки: [GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md](docs/GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md). Исходное описание ГЭТ PDF: [LEGACY_GET_PDF_README_2026-10-24.md](docs/LEGACY_GET_PDF_README_2026-10-24.md).
