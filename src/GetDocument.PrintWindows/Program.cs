@@ -149,22 +149,11 @@ internal static class Program
             // Use the driver's print-ticket-specific imageable area when available.
             // The previous fixed 18-DIP inset could cut off text on some MFPs.
             var sheetSize = new Size(width, height);
-            Rect printable = new Rect(18, 18,
-                Math.Max(1, width - 36), Math.Max(1, height - 36));
-            var driverArea = queue.GetPrintCapabilities(ticket).PageImageableArea;
-            if (driverArea is not null &&
-                double.IsFinite(driverArea.OriginWidth) &&
-                double.IsFinite(driverArea.OriginHeight) &&
-                double.IsFinite(driverArea.ExtentWidth) &&
-                double.IsFinite(driverArea.ExtentHeight) &&
-                driverArea.OriginWidth >= 0 && driverArea.OriginHeight >= 0 &&
-                driverArea.ExtentWidth > 0 && driverArea.ExtentHeight > 0 &&
-                driverArea.OriginWidth + driverArea.ExtentWidth <= width + 1 &&
-                driverArea.OriginHeight + driverArea.ExtentHeight <= height + 1)
-            {
-                printable = new Rect(driverArea.OriginWidth, driverArea.OriginHeight,
-                    driverArea.ExtentWidth, driverArea.ExtentHeight);
-            }
+            var deviceBounds = queue.GetPrintCapabilities(ticket).PageImageableArea;
+            var area = PrintImageableArea.Choose(width, height,
+                deviceBounds?.OriginWidth, deviceBounds?.OriginHeight,
+                deviceBounds?.ExtentWidth, deviceBounds?.ExtentHeight);
+            var printable = new Rect(area.X, area.Y, area.Width, area.Height);
             var paginator = new PdfRasterPaginator(source, plan.Pages, sheetSize, printable);
             XpsDocumentWriter writer = PrintQueue.CreateXpsDocumentWriter(queue);
             writer.Write(paginator, ticket);
