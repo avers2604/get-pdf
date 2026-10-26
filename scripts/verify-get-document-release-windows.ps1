@@ -26,6 +26,8 @@ if ($driveType -ne [IO.DriveType]::Fixed -and
 if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate restore failed.' }
 & dotnet build tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj -c Release --no-restore
 if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate build failed.' }
+& dotnet run --project tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj -c Release --no-build --no-restore -- --self-test
+if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate self-tests failed.' }
 
 # Reports may contain document paths: use the private current-user data area,
 # not a shared source checkout or publicly readable artifacts directory.
