@@ -220,6 +220,38 @@ public sealed class LocalCupsSimulatorTests
     }
 
     [TestMethod]
+    public async Task MissingLocalLpIsDefiniteFailureBeforeSubmission()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Fake CUPS executable tests require Linux.");
+
+        using var cups = new FakeCups();
+        cups.DisableLp();
+        using var frozen = await cups.CreateSnapshotAsync("test.pdf");
+        var plan = PrintJobPlan.Create("GET_SIMULATOR", 1, "", 1,
+            PrintDuplex.OneSided, PrintPaper.A4);
+        var ex = await Assert.ThrowsExactlyAsync<PrintSubmissionException>(() =>
+            LocalPrintBroker.SubmitPdfAsync(frozen.Path, plan,
+                CancellationToken.None, frozen.Sha256Hex));
+        Assert.AreEqual(PrintFailureKind.TransportUnavailable, ex.Failure.Kind);
+        Assert.IsFalse(ex.Failure.MightBeQueued);
+        Assert.IsFalse(File.Exists(cups.ArgumentsFile));
+    }
+
+    [TestMethod]
+    public async Task FakeCupsEnvironmentCannotAccidentallyFallbackToRealLp()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Fake CUPS executable tests require Linux.");
+
+        using var cups = new FakeCups();
+        Assert.AreEqual(cups.OnlyExecutablesPath,
+            Environment.GetEnvironmentVariable("PATH"),
+            "Test process PATH must never expose real CUPS commands.");
+        Assert.IsTrue(File.Exists(Path.Combine(cups.OnlyExecutablesPath, "lp")));
+    }
+
+    [TestMethod]
     public async Task ExcessivePrinterOutputIsRejectedWithoutUnboundedBuffering()
     {
         if (!OperatingSystem.IsLinux())
@@ -230,9 +262,11 @@ public sealed class LocalCupsSimulatorTests
         using var frozen = await cups.CreateSnapshotAsync("test.pdf");
         var plan = PrintJobPlan.Create("GET_SIMULATOR", 1, "", 1,
             PrintDuplex.OneSided, PrintPaper.A4);
-        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+        var ex = await Assert.ThrowsExactlyAsync<PrintSubmissionException>(() =>
             LocalPrintBroker.SubmitPdfAsync(frozen.Path, plan,
                 CancellationToken.None, frozen.Sha256Hex));
+        Assert.AreEqual(PrintFailureKind.Indeterminate, ex.Failure.Kind);
+        Assert.IsTrue(ex.Failure.MightBeQueued);
         Assert.IsTrue(File.Exists(cups.ArgumentsFile));
     }
 
@@ -324,7 +358,9 @@ public sealed class LocalCupsSimulatorTests
             _previousFullCaps = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_FULL_CAPS");
             _previousNoReceipt = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_RECEIPT");
             _previousHugeReply = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_HUGE_REPLY");
-            Environment.SetEnvironmentVariable("PATH", _folder + Path.PathSeparator + _originalPath);
+            // The fake commands rely only on /bin/sh shell builtins. Excluding
+            // the original PATH makes fallback to a real lp impossible.
+            Environment.SetEnvironmentVariable("PATH", _folder);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_ARGS", ArgumentsFile);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_REJECT", "0");
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_QUEUE", "0");
@@ -335,6 +371,10 @@ public sealed class LocalCupsSimulatorTests
         }
 
         public string ArgumentsFile { get; }
+        public string OnlyExecutablesPath => _folder;
+
+        public void DisableLp() =>
+            File.Delete(Path.Combine(_folder, "lp"));
 
         public void RejectPrint() =>
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_REJECT", "1");
