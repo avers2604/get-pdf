@@ -76,15 +76,13 @@ app.MapGet("/get-document/editor/launch/{launchId}", async (
 
     // MUST be an atomic, single-use lookup tied to this exact identity.
     // The shipped store is DenyAll, so this never returns a real document.
-    var authorized = await store.ConsumeOnceAsync(
-        launchId, context.User, context.RequestAborted);
-    if (authorized is null)
-        return Results.NotFound();
-
     try
     {
-        var launch = EuroOfficeLaunchPage.Render(
-            authorized, secrets.OfficeOrigin, secrets.SigningKey, clock.GetUtcNow());
+        var launch = await EuroOfficeLaunchResolver.ResolveAsync(
+            launchId, context.User, store, secrets.OfficeOrigin, secrets.SigningKey,
+            clock.GetUtcNow(), context.RequestAborted);
+        if (launch is null)
+            return Results.NotFound();
         context.Response.Headers["Content-Security-Policy"] = launch.ContentSecurityPolicy;
         return Results.Content(launch.Html, "text/html; charset=utf-8");
     }
