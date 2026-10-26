@@ -50,11 +50,21 @@ public static class EuroOfficeNativeCallback
             if (received.ValueKind != JsonValueKind.Object)
                 throw new UnauthorizedAccessException("Callback должен быть JSON-объектом.");
 
-            // No permissive fallback to unsigned fields, another claim wrapper
-            // or a mismatching key/status/URL.
-            string? signedKey = signed.GetProperty("key").GetString();
+            // Native Euro-Office / Docs API JWT outbox: {payload:{key,
+            // status,url,...}, operation:"callback"} in version 10. The
+            // previous top-level JWT shape is not the native protocol.
+            // Do not silently accept a legacy/raw object; pin a compatible
+            // Document Server version and reject any other purpose.
+            if (signed.ValueKind != JsonValueKind.Object ||
+                signed.GetProperty("operation").GetString() != "callback")
+                throw new UnauthorizedAccessException("JWT назначен не для callback Euro-Office.");
+            JsonElement outbox = signed.GetProperty("payload");
+            if (outbox.ValueKind != JsonValueKind.Object)
+                throw new UnauthorizedAccessException("JWT callback не содержит payload.");
+
+            string? signedKey = outbox.GetProperty("key").GetString();
             string? inputKey = received.GetProperty("key").GetString();
-            int signedStatus = signed.GetProperty("status").GetInt32();
+            int signedStatus = outbox.GetProperty("status").GetInt32();
             int inputStatus = received.GetProperty("status").GetInt32();
             if (signedKey != expectedDocumentKey || inputKey != signedKey ||
                 signedStatus != inputStatus)
@@ -65,7 +75,7 @@ public static class EuroOfficeNativeCallback
             if (signedStatus is not (2 or 6))
                 throw new InvalidDataException("Euro-Office не подтвердил готовность новой редакции.");
 
-            string? signedUrl = signed.GetProperty("url").GetString();
+            string? signedUrl = outbox.GetProperty("url").GetString();
             string? inputUrl = received.GetProperty("url").GetString();
             if (string.IsNullOrWhiteSpace(signedUrl) ||
                 signedUrl.Length > 4096 || inputUrl != signedUrl ||
