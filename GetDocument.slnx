@@ -7,6 +7,7 @@
   <Project Path="src/GetDocument.Collaboration/GetDocument.Collaboration.csproj" />
   <Project Path="src/GetDocument.WopiGateway/GetDocument.WopiGateway.csproj" />
   <Project Path="src/GetDocument.WopiHost/GetDocument.WopiHost.csproj" />
+  <Project Path="src/GetDocument.EuroOfficeHost/GetDocument.EuroOfficeHost.csproj" />
   <Project Path="tests/GetDocument.WopiGateway.Tests/GetDocument.WopiGateway.Tests.csproj" />
   <Project Path="tests/GetDocument.Collaboration.Tests/GetDocument.Collaboration.Tests.csproj" />
   <Project Path="tests/GetDocument.Revisions.Tests/GetDocument.Revisions.Tests.csproj" />
