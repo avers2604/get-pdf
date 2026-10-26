@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using System.Security.Cryptography;
@@ -69,7 +70,7 @@ internal static class LocalPrintBroker
 
     public static async Task<string> SubmitPdfAsync(
         string pdfPath, PrintJobPlan plan, CancellationToken ct,
-        string? expectedSha256 = null)
+        string expectedSha256)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ct.ThrowIfCancellationRequested();
@@ -78,14 +79,14 @@ internal static class LocalPrintBroker
         if (!string.Equals(Path.GetExtension(pdfPath), ".pdf", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Печатать можно только сохранённый PDF.");
 
-        if (expectedSha256 is not null)
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedSha256);
+        if (expectedSha256.Length != 64 ||
+            expectedSha256.Any(c => c is not (>= '0' and <= '9'
+                or >= 'a' and <= 'f')))
+            throw new ArgumentException("Некорректная контрольная сумма PDF.", nameof(expectedSha256));
+        await using (var input = new FileStream(pdfPath, FileMode.Open, FileAccess.Read,
+                         FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan))
         {
-            if (expectedSha256.Length != 64 ||
-                expectedSha256.Any(c => c is not (>= '0' and <= '9'
-                    or >= 'a' and <= 'f')))
-                throw new ArgumentException("Некорректная контрольная сумма PDF.", nameof(expectedSha256));
-            await using var input = new FileStream(pdfPath, FileMode.Open, FileAccess.Read,
-                FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
             if (input.Length is < 5 or > PrintFileSnapshot.MaxBytes)
                 throw new InvalidDataException("PDF превышает допустимый размер.");
             var computed = await SHA256.HashDataAsync(input, ct);
@@ -129,7 +130,14 @@ internal static class LocalPrintBroker
                 plan.CupsPageRange, plan.Copies, plan.Duplex, plan.Paper,
                 plan.Orientation, plan.Color, plan.PagesPerSheet, plan.Tray,
                 expectedSha256);
-            await RunAsync(WindowsWorker(), ["print"],
+            string worker;
+            try { worker = WindowsWorker(); }
+            catch (FileNotFoundException)
+            {
+                throw new PrintSubmissionException(
+                    PrintSpoolFailurePolicy.UnavailableBeforeSubmit());
+            }
+            await RunAsync(worker, ["print"],
                 JsonSerializer.Serialize(request), ct);
             return "Задание передано в очередь Windows. Проверьте состояние принтера.";
         }
@@ -190,8 +198,18 @@ internal static class LocalPrintBroker
         foreach (string arg in argv) start.ArgumentList.Add(arg);
         if (OperatingSystem.IsLinux() && program == "lpstat")
             start.Environment["LC_ALL"] = "C"; // predictable fallback parsing across locales
-        using var process = Process.Start(start) ??
-            throw new IOException("Не удалось запустить локальную службу печати.");
+        Process process;
+        try
+        {
+            process = Process.Start(start) ??
+                throw new IOException("Не удалось запустить локальную службу печати.");
+        }
+        catch (Win32Exception) when (isPrintJob)
+        {
+            throw new PrintSubmissionException(PrintSpoolFailurePolicy.UnavailableBeforeSubmit());
+        }
+        using (process)
+        {
         try
         {
             var stdOut = process.StandardOutput.ReadToEndAsync(timeout.Token);
@@ -205,21 +223,34 @@ internal static class LocalPrintBroker
             string output = await stdOut;
             _ = await stdErr; // Never surface arbitrary driver stderr/paths to end-user.
             if (process.ExitCode != 0)
-                throw new IOException("Служба печати отклонила задание либо недоступна.");
+            {
+                if (isPrintJob)
+                    throw new PrintSubmissionException(argv[0] == "print"
+                        ? PrintSpoolFailurePolicy.FromWindowsWorker(process.ExitCode)
+                        : PrintSpoolFailurePolicy.FromCupsFailure());
+                throw new IOException("Локальная служба печати отклонила запрос.");
+            }
             if (output.Length > 65536)
                 throw new InvalidDataException("Некорректный ответ службы печати.");
             return output;
         }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested && isPrintJob)
+        {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+            catch (Win32Exception) { }
+            throw new PrintSubmissionException(PrintSpoolFailurePolicy.TimedOut());
+        }
         catch
         {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+            catch (Win32Exception) { }
             throw;
         }
+        } // dispose OS worker
     }
 
     private sealed record PrintWorkerRequest(string PdfPath, string PrinterName,
         int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper,
         PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet,
-        PrintTrayOption? Tray, string? ExpectedSha256);
+        PrintTrayOption? Tray, string ExpectedSha256);
 }

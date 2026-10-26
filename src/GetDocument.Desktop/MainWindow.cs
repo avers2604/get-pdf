@@ -44,6 +44,7 @@ public sealed class MainWindow : Window
     private readonly OfficeReturnPolicy _officeReturnPolicy = OfficeReturnPolicy.LoadLocal();
     private TabItem? _officeReturnTab;
     private TabItem? _printTab;
+    private bool _openingPrintWizard;
     private readonly DocumentHistory _history = new();
     private readonly StackPanel _homeLists = new() { Spacing = 4 };
     private bool _closeConfirmed;
@@ -727,11 +728,22 @@ public sealed class MainWindow : Window
 
     private async void ShowPrintWizard()
     {
+        // A double click or two Ctrl+P events must not start concurrent Office
+        // exports that race to open a print tab and leave orphan PDFs behind.
+        if (_openingPrintWizard) return;
+        if (_printTab is not null)
+        {
+            _tabs.SelectedItem = _printTab;
+            return;
+        }
         if (_tabs.SelectedItem is TabItem { Tag: Guid id })
         {
-            var document = _workspace.Tabs.FirstOrDefault(x => x.Id == id);
+            _openingPrintWizard = true;
             string? printable = null;
             bool generatedOfficePrintCopy = false;
+            try
+            {
+            var document = _workspace.Tabs.FirstOrDefault(x => x.Id == id);
             if (_views.TryGetValue(id, out var pdfTab) && pdfTab.Content is GetDocument.Desktop.Pdf.PdfWorkspacePane pdf)
             {
                 // Prints what is on screen: unsaved stamps, numbers and page edits included.
@@ -766,7 +778,16 @@ public sealed class MainWindow : Window
                     "Изображение сначала сохраните или откройте как PDF.";
                 return;
             }
-            ClosePrintWizard();
+            // The user might have switched or closed the source tab while
+            // LibreOffice was exporting the current unsaved document state.
+            if (_tabs.SelectedItem is not TabItem { Tag: Guid currentId } ||
+                currentId != id || !_views.ContainsKey(id))
+            {
+                if (generatedOfficePrintCopy && printable is not null)
+                    GetDocument.Core.Printing.OfficePrintFiles.DeleteOwnedExport(printable);
+                _status.Text = "Исходная вкладка изменилась во время подготовки PDF. Печать отменена.";
+                return;
+            }
             var heading = TabHeader("Печать: " + document.Title, ClosePrintWizard);
             _printTab = new TabItem
             {
@@ -777,14 +798,24 @@ public sealed class MainWindow : Window
             _items.Add(_printTab);
             _tabs.SelectedItem = _printTab;
             _status.Text = "Открыт мастер печати ГЭТ. Параметры задаются без системного диалога.";
+            generatedOfficePrintCopy = false; // print wizard now owns its Office export
+            return;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException
+                or TimeoutException or UnauthorizedAccessException or ArgumentException)
+            {
+                _status.Text = "Не удалось подготовить документ к печати. " +
+                    "Проверьте доступность документа и попробуйте ещё раз.";
+            }
+            finally
+            {
+                if (generatedOfficePrintCopy && printable is not null)
+                    GetDocument.Core.Printing.OfficePrintFiles.DeleteOwnedExport(printable);
+                _openingPrintWizard = false;
+            }
             return;
         }
-        if (_printTab is not null)
-        {
-            _tabs.SelectedItem = _printTab;
-            return;
-        }
-        _status.Text = "Выберите вкладку сохранённого PDF перед печатью.";
+        _status.Text = "Выберите вкладку PDF или Office перед печатью.";
     }
 
     private void ClosePrintWizard()

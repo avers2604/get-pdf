@@ -1,3 +1,4 @@
+using GetDocument.Core.Printing;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
@@ -514,17 +515,20 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     public async Task<string?> PreparePrintableAsync()
     {
         if (_document is not { } document) return null;
-        string folder = Path.Combine(Path.GetTempPath(), "GET-Document-print");
-        Directory.CreateDirectory(folder);
-        string target = Path.Combine(folder, Path.GetFileNameWithoutExtension(_path) + "-" + Guid.NewGuid().ToString("N")[..8] + ".pdf");
+        string target = OfficePrintFiles.NewExportPath();
         try
         {
             await document.ExportPdfAsync(target);
-            return File.Exists(target) ? target : null;
+            if (!File.Exists(target) || new FileInfo(target).Length == 0)
+                throw new InvalidDataException("Офисный редактор не создал PDF для печати.");
+            OfficePrintFiles.HardenExport(target);
+            return target;
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (ex is IOException or InvalidOperationException
+            or TimeoutException or UnauthorizedAccessException)
         {
-            _status("Не удалось подготовить печать: " + ex.Message);
+            OfficePrintFiles.DeleteOwnedExport(target); // partially exported or failed PDF
+            _status("Не удалось подготовить PDF для печати: " + ex.Message);
             return null;
         }
     }
