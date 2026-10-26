@@ -11,6 +11,9 @@ public sealed class Gup2EuroOfficeSaveTransportTests
 {
     private const string Grant = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     private const string Employee = "11111111-2222-4333-8444-555555555555";
+    private static readonly string DocumentKey = Convert.ToHexString(SHA256.HashData(
+        Encoding.UTF8.GetBytes("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" + "\n" + "4")))
+        .ToLowerInvariant();
     private static readonly byte[] Secret = Encoding.ASCII.GetBytes(
         "gd24-local-only-internal-save-transport-key-64-characters");
     private static readonly byte[] Content = Encoding.ASCII.GetBytes("GD24-NEW-OFFICE-COPY");
@@ -24,10 +27,11 @@ public sealed class Gup2EuroOfficeSaveTransportTests
     public void HmacCoversTheExactBodyDigestEmployeeAndCallbackFingerprint()
     {
         using var req = Gup2EuroOfficeSaveTransportClient.CreateSignedRequest(
-            Gup2, Grant, Employee, Secret, Now, Content, Fingerprint);
+            Gup2, Grant, Employee, DocumentKey, Secret, Now, Content, Fingerprint);
         string sha = Convert.ToHexString(SHA256.HashData(Content)).ToLowerInvariant();
         string message = "POST\ngetdocument/eurooffice/save\n" + Grant + "\n" + Employee +
-            "\n" + Now.ToUnixTimeSeconds() + "\n" + sha + "\n" + Fingerprint +
+            "\n" + Now.ToUnixTimeSeconds() + "\n" + DocumentKey + "\n" + sha +
+            "\n" + Fingerprint +
             "\n" + Content.Length;
         string signature = Convert.ToHexString(HMACSHA256.HashData(
             Secret, Encoding.ASCII.GetBytes(message))).ToLowerInvariant();
@@ -35,6 +39,8 @@ public sealed class Gup2EuroOfficeSaveTransportTests
             req.RequestUri!.AbsoluteUri);
         Assert.IsFalse(req.RequestUri.AbsoluteUri.Contains(Grant, StringComparison.Ordinal));
         Assert.AreEqual((long)Content.Length, req.Content!.Headers.ContentLength);
+        Assert.AreEqual(DocumentKey,
+            req.Headers.GetValues("X-Get-Eurooffice-Document-Key").Single());
         Assert.AreEqual(sha, req.Headers.GetValues("X-Get-Eurooffice-File-Sha256").Single());
         Assert.AreEqual(Fingerprint,
             req.Headers.GetValues("X-Get-Eurooffice-Callback-Fingerprint").Single());
@@ -84,12 +90,12 @@ public sealed class Gup2EuroOfficeSaveTransportTests
                 Employee, Secret, Now, Content, Fingerprint));
         Assert.ThrowsExactly<ArgumentException>(() =>
             Gup2EuroOfficeSaveTransportClient.CreateSignedRequest(
-                Gup2, Grant, Employee, new byte[16], Now, Content, Fingerprint));
+                Gup2, Grant, Employee, DocumentKey, new byte[16], Now, Content, Fingerprint));
         Assert.ThrowsExactly<ArgumentException>(() =>
             Gup2EuroOfficeSaveTransportClient.CreateSignedRequest(
-                Gup2, "bad", Employee, Secret, Now, Content, Fingerprint));
+                Gup2, "bad", Employee, DocumentKey, Secret, Now, Content, Fingerprint));
         Assert.ThrowsExactly<ArgumentException>(() =>
             Gup2EuroOfficeSaveTransportClient.CreateSignedRequest(
-                Gup2, Grant, Employee, Secret, Now, [], Fingerprint));
+                Gup2, Grant, Employee, DocumentKey, Secret, Now, [], Fingerprint));
     }
 }
