@@ -802,8 +802,7 @@ public sealed class MainWindow : Window
             return;
             }
             catch (Exception ex) when (ex is IOException or InvalidOperationException
-                or TimeoutException or UnauthorizedAccessException or ArgumentException
-                or InvalidDataException)
+                or TimeoutException or UnauthorizedAccessException or ArgumentException)
             {
                 _status.Text = "Не удалось подготовить документ к печати. " +
                     "Проверьте доступность документа и попробуйте ещё раз.";
