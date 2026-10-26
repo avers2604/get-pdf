@@ -71,6 +71,20 @@ public static class Gup2EuroOfficeContentClient
             request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
 
+        return await ReadVerifiedResponseAsync(response, expectedSha256, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Independently testable transport validation. Reject partial responses,
+    /// redirects, unexpected media types and tampered bytes before release.
+    /// </summary>
+    public static async Task<byte[]> ReadVerifiedResponseAsync(
+        HttpResponseMessage response, string expectedSha256,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        cancellationToken.ThrowIfCancellationRequested();
         EnsureContentStatus(response.StatusCode);
         if (response.Content.Headers.ContentType?.MediaType != "application/octet-stream")
             throw new InvalidDataException("Сервер прислал неожиданный тип содержимого.");
