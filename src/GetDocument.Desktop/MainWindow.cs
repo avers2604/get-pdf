@@ -731,6 +731,7 @@ public sealed class MainWindow : Window
         {
             var document = _workspace.Tabs.FirstOrDefault(x => x.Id == id);
             string? printable = null;
+            bool generatedOfficePrintCopy = false;
             if (_views.TryGetValue(id, out var pdfTab) && pdfTab.Content is GetDocument.Desktop.Pdf.PdfWorkspacePane pdf)
             {
                 // Prints what is on screen: unsaved stamps, numbers and page edits included.
@@ -745,6 +746,9 @@ public sealed class MainWindow : Window
                 // Prints the document as it is on screen, unsaved edits included.
                 printable = await editor.PreparePrintableAsync();
                 if (printable is null) return;
+                // This path was created solely for the current print operation,
+                // never the underlying DOCX/XLSX/PPTX nor a WORM original.
+                generatedOfficePrintCopy = true;
             }
             else if (_views.TryGetValue(id, out var officeTab) && officeTab.Content is OfficeDocumentPane office)
             {
@@ -767,7 +771,8 @@ public sealed class MainWindow : Window
             _printTab = new TabItem
             {
                 Header = heading,
-                Content = new PrintWizardPane(printable, ClosePrintWizard)
+                Content = new PrintWizardPane(printable, ClosePrintWizard,
+                    deleteOwnedInput: generatedOfficePrintCopy)
             };
             _items.Add(_printTab);
             _tabs.SelectedItem = _printTab;
