@@ -39,7 +39,9 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         control.CornerRadius = new CornerRadius(9);
     }
 
-    private readonly string _pdfPath;
+    private string _pdfPath;
+    private PrintFileSnapshot? _printSnapshot;
+    private readonly string? _ownedInputPath;
     private readonly Action _closeTab;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly ComboBox _printer = new() { Width = 350 };
@@ -84,10 +86,24 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     private bool _disposed;
     private int _trayRequest;
 
-    public PrintWizardPane(string pdfPath, Action closeTab)
+    public PrintWizardPane(string pdfPath, Action closeTab, bool deleteOwnedInput = false)
     {
         _pdfPath = pdfPath;
         _closeTab = closeTab;
+        // Only an Office-generated PDF in the known print export directory is
+        // deletable by this pane. Source/user PDFs must NEVER be deleted.
+        if (deleteOwnedInput)
+        {
+            string expectedFolder = Path.GetFullPath(
+                Path.Combine(Path.GetTempPath(), "GET-Document-print"));
+            string full = Path.GetFullPath(pdfPath);
+            if (string.Equals(Path.GetDirectoryName(full), expectedFolder,
+                    OperatingSystem.IsWindows()
+                        ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
+                string.Equals(Path.GetExtension(full), ".pdf",
+                    StringComparison.OrdinalIgnoreCase))
+                _ownedInputPath = full;
+        }
         Background = Palette("#F4F5F9");
         Foreground = Palette("#141A33");
         StyleField(_printer);
@@ -338,8 +354,15 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         _status.Text = "Задание передаётся в выбранную очередь печати…";
         try
         {
+            if (_printSnapshot is not { } snapshot ||
+                !await snapshot.VerifyAsync(_lifetime.Token))
+            {
+                if (!_disposed)
+                    _status.Text = "Подготовленная PDF-копия изменилась. Печать отменена; откройте мастер заново.";
+                return;
+            }
             string confirmation = await LocalPrintBroker.SubmitPdfAsync(
-                _pdfPath, plan!, _lifetime.Token);
+                snapshot.Path, plan!, _lifetime.Token, snapshot.Sha256Hex);
             if (!_disposed)
             {
                 _status.Text = confirmation;
@@ -535,8 +558,19 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         if (_disposed) return;
         try
         {
+            // Freeze exactly the PDF revision currently selected for printing,
+            // including unsaved Office/PDF edits exported into a temporary PDF.
+            var snapshot = await PrintFileSnapshot.CreateAsync(_pdfPath, _lifetime.Token);
+            if (_disposed)
+            {
+                snapshot.Dispose();
+                return;
+            }
+            _printSnapshot = snapshot;
+            _pdfPath = snapshot.Path;
+            DeleteOwnedInput();
             var info = await Task.Run(() => RenderPreviewPages(
-                _pdfPath, _lifetime.Token), _lifetime.Token);
+                snapshot.Path, _lifetime.Token), _lifetime.Token);
             if (_disposed) return;
             _pageCount = info.Pages;
             for (int i = 0; i < info.PreviewPngs.Count; i++)
@@ -660,12 +694,23 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         finally { PdfNativeGate.Instance.Release(); }
     }
 
+    private void DeleteOwnedInput()
+    {
+        if (_ownedInputPath is null) return;
+        try { File.Delete(_ownedInputPath); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         _lifetime.Cancel();
         _sheetLoad?.Cancel();
+        _printSnapshot?.Dispose();
+        _printSnapshot = null;
+        DeleteOwnedInput();
         _sheetPreview.Children.Clear();
         foreach (Bitmap image in _previewPages.Values) image.Dispose();
         _previewPages.Clear();
