@@ -452,6 +452,14 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             Grid.SetColumn(tile, index % layout.Columns);
             _sheetPreview.Children.Add(tile);
         }
+        // Keep the initial 1..4 thumbnails and only the currently visible sheet.
+        // Paging through a 1,000-page PDF must not accumulate 1,000 bitmaps.
+        var keep = new HashSet<int>(layout.PageNumbers);
+        foreach (int page in _previewPages.Keys.ToArray())
+        {
+            if (page <= 4 || keep.Contains(page)) continue;
+            if (_previewPages.Remove(page, out var old)) old.Dispose();
+        }
         if (missing.Count > 0) _ = FetchPageThumbnailsAsync(missing);
     }
 
