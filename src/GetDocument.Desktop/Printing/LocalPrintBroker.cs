@@ -42,6 +42,30 @@ internal static class LocalPrintBroker
         throw new PlatformNotSupportedException("Печать поддерживается только Windows и Linux.");
     }
 
+    public static async Task<IReadOnlyList<PrintTrayOption>> TraysAsync(
+        string printer, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(printer) || printer.Length > 160 ||
+            printer.StartsWith("-", StringComparison.Ordinal) || printer.Any(char.IsControl))
+            throw new ArgumentException("Недопустимое имя принтера.", nameof(printer));
+        ct.ThrowIfCancellationRequested();
+        if (OperatingSystem.IsLinux())
+        {
+            string output = await RunAsync("lpoptions", ["-p", printer, "-l"], null, ct);
+            return PrintTrayOptions.ParseCups(output);
+        }
+        if (OperatingSystem.IsWindows())
+        {
+            string json = await RunAsync(WindowsWorker(), ["trays", printer], null, ct);
+            var names = JsonSerializer.Deserialize<string[]>(json) ?? [];
+            if (names.Length > 32) return [];
+            return names.Where(name => !string.IsNullOrEmpty(name))
+                .Select(name => PrintTrayOptions.Make("InputBin", name))
+                .ToArray();
+        }
+        throw new PlatformNotSupportedException();
+    }
+
     public static async Task<string> SubmitPdfAsync(
         string pdfPath, PrintJobPlan plan, CancellationToken ct)
     {
@@ -57,6 +81,13 @@ internal static class LocalPrintBroker
         if (!discovered.Contains(plan.PrinterName, StringComparer.Ordinal))
             throw new InvalidOperationException("Принтер не найден. Обновите список устройств.");
 
+        if (plan.Tray is { } requestedTray)
+        {
+            var currentlyAvailable = await TraysAsync(plan.PrinterName, ct);
+            if (!PrintTrayOptions.IsSupported(currentlyAvailable, requestedTray))
+                throw new InvalidOperationException(
+                    "Выбранный лоток больше не поддерживается принтером. Обновите список лотков.");
+        }
         if (OperatingSystem.IsLinux())
         {
             if (plan.Color != PrintColorMode.PrinterDefault)
@@ -78,7 +109,7 @@ internal static class LocalPrintBroker
             var request = new PrintWorkerRequest(
                 Path.GetFullPath(pdfPath), plan.PrinterName, plan.SourcePageCount,
                 plan.CupsPageRange, plan.Copies, plan.Duplex, plan.Paper,
-                plan.Orientation, plan.Color, plan.PagesPerSheet);
+                plan.Orientation, plan.Color, plan.PagesPerSheet, plan.Tray);
             await RunAsync(WindowsWorker(), ["print"],
                 JsonSerializer.Serialize(request), ct);
             return "Задание передано в очередь Windows. Проверьте состояние принтера.";
@@ -170,5 +201,6 @@ internal static class LocalPrintBroker
 
     private sealed record PrintWorkerRequest(string PdfPath, string PrinterName,
         int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper,
-        PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet);
+        PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet,
+        PrintTrayOption? Tray);
 }
