@@ -12,6 +12,24 @@ $feed = $resolved.ProviderPath
 if (-not (Test-Path -LiteralPath $feed -PathType Container)) {
     throw 'OfflineNuGetFeed must be an existing local directory.'
 }
+# A UNC share, mapped network drive or junction can contact external servers.
+# The release-acceptance feed must reside on a physical local volume.
+if ($feed.StartsWith('\\') -or $feed.StartsWith('//')) {
+    throw 'OfflineNuGetFeed cannot be a UNC network path.'
+}
+$feedItem = Get-Item -LiteralPath $feed -Force
+if (($feedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'OfflineNuGetFeed cannot be a symlink or junction.'
+}
+$root = [IO.Path]::GetPathRoot($feed)
+if ([string]::IsNullOrWhiteSpace($root)) {
+    throw 'OfflineNuGetFeed must use a local drive.'
+}
+$driveType = ([IO.DriveInfo]::new($root)).DriveType
+if ($driveType -ne [IO.DriveType]::Fixed -and
+    $driveType -ne [IO.DriveType]::Removable) {
+    throw 'OfflineNuGetFeed must be on a local fixed or removable drive.'
+}
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw '.NET 10 SDK not installed.'
 }
@@ -45,4 +63,11 @@ foreach ($argsList in $commands) {
 if ($LASTEXITCODE -ne 0) { throw 'Offline Windows PrintWorker restore failed.' }
 & dotnet build src/GetDocument.PrintWindows/GetDocument.PrintWindows.csproj -c Release --no-restore
 if ($LASTEXITCODE -ne 0) { throw 'Offline Windows PrintWorker build failed.' }
-Write-Host 'PASS: offline .NET build and tests. Physical printer trials still required.'
+# Guard legacy GET PDF against regressions while replacing its print UI.
+& dotnet restore GetPdf.slnx --source $feed '-p:NuGetAudit=false'
+if ($LASTEXITCODE -ne 0) { throw 'Offline legacy GetPdf restore failed.' }
+& dotnet build GetPdf.slnx -c Release --no-restore
+if ($LASTEXITCODE -ne 0) { throw 'Offline legacy GetPdf build failed.' }
+& dotnet test tests/GetPdf.Tests/GetPdf.Tests.csproj -c Release --no-restore
+if ($LASTEXITCODE -ne 0) { throw 'Offline legacy GetPdf tests failed.' }
+Write-Host 'PASS: offline GetDocument + GetPdf .NET build/tests. Physical printer trials still required.'
