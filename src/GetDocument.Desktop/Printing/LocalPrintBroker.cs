@@ -59,6 +59,16 @@ internal static class LocalPrintBroker
 
         if (OperatingSystem.IsLinux())
         {
+            if (plan.Color != PrintColorMode.PrinterDefault)
+            {
+                // Do not silently ignore color overrides on older PPD/IPP drivers.
+                string advertised = await RunAsync("lpoptions",
+                    ["-p", plan.PrinterName, "-l"], null, ct);
+                if (!CupsColorCapabilities.Supports(advertised, plan.Color))
+                    throw new InvalidOperationException(
+                        "Этот принтер не подтверждает выбранный цветовой режим. " +
+                        "Используйте настройки принтера или другое устройство.");
+            }
             var args = CupsPrintArguments.Create(plan, Path.GetFullPath(pdfPath));
             await RunAsync("lp", args, null, ct);
             return "Задание передано в очередь CUPS. Проверьте состояние принтера.";
