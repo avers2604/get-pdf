@@ -44,7 +44,7 @@ public sealed class EuroOfficeOidcConfiguration
             issuer.Length > 2048 ||
             !Uri.TryCreate(issuer, UriKind.Absolute, out Uri? uri) ||
             uri.Scheme != Uri.UriSchemeHttps ||
-            uri.Host.Length == 0 || !uri.IsDefaultPort && uri.Port == 0 ||
+            uri.Host.Length == 0 ||
             !string.IsNullOrEmpty(uri.UserInfo) ||
             !string.IsNullOrEmpty(uri.Query) ||
             !string.IsNullOrEmpty(uri.Fragment) ||
