@@ -57,10 +57,10 @@ internal static class LocalPrintBroker
         if (OperatingSystem.IsWindows())
         {
             string json = await RunAsync(WindowsWorker(), ["trays", printer], null, ct);
-            var names = JsonSerializer.Deserialize<string[]>(json) ?? [];
-            if (names.Length > 32) return [];
-            return names.Where(name => !string.IsNullOrEmpty(name))
-                .Select(name => PrintTrayOptions.Make("InputBin", name))
+            var trays = JsonSerializer.Deserialize<TrayReply[]>(json) ?? [];
+            if (trays.Length > 32) return [];
+            return trays.Where(t => PrintTrayOptions.IsValidValue(t.Value))
+                .Select(t => PrintTrayOptions.Make("InputBin", t.Value, t.Label))
                 .ToArray();
         }
         throw new PlatformNotSupportedException();
@@ -203,6 +203,8 @@ internal static class LocalPrintBroker
             throw;
         }
     }
+
+    private sealed record TrayReply(string Value, string Label);
 
     private sealed record PrintWorkerRequest(string PdfPath, string PrinterName,
         int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper,

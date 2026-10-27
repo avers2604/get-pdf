@@ -32,12 +32,11 @@ internal static class Program
                 if (string.IsNullOrWhiteSpace(queueName) ||
                     !server.GetPrintQueues().Any(q => q.Name == queueName)) return 3;
                 using var printer = server.GetPrintQueue(queueName);
-                var bins = printer.GetPrintCapabilities().InputBinCapability
-                    .Where(bin => bin != InputBin.Unknown)
-                    .Select(bin => bin.ToString())
-                    .Distinct(StringComparer.Ordinal)
+                // The driver's own trays with its own names (see WindowsTrayCapabilities).
+                var trays = WindowsTrayCapabilities.Parse(CapabilitiesXml(printer))
+                    .Select(t => new TrayReply(t.LocalName, t.Label))
                     .ToArray();
-                Console.Write(JsonSerializer.Serialize(bins));
+                Console.Write(JsonSerializer.Serialize(trays));
                 return 0;
             }
             if (args.Length != 1) return 2;
@@ -125,15 +124,6 @@ internal static class Program
                     return Unsupported("color");
                 ticket.OutputColor = color;
             }
-            if (plan.Tray is { } requestedTray)
-            {
-                if (requestedTray.Option != "InputBin" ||
-                    !Enum.TryParse<InputBin>(requestedTray.Value, false, out var bin) ||
-                    bin == InputBin.Unknown ||
-                    !capabilities.InputBinCapability.Contains(bin))
-                    return 4;
-                ticket.InputBin = bin;
-            }
             if (plan.PagesPerSheet != PrintPagesPerSheet.One)
             {
                 int pagesPerSheet = (int)plan.PagesPerSheet;
@@ -141,6 +131,22 @@ internal static class Program
                     !capabilities.PagesPerSheetCapability.Contains(pagesPerSheet))
                     return Unsupported("nup");
                 ticket.PagesPerSheet = pagesPerSheet;
+            }
+            if (plan.Tray is { } requestedTray)
+            {
+                // Vendor trays cannot be set through the InputBin enum: merge a Print Schema
+                // fragment and make sure the driver kept it after validation.
+                var choice = requestedTray.Option == "InputBin"
+                    ? WindowsTrayCapabilities.Parse(CapabilitiesXml(queue))
+                        .FirstOrDefault(t => t.LocalName == requestedTray.Value)
+                    : null;
+                if (choice is null) return Unsupported("tray");
+                using var delta = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(WindowsTrayCapabilities.TicketDelta(choice)));
+                PrintTicket merged = queue.MergeAndValidatePrintTicket(ticket, new PrintTicket(delta)).ValidatedPrintTicket;
+                using var mergedXml = merged.GetXmlStream();
+                if (!WindowsTrayCapabilities.TicketSelects(new StreamReader(mergedXml).ReadToEnd(), choice))
+                    return Unsupported("tray");
+                ticket = merged;
             }
             // Read raster pages lazily. Do not decode a 1,000 page job into RAM.
             double width = plan.Paper == PrintPaper.A3 ? 1122.52 : 793.70;
@@ -160,6 +166,14 @@ internal static class Program
             return 5;
         }
     }
+
+    private static string CapabilitiesXml(PrintQueue queue)
+    {
+        using var stream = queue.GetPrintCapabilitiesAsXml();
+        return new StreamReader(stream).ReadToEnd();
+    }
+
+    private sealed record TrayReply(string Value, string Label);
 
     /// <summary>Refusal before anything is spooled; the wizard lets the user change the setting.</summary>
     private static int Unsupported(string feature)

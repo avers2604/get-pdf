@@ -47,3 +47,21 @@ bash scripts/verify-get-document-linux.sh
 
 - Windows: `System.Printing.PrintCapabilities.InputBinCapability` и `PrintTicket.InputBin` (Microsoft Learn).
 - CUPS: `lpoptions -p -l` и `lp -o InputSlot=...` / `media=...`, `number-up` (OpenPrinting/CUPS).
+
+## Исправление 27.10.2026: лотки Windows из драйвера
+
+- WPF-перечисление `InputBin` знает только пять общих значений, поэтому лотки МФУ
+  («Основной лоток», «Лоток 2», «Обходной»), которые драйвер описывает своими именами
+  (например, `ns0000:_1`), отбрасывались как Unknown. На HP DeskJet 5000 мастер получал
+  только `AutoSelect`.
+- Теперь `GetDocument.PrintWindows.exe trays` читает XML PrintCapabilities
+  (`psk:JobInputBin`, затем `DocumentInputBin` / `PageInputBin`) и показывает название
+  лотка из драйвера. Автовыбор не дублируется: его уже даёт пункт «Выбор принтера».
+- При печати выбранный лоток передаётся фрагментом PrintTicket через
+  `MergeAndValidatePrintTicket`. Если драйвер его отбросил, задание не отправляется,
+  а мастер сообщает «не поддерживает выбранный лоток».
+- Если у принтера нет ничего, кроме автовыбора (Microsoft Print to PDF, XPS Writer),
+  поле «Источник бумаги / лоток» скрыто.
+- Проверено на этом ПК: HP DeskJet 5000 → «Основной лоток»; драйвер сохранил
+  `ns0000:_1` в проверенном билете (без печати). PDF/XPS — поле скрыто.
+  Физическая печать из лотка не проверялась.

@@ -10,14 +10,32 @@ public static class PrintTrayOptions
 {
     private static readonly string[] AllowedKeys = ["InputSlot", "media-source", "InputBin"];
 
-    public static PrintTrayOption Make(string option, string value)
+    /// <param name="label">What the driver calls the tray ("Main Tray", "Лоток 2"); the value when absent.</param>
+    public static PrintTrayOption Make(string option, string value, string? label = null)
     {
         if (!AllowedKeys.Contains(option, StringComparer.Ordinal) ||
             !ValidValue(value))
             throw new ArgumentException("Недопустимый идентификатор лотка.");
-        return new PrintTrayOption(option, value, value);
+        string shown = CleanLabel(label);
+        return new PrintTrayOption(option, value, shown.Length > 0 ? shown : value);
     }
 
+    /// <summary>"Auto" / "AutoSelect": the printer chooses - the wizard's default item already says so.</summary>
+    public static bool IsAutomatic(PrintTrayOption tray) =>
+        tray.Value.Equals("Auto", StringComparison.OrdinalIgnoreCase) ||
+        tray.Value.Equals("AutoSelect", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Driver display names are shown as text only: no control characters, bounded length.</summary>
+    public static string CleanLabel(string? label)
+    {
+        if (string.IsNullOrWhiteSpace(label)) return "";
+        string clean = new string(label.Where(c => !char.IsControl(c)).ToArray()).Trim();
+        return clean.Length > 64 ? clean[..64] : clean;
+    }
+
+    public static bool IsValidValue(string? value) => ValidValue(value);
+
+    /// <summary>Same option and value; the label is only what the user saw.</summary>
     public static bool IsSupported(IEnumerable<PrintTrayOption> available, PrintTrayOption selected) =>
         selected is not null && available.Any(x => x.Option == selected.Option &&
             x.Value == selected.Value);

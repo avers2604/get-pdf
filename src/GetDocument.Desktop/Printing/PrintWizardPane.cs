@@ -78,6 +78,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     private bool _submitted;
     private bool _disposed;
     private int _trayRequest;
+    private bool _hasTrays;   // the tray field is shown only when the printer offers more than auto-select
 
     public PrintWizardPane(string pdfPath, Action closeTab)
     {
@@ -231,7 +232,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
                 $"Страницы (в документе {_pageCount})", _pages));
             _stage.Children.Add(Labeled("Копии (от 1 до 99)", _copies));
             _stage.Children.Add(Labeled("Размер бумаги", _paper));
-            _stage.Children.Add(Labeled("Источник бумаги / лоток", _tray));
+            if (_hasTrays) _stage.Children.Add(Labeled("Источник бумаги / лоток", _tray));
             _stage.Children.Add(Labeled("Режим печати", _sides));
             _stage.Children.Add(Labeled("Ориентация", _orientation));
             _stage.Children.Add(Labeled("Цветность", _color));
@@ -446,6 +447,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             new ComboBoxItem { Content = "Выбор принтера (автоматически)" }
         };
         _tray.SelectedIndex = 0;
+        SetHasTrays(false);
         if (string.IsNullOrWhiteSpace(printer)) return;
         _tray.IsEnabled = false;
         try
@@ -457,12 +459,11 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             {
                 new() { Content = "Выбор принтера (автоматически)" }
             };
-            items.AddRange(choices.Select(option => new ComboBoxItem
-            {
-                Content = option.Label, Tag = option
-            }));
+            items.AddRange(choices.Where(option => !PrintTrayOptions.IsAutomatic(option))
+                .Select(option => new ComboBoxItem { Content = option.Label, Tag = option }));
             _tray.ItemsSource = items;
             _tray.SelectedIndex = 0;
+            SetHasTrays(items.Count > 1);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (Exception)
@@ -474,6 +475,13 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         {
             if (!_disposed && request == _trayRequest) _tray.IsEnabled = true;
         }
+    }
+
+    private void SetHasTrays(bool value)
+    {
+        if (_hasTrays == value) return;
+        _hasTrays = value;
+        if (_step == 2 && !_busy) RenderStage();
     }
 
     private async Task LoadPrintersAsync()

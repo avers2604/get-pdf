@@ -60,8 +60,8 @@ public sealed class PrintJobPlan
             throw new ArgumentOutOfRangeException(nameof(copies), "Разрешено от 1 до 99 копий.");
         if (tray is not null)
         {
-            var validated = PrintTrayOptions.Make(tray.Option, tray.Value);
-            if (tray != validated)
+            var validated = PrintTrayOptions.Make(tray.Option, tray.Value, tray.Label);
+            if (tray.Option != validated.Option || tray.Value != validated.Value || tray.Label != validated.Label)
                 throw new ArgumentException("Лоток содержит некорректное наименование.", nameof(tray));
         }
         if (!Enum.IsDefined(duplex) || !Enum.IsDefined(paper) ||
