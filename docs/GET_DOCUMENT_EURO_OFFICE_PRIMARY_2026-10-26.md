@@ -17,6 +17,8 @@
 
 > **GD-24:** исходники [парного C# server writeback](GET_DOCUMENT_EUROOFFICE_SAVE_TRANSPORT_GD24_2026-10-26.md) и [GUP-2 PR #182](https://github.com/avers2604/Gup-2/pull/182) содержат HMAC authorization с document.key, save-grants, выдачу CAS/immutable receipt. SSO issuer и DocumentServer безопасный output fetch должны быть подключены отдельно, редактор по умолчанию DenyAll.
 
+> **GD-25.1–25.2:** GUP-2 [PR #185](https://github.com/avers2604/Gup-2/pull/185) добавляет SSO browser one-use editor launch / внутренний HMAC redeem; в GET Documents доступен [строгий C# клиент и контракт](GET_DOCUMENT_EUROOFFICE_SSO_SESSION_GD25_2026-10-27.md). Реальный ASP.NET middleware/запуск Document Server и подключённый callback sink — следующий этап, пока DenyAll.
+
 ## 1. Приоритет движков
 
 1. **Euro-Office Document Server** — основной движок для DOCX/XLSX/PPTX в локальной сети и совместного редактирования. Это **не** файловый сервер, не система ACL и не замена ГЭТ Файлы/GUP-2.
