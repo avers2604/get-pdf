@@ -3,6 +3,7 @@
 param([Parameter(Mandatory=$true)][string]$OfflineNuGetFeed)
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
+& (Join-Path $PSScriptRoot 'check-get-document-lab-windows.ps1') -OfflineNuGetFeed $OfflineNuGetFeed
 & (Join-Path $PSScriptRoot 'verify-get-document-offline-windows.ps1') -OfflineNuGetFeed $OfflineNuGetFeed
 if ($LASTEXITCODE -ne 0) { throw 'Offline Windows validation failed.' }
 
