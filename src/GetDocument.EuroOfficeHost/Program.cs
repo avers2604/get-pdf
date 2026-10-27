@@ -41,6 +41,22 @@ if (signingKey.Length < 32)
 // Incoming editor config JWT and outgoing callback JWT may use different
 // Document Server secrets. Require an independent pinned outbox secret before
 // the callback route can ever be enabled.
+// Explicitly keep editor launches switched off until a validated OIDC/SSO
+// authentication handler is registered and its issuer/audience/revocation
+// checks have passed the local corporate acceptance suite.
+bool enterpriseLaunchEnabled =
+    Environment.GetEnvironmentVariable("GET_EUROOFFICE_ENTERPRISE_LAUNCH_ENABLED") == "1";
+string? validatedSsoScheme =
+    Environment.GetEnvironmentVariable("GET_EUROOFFICE_VALIDATED_SSO_SCHEME");
+if (enterpriseLaunchEnabled)
+{
+    // A configured name alone is not an authentication handler.
+    // There is deliberately no real SSO middleware registered in this host.
+    throw new InvalidOperationException(
+        "Enterprise Euro-Office launch requires a reviewed corporate SSO " +
+        "authentication handler, issuer/audience verification and revocation.");
+}
+
 bool callbacksEnabled =
     Environment.GetEnvironmentVariable("GET_EUROOFFICE_CALLBACKS_ENABLED") == "1";
 byte[]? outboxSigningKey = null;
@@ -96,7 +112,16 @@ app.MapGet("/get-document/editor/launch/{launchId}", async (
 {
     // The NativeWebView must be authenticated by the corporate SSO broker.
     // A matching path is not itself proof of permission to read the document.
-    if (context.User.Identity?.IsAuthenticated != true)
+    if (!enterpriseLaunchEnabled)
+        return Results.NotFound();
+    // This additional policy is not a substitute for an ASP.NET SSO
+    // authentication handler. The host refuses startup if the feature is
+    // enabled without that handler.
+    IReadOnlySet<string> trustedSchemes = validatedSsoScheme is { Length: > 0 }
+        ? new HashSet<string>(StringComparer.Ordinal) { validatedSsoScheme }
+        : new HashSet<string>(StringComparer.Ordinal);
+    if (!EuroOfficeEnterprisePrincipalPolicy.IsApproved(
+        context.User, trustedSchemes))
         return Results.Unauthorized();
 
     if (!EuroOfficeLaunchId.IsValid(launchId))
