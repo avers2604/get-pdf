@@ -1,0 +1,84 @@
+using System.Security.Cryptography;
+using System.Security.Claims;
+using System.Text;
+using GetDocument.Collaboration;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace GetDocument.Collaboration.Tests;
+
+[TestClass]
+public sealed class EuroOfficeCallbackAdmissionTests
+{
+    private static readonly byte[] SigningKey = SHA256.HashData(
+        Encoding.UTF8.GetBytes("native-eurooffice-callback-lab-signing-key"));
+    private static readonly Uri Origin = new("https://office.intra.get.test/");
+    private const string Key =
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    [TestMethod]
+    public async Task WithoutTrustedSessionNoCallbackIsEverProcessed()
+    {
+        ITrustedEuroOfficeCallbackSessionStore store = new DenyAllEuroOfficeCallbackSessionStore();
+        var session = await store.FindAsync(EuroOfficeLaunchId.New(),
+            CancellationToken.None);
+        Assert.IsNull(session);
+    }
+
+    [TestMethod]
+    public void ActiveSessionMustUseTrustedDocumentOriginAndShortExpiry()
+    {
+        var session = new EuroOfficeCallbackSession(Key, Origin,
+            DateTimeOffset.UtcNow.AddMinutes(3));
+        EuroOfficeCallbackAdmission.RequireCurrent(
+            session, Origin, DateTimeOffset.UtcNow);
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
+            EuroOfficeCallbackAdmission.RequireCurrent(
+                session, new Uri("https://external.invalid/"), DateTimeOffset.UtcNow));
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
+            EuroOfficeCallbackAdmission.RequireCurrent(
+                session, Origin, DateTimeOffset.UtcNow.AddMinutes(10)));
+    }
+
+    [TestMethod]
+    public void AFullShiftCallbackSessionCanRemainValidButOverlongSessionIsRejected()
+    {
+        var now = new DateTimeOffset(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);
+        var shiftSession = new EuroOfficeCallbackSession(
+            Key, Origin, now.AddHours(8));
+        EuroOfficeCallbackAdmission.RequireCurrent(shiftSession, Origin, now);
+
+        var unrealistic = new EuroOfficeCallbackSession(
+            Key, Origin, now.AddHours(48));
+        Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
+            EuroOfficeCallbackAdmission.RequireCurrent(unrealistic, Origin, now));
+    }
+
+    [TestMethod]
+    public void DenyAllRevisionSinkCannotAcknowledgeAnyNewVersion()
+    {
+        ITrustedEuroOfficeCallbackRevisionSink sink = new DenyAllEuroOfficeCallbackRevisionSink();
+        var candidate = new EuroOfficeSaveCandidate(
+            Key, 2, new Uri("https://office.intra.get.test/file.docx"),
+            new string('b', 64));
+        var outcome = sink.CommitAsync(candidate, CancellationToken.None)
+            .GetAwaiter().GetResult();
+        Assert.IsFalse(outcome.Committed);
+    }
+
+    [TestMethod]
+    public void CallbackHttpAckNeverClaimsSuccessWithoutRealCommit()
+    {
+        Assert.AreEqual(1, EuroOfficeCallbackAdmission.ResponseError(
+            new EuroOfficeCallbackCommitReceipt(false)));
+        // A boolean success flag alone is not proof of a committed GUP-2
+        // revision. Missing or malformed revision metadata must fail closed.
+        Assert.AreEqual(1, EuroOfficeCallbackAdmission.ResponseError(
+            new EuroOfficeCallbackCommitReceipt(true)));
+        Assert.AreEqual(1, EuroOfficeCallbackAdmission.ResponseError(
+            new EuroOfficeCallbackCommitReceipt(true, "0", new string('a', 64))));
+        Assert.AreEqual(1, EuroOfficeCallbackAdmission.ResponseError(
+            new EuroOfficeCallbackCommitReceipt(true, "42", "not-a-sha")));
+        Assert.AreEqual(0, EuroOfficeCallbackAdmission.ResponseError(
+            new EuroOfficeCallbackCommitReceipt(true, "42", new string('a', 64))));
+    }
+}

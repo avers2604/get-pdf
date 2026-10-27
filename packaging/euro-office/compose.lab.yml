@@ -1,0 +1,31 @@
+# Изолированный лабораторный стенд. Не публиковать порт напрямую в корпоративную сеть.
+# Образ нужно заранее скачать, проверить по подписи/хешу и загрузить через docker load.
+# Подставить версию/sha256 digest. Не использовать :latest.
+name: get-eurooffice-lab
+
+services:
+  eurooffice:
+    image: ${GET_EUROOFFICE_IMAGE:?Set a vetted pinned image digest}
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GET_EUROOFFICE_LOCAL_PORT:-8086}:80"
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${GET_EUROOFFICE_LAB_JWT_SECRET:?Set a random 32+ character lab secret}
+      EXAMPLE_ENABLED: "false"
+      WOPI_ENABLED: "false"
+      ALLOW_PRIVATE_IP_ADDRESS: "false"
+      ALLOW_META_IP_ADDRESS: "false"
+      USE_UNAUTHORIZED_STORAGE: "false"
+      ADMINPANEL_ENABLED: "false"
+      DS_LOG_LEVEL: "WARN"
+    volumes:
+      - eurooffice_data:/var/www/euro-office/Data
+      - eurooffice_documents:/var/lib/euro-office/documentserver
+      - eurooffice_logs:/var/log/euro-office
+
+volumes:
+  eurooffice_data: {}
+  eurooffice_documents: {}
+  eurooffice_logs: {}

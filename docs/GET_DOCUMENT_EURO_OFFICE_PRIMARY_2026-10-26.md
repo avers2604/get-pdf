@@ -1,0 +1,102 @@
+# GD-17 — Euro-Office как основной Office-движок ГЭТ Документы
+
+**Решение:** 26.10.2026. **Статус:** утверждённый выбор продукта + подготовленный серверный адаптер; полноценное подключение, сборка и редакторная приёмка пока не проводились. База: stacked Draft PR после GD-16 (#39).
+
+> **Продолжение GD-17B (26.10.2026):** подготовлены закрытый лабораторный compose со строго закрепляемым образом, HTTPS healthcheck, отдельный `GetDocument.EuroOfficeHost`, одноразовый launch ID, строго ограниченная CSP страница DocsAPI и контракт `ITrustedEuroOfficeLaunchStore` с DenyAll по умолчанию. Добавлены модульные тесты. **ГЭТ сервер, корпоративные SSO/ACL, trusted callback и immutable CAS по-прежнему отсутствуют.** См. [GD-17B: launch broker и стенд](GET_DOCUMENT_EURO_OFFICE_BROKER_GD17B_2026-10-26.md).
+
+> **GD-17C.1:** реализован клиент существующего GUP-2 tab-binding endpoint с SHA-256 и отдельной вкладкой ГЭТ; функциональность отключена до явного флага и серверного ACL. События GUP-2 сами по себе не разрешают Euro-Office совместное редактирование. Подробнее: [GD-17C.1](GET_DOCUMENT_GUP2_BINDING_GD17C_2026-10-26.md).
+
+
+> **GD-17C.2:** C# клиент сервисной HMAC-аттестации подготовлен, GUP-2 server-side issue/consume внесён отдельным [PR #174](https://github.com/avers2604/Gup-2/pull/174). Этот протокол не возвращает документ и не разрешает редактирование; `EuroOfficeHost` остаётся `DenyAll`. [Детали GD-17C.2](GET_DOCUMENT_EUROOFFICE_ATTESTATION_GD17C2_2026-10-26.md).
+
+> **GD-17D.1:** подготовлен read-only контентный шлюз с отдельным HMAC purpose, закреплённой S3 VersionId, повторными ACL-проверками и SHA-before-release. Сторона GUP-2: [Draft PR #176](https://github.com/avers2604/Gup-2/pull/176); сторона ГЭТ Документы: [подробности GD-17D](GET_DOCUMENT_EUROOFFICE_CONTENT_GD17D_2026-10-26.md). Запись не включена; callback/CAS остаётся следующим этапом.
+
+> **GD-17D.2a:** [нативная JWT-проверка callback Euro-Office и denied-by-default commit](GET_DOCUMENT_EUROOFFICE_CALLBACK_GD17D2_2026-10-26.md); GUP-2 [GD-22 PR #177](https://github.com/avers2604/Gup-2/pull/177) проверяет текущие права/ревизию/архив без записи. Реальная запись `services.update_document` через серверный callback по-прежнему отсутствует — только следующий GD-17D.2b после ИБ-аудита.
+
+> **GD-17D.2b:** внутренний `commit_trusted_eurooffice_callback` в GUP-2 уже использует штатные CAS/AV/S3 VersionId/append-only историю, миграции 0041–0042 и replay receipt: [Draft PR #179](https://github.com/avers2604/Gup-2/pull/179). [Интеграционный контракт](GET_DOCUMENT_EUROOFFICE_COMMIT_GD17D2B_2026-10-26.md). В реальном `EuroOfficeHost` остаётся DenyAll, межсерверный write-grant ещё не подключён.
+
+> **GD-24:** исходники [парного C# server writeback](GET_DOCUMENT_EUROOFFICE_SAVE_TRANSPORT_GD24_2026-10-26.md) и [GUP-2 PR #182](https://github.com/avers2604/Gup-2/pull/182) содержат HMAC authorization с document.key, save-grants, выдачу CAS/immutable receipt. SSO issuer и DocumentServer безопасный output fetch должны быть подключены отдельно, редактор по умолчанию DenyAll.
+
+> **GD-25.1–25.2:** GUP-2 [PR #185](https://github.com/avers2604/Gup-2/pull/185) добавляет SSO browser one-use editor launch / внутренний HMAC redeem; в GET Documents доступен [строгий C# клиент и контракт](GET_DOCUMENT_EUROOFFICE_SSO_SESSION_GD25_2026-10-27.md). Реальный ASP.NET middleware/запуск Document Server и подключённый callback sink — следующий этап, пока DenyAll.
+
+## 1. Приоритет движков
+
+1. **Euro-Office Document Server** — основной движок для DOCX/XLSX/PPTX в локальной сети и совместного редактирования. Это **не** файловый сервер, не система ACL и не замена ГЭТ Файлы/GUP-2.
+2. **LibreOffice Desktop/UNO** — автономный редактор и fallback *только после проверки прав и локальной копии*; PDF и собственные компоненты ГЭТ продолжают работать независимо от Euro-Office.
+3. **ONLYOFFICE Docs / Collabora Online** — только совместимость, диагностика и запасные адаптеры. Автоматически и незаметно для пользователя переключать поставщика редактора или протокол сохранения запрещено.
+
+Это заменяет прежний приоритет LibreOffice как главного кандидата, но не означает удаления уже написанных интеграционных прототипов.
+
+## 2. Что уже добавлено в код (не равно готовому запуску)
+
+- `OfficeServerEnginePolicy.Primary = OfficeServerEngine.EuroOffice`: единая точка **для новых онлайн-сессий**.
+- `EuroOfficeSessionFactory` использует существующий серверный контракт подписанной Docs API-конфигурации (историческое имя `OnlyOfficeSessionFactory`). Дублирующий JWT/OOXML код не создаётся.
+- `immutableRevisionSinkReady=false` — **обязательный безопасный режим по умолчанию**: даже пользователь с CanEdit получает **view** до отдельного разрешения от доверенного серверного интегратора, подтвердившего ACL, callback и атомарные неизменяемые ревизии.
+- При готовом хранилище `immutableRevisionSinkReady=true` разрешает редактирование только для `CanEdit && !IsWormOriginal`. Это контракт, а не установленный факт готовности backend.
+- `CollaboraWopi` нельзя открывать через Docs API. Для него сохраняется собственный WOPI-путь; несогласованные протоколы не подменяются.
+- Подготовлены MSTest на первичность Euro-Office, DOCX/XLSX/PPTX, JWT, fast-coediting, WORM, запрет внешних URL, явный legacy и fail-closed.
+
+**Важное ограничение:** на момент этого изменения никто не вызывает новый `OfficeServerEnginePolicy` из действующего GUP-2 launch broker, поскольку реального доверенного брокера пока нет. Код не должен объявляться рабочим без этой интеграции. Server-side factory выдаёт **только подписанную конфигурацию**, не запускает клиент, не создаёт учётку и не подключает реальный GUP-2.
+
+## 3. Целевая архитектура
+
+```text
+ГЭТ Документы / Avalonia
+  ├─ единый лаунчер, вкладки, брендбук, собственный мастер печати
+  ├─ PDF: свой Core/viewer, без зависимости от офисного сервера
+  ├─ DOCX/XLSX/PPTX: CollaborationEditorPane / NativeWebView
+  │    └─ одноразовый HTTPS launch-broker (корпоративное SSO/ACL)
+  │         └─ Euro-Office Document Server (primary; Docs API)
+  │              └─ GetDocument/GUP-2 trusted callback and revision sink
+  └─ LibreOffice Desktop / UNO — явный локальный fallback
+ГЭТ Файлы / GUP-2: владеют хранением, версиями, запретом WORM и аудитом.
+```
+
+Проект не зависит от установки Nextcloud: Euro-Office Document Server требует совместимой файловой платформы, её контракт должны реализовать ГЭТ Файлы и GUP-2. Nextcloud — опциональный отдельный интеграционный путь, **не** обязательное второе хранилище.
+
+## 4. Сервер, офлайн и безопасность
+
+- Сервер разворачивается **только в изолированном контуре** с корпоративным TLS/CA и внутренним DNS; пользователи видят редактор в существующей вкладке WebView. Документы и токены не должны попадать во внешнюю сеть.
+- Не использовать `latest` при приемке: зафиксировать точную версию/image digest, SHA256, перечень лицензий и комплект зависимостей для офлайн-поставки. Официальные **community builds предназначены для тестирования**, их пригодность для корпоративной выкладки и подпись пакетов подтвердить отдельно.
+- Docker-установка Euro-Office требует по документации минимум 4 GiB RAM и около 5 GB диска для образа. Для Windows/Linux/Astra/ALT/РЕД на рабочем месте используется только оболочка/WebView; серверные ресурсы не перекладывать на старые ПК.
+- `JWT_ENABLED=true`, отдельный длинный секрет через секрет-хранилище; не хранить секрет или bearer tokens в клиенте и репозитории. Ключи WOPI отдельно, если протокол действительно нужен. TLS проверку **не отключать**.
+- `EXAMPLE_ENABLED=false`; `WOPI_ENABLED=false` до отдельной проверки. `ALLOW_PRIVATE_IP_ADDRESS` включать только для явных корпоративных host/IP через ограниченные egress ACL и DNS-пиннинг, иначе изолированный сервер не сможет загрузить документ, а бесконтрольный allowPrivateIPAddress создаст SSRF-риск.
+- Постоянно хранить `/var/www/euro-office/Data` с ключами наряду с основными data/log томами. Проверять резервное копирование и восстановление этих ключей.
+- Каждая загрузка документа и каждый callback заново проверяют серверные ACL. Сохранение — только в **новую редакцию** с CAS, аудитом и антивирусной/ZIP проверкой. WORM-оригинал неизменяем. Callback/конфликтный протокол Euro-Office не считать автоматически идентичным ONLYOFFICE до реального теста.
+- Правила **AGPLv3** и обязанности при модификации/сетевом использовании согласовать до выдачи пользователям. Внутреннее некоммерческое использование не является освобождением от лицензии; проверка брендирования и NOTICE обязательна.
+
+## 5. Этапы реализации
+
+| Приоритет | Работа | Критерий |
+|---|---|---|
+| GD-17A | Назначить Euro-Office основным, вынести адаптер, сохранить WOPI/LibreOffice | Исходники и MSTest, режим view-by-default; **код внесён, тесты не запускались** |
+| GD-17B | Локальный pinned Euro-Office стенд, TLS/CA, тест JWT/Docs API и callback | Воспроизводимый offline package, наблюдаемые реальные ответы Document Server |
+| GD-17C | Подключить GUP-2 SSO launch-broker и NativeWebView | Один документ в одной вкладке, токены только через trusted broker, запрет открытых redirect |
+| GD-17D | Trusted ACL+CAS revision sink для callback, отзыв прав, конфликт | Новая редакция, отсутствие WORM-перезаписи, audit и отзыв доступа между началом и концом сохранения |
+| GD-17E | Совместная работа 2/5/10 пользователей в реальном времени | Cursor/changes/saving, сетевые обрывы, 10-часовая смена, P95 цели для LAN |
+| GD-17F | MS Office roundtrip и функции | DOCX/XLSX/PPTX со сложными таблицами, формулами, стилями, рецензированием и презентациями |
+| GD-17G | Собственная лента ГЭТ + собственный мастер печати Office через PDF | Реальные доступные команды SDK, экспорт в PDF без потерь и печать без системного диалога |
+| GD-17H | Кроссплатформенная и лицензионная приёмка | Windows, Astra/ALT/РЕД, экран, слабый ПК, локальные тесты и санкционированный релиз |
+
+**Ничего из GD-17B–H не считать завершённым до протокола испытаний.** Не включать GitHub Actions. Локальная проверка bash-скрипта: синтаксис и отклонение неверного URL/отсутствующей CA проверены отдельно, реальный HTTPS ответ сервера — нет. Прототип не заменяет main и не отменяет текущих требований по печати и редактору.
+
+## 6. Проверки разработчика
+
+```sh
+dotnet restore GetDocument.slnx
+dotnet build GetDocument.slnx -c Release --no-restore
+dotnet test tests/GetDocument.Collaboration.Tests/GetDocument.Collaboration.Tests.csproj -c Release --no-restore
+```
+
+Запускать локально на машине с .NET 10; отдельно Windows UI smoke и Linux UI smoke. В доступном исполнительном окружении отсутствует `dotnet`, поэтому compile/test **не подтверждены**.
+
+## 7. Источники и предмет интеграции
+
+- https://github.com/Euro-Office/DocumentServer
+- https://euro-office.github.io/documentation/
+- https://euro-office.github.io/documentation/installation/docker/
+- https://github.com/Euro-Office/documentation/blob/main/docs/configuration/server.md
+- https://github.com/Euro-Office/DesktopEditors
+- Наши Draft PR #22–29 (контракты Docs API и Collabora/WOPI), #31–39 (единые вкладки, PDF, возврат и печать).
+
+Приемка внешнего кода по SOURCE-FIRST: фиксировать upstream tag/commit и лицензию **каждого** скопированного или подключённого модуля; не форкать Document Server целиком ради смены интерфейса без доказанной необходимости.

@@ -43,6 +43,8 @@ public sealed class MainWindow : Window
     private readonly Dictionary<string, TabItem> _collaborationTabs = new(StringComparer.Ordinal);
     private readonly OfficeReturnPolicy _officeReturnPolicy = OfficeReturnPolicy.LoadLocal();
     private TabItem? _officeReturnTab;
+    private TabItem? _officeBindingTab;
+    private Guid? _officeBindingSourceId;
     private TabItem? _printTab;
     private readonly DocumentHistory _history = new();
     private readonly StackPanel _homeLists = new() { Spacing = 4 };
@@ -106,6 +108,7 @@ public sealed class MainWindow : Window
         {
             if (_filesTab?.Content is IDisposable files) files.Dispose();
             if (_officeReturnTab?.Content is IDisposable officeReturn) officeReturn.Dispose();
+            if (_officeBindingTab?.Content is IDisposable officeBinding) officeBinding.Dispose();
             if (_printTab?.Content is IDisposable printWizard) printWizard.Dispose();
             foreach (var view in _views.Values)
                 if (view.Content is IDisposable document) document.Dispose();
@@ -321,6 +324,9 @@ public sealed class MainWindow : Window
         if (_officeReturnPolicy.Enabled)
             commands.Children.Add(HeaderCommand("Отправить в GUP-2", Icons.Send,
                 "Вернуть рабочую копию DOCX/XLSX в карточку GUP-2", ShowOfficeReturn));
+        if (_officeReturnPolicy.AllowGup2TabBinding)
+            commands.Children.Add(HeaderCommand("Связать с GUP-2", Icons.Network,
+                "Проверить SHA-256 и привязать рабочую копию к карточке GUP-2", ShowOfficeBinding));
         DockPanel.SetDock(commands, Dock.Left);
         bar.Children.Add(commands);
 
@@ -659,6 +665,7 @@ public sealed class MainWindow : Window
     private void CloseDocument(Guid id)
     {
         if (!_views.TryGetValue(id, out var view)) return;
+        if (_officeBindingSourceId == id) CloseOfficeBinding();
         _views.Remove(id);
         _workspace.Close(id);
         if (view.Content is IDisposable disposable) disposable.Dispose();
@@ -697,6 +704,47 @@ public sealed class MainWindow : Window
 
     public void ReportRejectedLaunch() =>
         _status.Text = "Неверные параметры запуска: допустимы только локальные файлы поддерживаемых форматов.";
+
+    private void ShowOfficeBinding()
+    {
+        if (_officeBindingTab is not null)
+        {
+            _tabs.SelectedItem = _officeBindingTab;
+            return;
+        }
+        if (!_officeReturnPolicy.AllowGup2TabBinding) return;
+        if (_tabs.SelectedItem is not TabItem { Tag: Guid documentId } ||
+            _workspace.Tabs.FirstOrDefault(x => x.Id == documentId)?.FilePath is not { } openedPath ||
+            !OfficeReturnClient.IsSupportedCopy(openedPath))
+        {
+            _status.Text = "Для привязки сначала откройте рабочий DOCX/XLSX во вкладке.";
+            return;
+        }
+        if (_views.TryGetValue(documentId, out var activeView) &&
+            HasUnsaved(activeView.Content))
+        {
+            _status.Text = "Сначала сохраните изменения рабочей копии. SHA-256 проверяется по файлу на диске.";
+            return;
+        }
+        _officeBindingSourceId = documentId;
+        _officeBindingTab = new TabItem
+        {
+            Header = TabHeader("Связь GUP-2", CloseOfficeBinding),
+            Content = new OfficeBindingPane(this, _officeReturnPolicy, openedPath)
+        };
+        _items.Add(_officeBindingTab);
+        _tabs.SelectedItem = _officeBindingTab;
+    }
+
+    private void CloseOfficeBinding()
+    {
+        if (_officeBindingTab is null) return;
+        if (_officeBindingTab.Content is IDisposable pane) pane.Dispose();
+        _items.Remove(_officeBindingTab);
+        _officeBindingTab = null;
+        _officeBindingSourceId = null;
+        _tabs.SelectedIndex = 0;
+    }
 
     private void ShowOfficeReturn()
     {

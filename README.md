@@ -79,3 +79,24 @@ PDF-вкладка получила **перелистывание первой/
 Код, ограничения, сборка Windows и аппаратная приёмка: [GD-16 GET Print Wizard](docs/GET_DOCUMENT_GD16_CUSTOM_PRINT_WIZARD_2026-10-25.md). .NET SDK отсутствует в доступном исполнителе, сборка/MSTest не подтверждены.
 
 План завершения с критериями приёмки: [GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md](docs/GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md). Исходное описание ГЭТ PDF: [LEGACY_GET_PDF_README_2026-10-24.md](docs/LEGACY_GET_PDF_README_2026-10-24.md).
+
+## GD-17 — Euro-Office основной серверный движок (26.10.2026)
+
+Для **ГЭТ Документы** основным редактором DOCX/XLSX/PPTX выбран **Euro-Office Document Server** (внутренний сервер, совместное редактирование). LibreOffice остаётся локальным автономным вариантом; ONLYOFFICE и Collabora — только legacy/альтернативные адаптеры. В отдельной Draft-ветке GD-17 добавлены `OfficeServerEnginePolicy`, `EuroOfficeSessionFactory` и MSTest: повторно используется контракт подписанной Docs API-конфигурации, но **без подключённого сервера/SSO/GUP-2 сохранения редакций сессии работают только в режиме просмотра**. Имеющийся PDF viewer и мастер печати остаются независимыми от Office-сервера. [Решение, безопасность и последовательность приёмки](docs/GET_DOCUMENT_EURO_OFFICE_PRIMARY_2026-10-26.md).
+
+**GD-17B:** подготовлены отдельный HTTPS launch broker `GetDocument.EuroOfficeHost`, одноразовая 128-битная ссылка для WebView, CSP-защищённая страница Euro-Office DocsAPI и `DenyAll` до подключения GUP-2/SSO. Добавлены тесты и [инструкция по offline-стенду](docs/GET_DOCUMENT_EURO_OFFICE_BROKER_GD17B_2026-10-26.md). Эти изменения находятся в Draft PR #42, реальные корпоративные документы пока открыть через этот сервер нельзя.
+
+
+**GD-17C.1:** [привязка текущей вкладки к GUP-2](docs/GET_DOCUMENT_GUP2_BINDING_GD17C_2026-10-26.md) через существующий одноразовый код и проверку SHA-256 для сохранённых DOCX/XLSX. Запрещённая по умолчанию отдельная ИТ-политика `AllowGup2TabBinding`; без передачи файла и без повышения прав. **Это проверка метаданных, а не работающая SSO-сессия Euro-Office**. 
+
+**GD-17C.2:** [сервисный протокол аттестации GUP-2](docs/GET_DOCUMENT_EUROOFFICE_ATTESTATION_GD17C2_2026-10-26.md) с HMAC и строгой проверкой read-only метаданных; сопряжённый [GUP-2 PR #174](https://github.com/avers2604/Gup-2/pull/174). Вход в Euro-Office и выдача файлов ещё намеренно запрещены до реального SSO, ACL content gateway и immutable revision sink.
+
+**GD-17D.1:** добавлен [строго проверяющий HMAC content клиент](docs/GET_DOCUMENT_EUROOFFICE_CONTENT_GD17D_2026-10-26.md) для чтения рабочих DOCX/XLSX только с закреплённой S3 VersionId после разрешения GUP-2 — связанный [GUP-2 PR #176](https://github.com/avers2604/Gup-2/pull/176). Передача до 64 МиБ в памяти, SHA-256 до выдачи байтов. Функция отключена по умолчанию; запуск Euro-Office, callback и сохранение новых версий ещё не подключены.
+
+**GD-17D.2a — callback:** [контроль JWT и GUP-2 CAS](docs/GET_DOCUMENT_EUROOFFICE_CALLBACK_GD17D2_2026-10-26.md); новый [GUP-2 Draft PR #177](https://github.com/avers2604/Gup-2/pull/177). Нативный callback Euro-Office, отдельный JWT outbox, безопасное подтверждение статуса 2/6 и DеnyAll revision sink. Пока **запись не реализована**, 503 вместо ложного успеха, флаги off, реальные файлы/WORM и печать не затронуты.
+
+**GD-17D.2b / GD-23:** [GUP-2 commit через штатные CAS/архив/AV](docs/GET_DOCUMENT_EUROOFFICE_COMMIT_GD17D2B_2026-10-26.md), отдельный [GUP-2 Draft PR #179](https://github.com/avers2604/Gup-2/pull/179). Там внесён внутренний реальный механизм фиксации новой рабочей версии, append-only журнал сохранений и replay-защита. Серверный обмен JWT/SSO и сетевой вызов commit ещё не подключены, `EuroOfficeHost` остаётся DenyAll.
+
+**GD-24:** серверный C# [клиент HMAC-возврата рабочей Office-редакции](docs/GET_DOCUMENT_EUROOFFICE_SAVE_TRANSPORT_GD24_2026-10-26.md) и связанный [GUP-2 Draft PR #182](https://github.com/avers2604/Gup-2/pull/182) с независимым save-grant, подписанным document.key, whitelist внутренних peer, CAS/архивом и replay-ответами. Инициатор trusted SSO и защищённый Document Server download пока не подключены; callback host остаётся DenyAll.
+
+**GD-25.1–25.2:** [HMAC SSO запуск через GUP-2](docs/GET_DOCUMENT_EUROOFFICE_SSO_SESSION_GD25_2026-10-27.md), связанный [Draft PR #185](https://github.com/avers2604/Gup-2/pull/185). В `GetDocument.Collaboration` добавлен `Gup2EuroOfficeEditorSessionClient`, строго проверяющий SSO UUID, HMAC, docKey, SHA и server-only save grant. Реальный ASP.NET SSO broker и доверенный редакторный session store ещё не подключены; EuroOfficeHost остаётся DenyAll.
