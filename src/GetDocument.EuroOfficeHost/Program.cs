@@ -1,6 +1,67 @@
 using GetDocument.Collaboration;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// GD-25.3: corporate SSO MUST originate in an independently validated OIDC
+// JWT from the pinned internal IdP, not an X-Forwarded-User header or a
+// manually created ClaimsPrincipal. Off by default.
+bool corporateSsoEnabled = EuroOfficeCorporateSsoPolicy.IsSsoEnabled(
+    Environment.GetEnvironmentVariable("GET_EUROOFFICE_SSO_ENABLED"));
+if (corporateSsoEnabled)
+{
+    var oidc = EuroOfficeCorporateSsoPolicy.CreateSettings(
+        Environment.GetEnvironmentVariable("GET_EUROOFFICE_SSO_AUTHORITY"),
+        Environment.GetEnvironmentVariable("GET_EUROOFFICE_SSO_ISSUER"),
+        Environment.GetEnvironmentVariable("GET_EUROOFFICE_SSO_AUDIENCE"));
+
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.Authority = oidc.Authority;
+            options.Audience = oidc.Audience;
+            options.RequireHttpsMetadata = true;
+            options.MapInboundClaims = false;
+            options.IncludeErrorDetails = false;
+            options.SaveToken = false;
+            options.BackchannelTimeout = TimeSpan.FromSeconds(10);
+            options.RefreshOnIssuerKeyNotFound = true;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = oidc.Issuer,
+                ValidateAudience = true,
+                ValidAudience = oidc.Audience,
+                ValidateIssuerSigningKey = true,
+                RequireSignedTokens = true,
+                ValidateLifetime = true,
+                RequireExpirationTime = true,
+                ClockSkew = TimeSpan.FromSeconds(30)
+            };
+            options.Events = new JwtBearerEvents
+            {
+                OnTokenValidated = context =>
+                {
+                    try
+                    {
+                        EuroOfficeCorporateSsoPolicy.BindVerifiedEmployee(
+                            context.Principal, TimeProvider.System.GetUtcNow());
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        context.Fail("Invalid immutable GUP-2 employee identity.");
+                    }
+                    return Task.CompletedTask;
+                }
+            };
+        });
+    builder.Services.AddAuthorization(options =>
+        options.AddPolicy("EuroOfficeCorporateSso", policy =>
+            policy.AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
+                .RequireAuthenticatedUser()));
+}
+
 // Do not log request-start paths containing one-time launch handles.
 // Reverse proxies must redact /get-document/editor/launch/{nonce} as well.
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
@@ -87,15 +148,26 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// Authenticate JWT before resolving any corporate editor launch. The
+// incoming callback has its independent server-to-server outbox signature
+// and is NOT granted access by a user's SSO bearer token.
+if (corporateSsoEnabled)
+{
+    app.UseAuthentication();
+    app.UseAuthorization();
+}
+
 // Liveness does not imply that real company files are accessible.
 app.MapGet("/health/live", () => Results.Ok(new { status = "live", authorizedStorage = false }));
 
-app.MapGet("/get-document/editor/launch/{launchId}", async (
+var launchRoute = app.MapGet("/get-document/editor/launch/{launchId}", async (
     string launchId, HttpContext context, ITrustedEuroOfficeLaunchStore store,
     EuroOfficeHostSecrets secrets, TimeProvider clock) =>
 {
     // The NativeWebView must be authenticated by the corporate SSO broker.
     // A matching path is not itself proof of permission to read the document.
+    if (!corporateSsoEnabled)
+        return Results.NotFound();
     if (context.User.Identity?.IsAuthenticated != true)
         return Results.Unauthorized();
 
@@ -125,6 +197,9 @@ app.MapGet("/get-document/editor/launch/{launchId}", async (
         return Results.StatusCode(StatusCodes.Status403Forbidden);
     }
 });
+// Even a valid SSO user does not bypass the still-denying grant provider.
+if (corporateSsoEnabled)
+    launchRoute.RequireAuthorization("EuroOfficeCorporateSso");
 
 
 // Native Docs API callback is disabled independently of editor launch.
