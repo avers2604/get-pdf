@@ -57,7 +57,7 @@ public sealed class EuroOfficeCorporateSsoPolicyTests
     [TestMethod]
     public void ValidatesRecentTokenAndCreatesOnlyCanonicalGup2EmployeeIdentifier()
     {
-        var principal = Principal(additional: new Claim("preferred_username", "dispatcher"));
+        var principal = Principal(additional: [new Claim("preferred_username", "dispatcher")]);
         EuroOfficeCorporateSsoPolicy.BindVerifiedEmployee(principal, Now);
         Assert.AreEqual(Uid, principal.FindFirst(ClaimTypes.NameIdentifier)?.Value);
         Assert.AreEqual(1, principal.FindAll(ClaimTypes.NameIdentifier).Count());
@@ -89,12 +89,12 @@ public sealed class EuroOfficeCorporateSsoPolicyTests
     {
         Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
             EuroOfficeCorporateSsoPolicy.BindVerifiedEmployee(
-                Principal(additional: new Claim("sub",
-                    "22222222-2222-4333-8444-555555555555")), Now));
+                Principal(additional: [new Claim("sub",
+                    "22222222-2222-4333-8444-555555555555")]), Now));
         Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
             EuroOfficeCorporateSsoPolicy.BindVerifiedEmployee(
-                Principal(additional: new Claim(
-                    ClaimTypes.NameIdentifier, "22222222-2222-4333-8444-555555555555")), Now));
+                Principal(additional: [new Claim(
+                    ClaimTypes.NameIdentifier, "22222222-2222-4333-8444-555555555555")]), Now));
         Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
             EuroOfficeCorporateSsoPolicy.BindVerifiedEmployee(
                 Principal(additional: [
@@ -126,11 +126,11 @@ public sealed class EuroOfficeCorporateSsoPolicyTests
         ], "jwt-corporate"));
         Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
             EuroOfficeCorporateSsoPolicy.BindVerifiedEmployee(missingIat, Now));
-        var doubledExpiry = Principal(additional: new Claim("exp",
-            Now.AddMinutes(5).ToUnixTimeSeconds().ToString()));
+        var doubledExpiry = Principal(additional: [new Claim("exp",
+            Now.AddMinutes(5).ToUnixTimeSeconds().ToString())]);
         Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
             EuroOfficeCorporateSsoPolicy.BindVerifiedEmployee(doubledExpiry, Now));
-        var junkTimestamp = Principal(additional: new Claim("iat", "2026-10-27"));
+        var junkTimestamp = Principal(additional: [new Claim("iat", "2026-10-27")]);
         Assert.ThrowsExactly<UnauthorizedAccessException>(() =>
             EuroOfficeCorporateSsoPolicy.BindVerifiedEmployee(junkTimestamp, Now));
     }
