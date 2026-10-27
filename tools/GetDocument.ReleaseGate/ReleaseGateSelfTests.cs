@@ -65,6 +65,65 @@ internal static class ReleaseGateSelfTests
                 .SetAttributeValue("outcome", "Failed");
             return !ReleaseReportEvaluator.EvaluateDocument("Core", "linux", doc).Approved;
         });
+        Check("empty success summary is never trusted", () =>
+        {
+            var doc = MakeTrx(requiredCore.Select(x => (x, "Passed")));
+            XNamespace ns = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
+            doc.Root!.Element(ns + "ResultSummary")!.SetAttributeValue("outcome", "");
+            return !ReleaseReportEvaluator.EvaluateDocument("Core", "linux", doc).Approved;
+        });
+        Check("unknown or inconclusive summary is never trusted", () =>
+        {
+            var doc = MakeTrx(requiredCore.Select(x => (x, "Passed")));
+            XNamespace ns = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
+            doc.Root!.Element(ns + "ResultSummary")!.SetAttributeValue("outcome", "Inconclusive");
+            return !ReleaseReportEvaluator.EvaluateDocument("Core", "linux", doc).Approved;
+        });
+        Check("executed count cannot be less than passed count", () =>
+        {
+            var doc = MakeTrx(requiredCore.Select(x => (x, "Passed")));
+            XNamespace ns = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
+            doc.Root!.Element(ns + "ResultSummary")!.Element(ns + "Counters")!
+                .SetAttributeValue("executed", 0);
+            return !ReleaseReportEvaluator.EvaluateDocument("Core", "linux", doc).Approved;
+        });
+        Check("not-executed count must agree with total and executed", () =>
+        {
+            var doc = MakeTrx(requiredCore.Select(x => (x, "Passed")));
+            XNamespace ns = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
+            doc.Root!.Element(ns + "ResultSummary")!.Element(ns + "Counters")!
+                .SetAttributeValue("notExecuted", 1);
+            return !ReleaseReportEvaluator.EvaluateDocument("Core", "linux", doc).Approved;
+        });
+        Check("missing TRX run ID cannot attest acceptance", () =>
+        {
+            var doc = MakeTrx(requiredCore.Select(x => (x, "Passed")));
+            doc.Root!.Attribute("id")!.Remove();
+            return !ReleaseReportEvaluator.EvaluateDocument("Core", "linux", doc).Approved;
+        });
+        Check("forged non-GUID run ID cannot attest acceptance", () =>
+        {
+            var doc = MakeTrx(requiredCore.Select(x => (x, "Passed")));
+            doc.Root!.SetAttributeValue("id", "not-a-guid");
+            return !ReleaseReportEvaluator.EvaluateDocument("Core", "linux", doc).Approved;
+        });
+        Check("one TRX cannot impersonate two separate suites", () =>
+        {
+            var doc = MakeTrx([("Ordinary", "Passed")]);
+            var images = ReleaseReportEvaluator.EvaluateDocument("Images", "linux", doc);
+            var revisions = ReleaseReportEvaluator.EvaluateDocument("Revisions", "linux", doc);
+            return images.Approved && revisions.Approved &&
+                   !ReleaseReportEvaluator.AreIndependentRuns([images, revisions]);
+        });
+        Check("separate TRX run IDs are accepted", () =>
+        {
+            var images = ReleaseReportEvaluator.EvaluateDocument("Images", "linux",
+                MakeTrx([("Ordinary", "Passed")]));
+            var revisions = ReleaseReportEvaluator.EvaluateDocument("Revisions", "linux",
+                MakeTrx([("Ordinary", "Passed")]));
+            return images.Approved && revisions.Approved &&
+                   ReleaseReportEvaluator.AreIndependentRuns([images, revisions]);
+        });
         Check("failed optional test blocks", () =>
             !ReleaseReportEvaluator.EvaluateDocument("Core", "linux",
                 MakeTrx(requiredCore.Select(x => (x, "Passed"))
