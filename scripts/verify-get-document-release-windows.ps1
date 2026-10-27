@@ -43,7 +43,7 @@ foreach ($suite in @('Core','Office','Printing','Images','Revisions','Collaborat
     & dotnet test --project $project -c Release --no-restore --results-directory $reports -- --report-trx --report-trx-filename "$suite.trx"
     if ($LASTEXITCODE -ne 0) { throw "Test suite failed: $suite" }
 }
-& dotnet test --project tests/GetPdf.Tests/GetPdf.Tests.csproj -c Release --no-restore -- --report-trx --report-trx-filename 'LegacyPdf.trx' --results-directory $reports
+& dotnet test --project tests/GetPdf.Tests/GetPdf.Tests.csproj -c Release --no-restore --results-directory $reports -- --report-trx --report-trx-filename 'LegacyPdf.trx'
 if ($LASTEXITCODE -ne 0) { throw 'Legacy GetPdf regression tests failed.' }
 & dotnet run --project tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj -c Release --no-build --no-restore -- $reports windows
 if ($LASTEXITCODE -ne 0) { throw 'Critical GD-25 release gate test missing/failed/inconclusive.' }
