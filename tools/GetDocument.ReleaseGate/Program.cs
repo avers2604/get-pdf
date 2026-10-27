@@ -9,11 +9,24 @@ internal static class Program
         if (args.Length == 1 && args[0] == "--self-test")
             return ReleaseGateSelfTests.Run();
 
+        if (args.Length == 3 && args[0] == "--audit-contracts")
+        {
+            IReadOnlyList<string> problems =
+                TestContractAuditor.Audit(args[1], args[2]);
+            foreach (string problem in problems)
+                Console.Error.WriteLine("SOURCE CONTRACT FAIL: " + problem);
+            if (problems.Count != 0)
+                return 1;
+            Console.WriteLine("PASS: mandatory test methods exist in source. " +
+                "Actual build and TRX Passed results are still required.");
+            return 0;
+        }
+
         if (args.Length != 2 || (args[1] != "linux" && args[1] != "windows") ||
             !Directory.Exists(args[0]))
         {
             Console.Error.WriteLine(
-                "Usage: GetDocument.ReleaseGate <trx-directory> <linux|windows> | --self-test");
+                "Usage: GetDocument.ReleaseGate <trx-directory> <linux|windows> | --self-test | --audit-contracts <repo-root> <linux|windows>");
             return 2;
         }
 

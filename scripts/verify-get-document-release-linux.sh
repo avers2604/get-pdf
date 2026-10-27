@@ -18,6 +18,9 @@ dotnet build tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
 # Validate the evaluator itself before trusting any of its TRX decisions.
 dotnet run --project tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
   -c Release --no-build --no-restore -- --self-test
+# Verify required method declarations before spending time running all MSTest suites.
+dotnet run --project tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
+  -c Release --no-build --no-restore -- --audit-contracts "$(pwd)" linux
 
 # TRX may include user documents and local paths: store reports privately,
 # outside shared source checkout; chmod limits access to the current OS user.
