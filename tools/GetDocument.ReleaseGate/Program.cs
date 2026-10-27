@@ -36,13 +36,17 @@ internal static class Program
                 Console.Error.WriteLine("  invalid report: " + message);
         }
 
+        bool independentRuns = ReleaseReportEvaluator.AreIndependentRuns(suites);
+        if (!independentRuns)
+            Console.Error.WriteLine("RELEASE BLOCKED: TRX идентификаторы запусков совпадают или отсутствуют.");
         bool approved = suites.Count ==
             ReleaseReportEvaluator.ExpectedSuites(platform).Count &&
-            suites.All(x => x.Approved);
+            independentRuns && suites.All(x => x.Approved);
         var summary = new
         {
             Platform = platform,
             Approved = approved,
+            IndependentRuns = independentRuns,
             Suites = suites,
             RequiredSuiteCount = ReleaseReportEvaluator.ExpectedSuites(platform).Count
         };
