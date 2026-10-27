@@ -169,9 +169,9 @@ internal static class ReleaseGateSelfTests
             try
             {
                 File.WriteAllText(Path.Combine(root, "Fixture.cs"),
-                    "// [TestMethod] public void RequiredCase() { }\\n" +
-                    "public void RequiredCase() { }\\n" +
-                    "[TestMethod] public void FakeRequiredCase() { }\\n");
+                    "// [TestMethod] public void RequiredCase() { }\n" +
+                    "public void RequiredCase() { }\n" +
+                    "[TestMethod] public void FakeRequiredCase() { }\n");
                 return !TestContractAuditor.HasRequiredMethod(root, "RequiredCase") &&
                     TestContractAuditor.HasRequiredMethod(root, "FakeRequiredCase");
             }
@@ -185,8 +185,8 @@ internal static class ReleaseGateSelfTests
             try
             {
                 File.WriteAllText(Path.Combine(root, "Fixture.cs"),
-                    "[TestMethod]\\n[Timeout(240_000, CooperativeCancellation = true)]\\n" +
-                    "public async Task RequiredCase() => await Task.CompletedTask;\\n");
+                    "[TestMethod]\n[Timeout(240_000, CooperativeCancellation = true)]\n" +
+                    "public async Task RequiredCase() => await Task.CompletedTask;\n");
                 return TestContractAuditor.HasRequiredMethod(root, "RequiredCase");
             }
             finally { Directory.Delete(root, recursive: true); }
@@ -199,7 +199,7 @@ internal static class ReleaseGateSelfTests
             try
             {
                 File.WriteAllText(Path.Combine(root, "Fixture.cs"),
-                    "[TestMethod] public void RequiredCaseSuffix() { }\\n");
+                    "[TestMethod] public void RequiredCaseSuffix() { }\n");
                 return !TestContractAuditor.HasRequiredMethod(root, "RequiredCase");
             }
             finally { Directory.Delete(root, recursive: true); }
