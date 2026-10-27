@@ -63,7 +63,7 @@ internal static class ReleaseReportEvaluator
         if (document.Root?.Name != XName.Get("TestRun", TrxNamespace))
             return FailedReport(suite, platform, "Корневой элемент не является стандартным TestRun TRX.");
 
-        Guid? runId = Guid.TryParse((string?)document.Root.Attribute("id"),
+        Guid? runId = Guid.TryParse((string?)document.Root!.Attribute("id"),
             out Guid parsedId) && parsedId != Guid.Empty ? parsedId : null;
         if (runId is null)
             errors.Add("У TRX отсутствует допустимый идентификатор TestRun.");
