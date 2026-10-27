@@ -7,7 +7,8 @@ internal sealed record TestOutcome(string Name, string Status);
 
 internal sealed record SuiteResult(
     string Suite, int Passed, int Failed, int Other,
-    IReadOnlyList<string> MissingRequired, IReadOnlyList<string> IntegrityErrors)
+    IReadOnlyList<string> MissingRequired, IReadOnlyList<string> IntegrityErrors,
+    Guid? RunId = null)
 {
     public bool Approved => Passed > 0 && Failed == 0 &&
                             MissingRequired.Count == 0 && IntegrityErrors.Count == 0;
@@ -62,6 +63,11 @@ internal static class ReleaseReportEvaluator
         if (document.Root?.Name != XName.Get("TestRun", TrxNamespace))
             return FailedReport(suite, platform, "Корневой элемент не является стандартным TestRun TRX.");
 
+        Guid? runId = Guid.TryParse((string?)document.Root.Attribute("id"),
+            out Guid parsedId) && parsedId != Guid.Empty ? parsedId : null;
+        if (runId is null)
+            errors.Add("У TRX отсутствует допустимый идентификатор TestRun.");
+
         XNamespace ns = TrxNamespace;
         var resultsRoot = document.Root.Element(ns + "Results");
         var summary = document.Root.Element(ns + "ResultSummary");
@@ -71,10 +77,9 @@ internal static class ReleaseReportEvaluator
         if (summary is null || counters is null)
             errors.Add("Отсутствует ResultSummary/Counters.");
         string summaryOutcome = ((string?)summary?.Attribute("outcome") ?? "").Trim();
-        if (summaryOutcome.Equals("Failed", StringComparison.OrdinalIgnoreCase) ||
-            summaryOutcome.Equals("Aborted", StringComparison.OrdinalIgnoreCase) ||
-            summaryOutcome.Equals("Error", StringComparison.OrdinalIgnoreCase))
-            errors.Add("ResultSummary сообщает об ошибке выполнения тестов.");
+        if (!summaryOutcome.Equals("Completed", StringComparison.OrdinalIgnoreCase) &&
+            !summaryOutcome.Equals("Passed", StringComparison.OrdinalIgnoreCase))
+            errors.Add("ResultSummary не подтверждает успешное завершение тестов.");
 
         var results = resultsRoot?.Elements(ns + "UnitTestResult").Select(element =>
             new TestOutcome(
@@ -106,9 +111,15 @@ internal static class ReleaseReportEvaluator
             int? total = Counter(counters, "total");
             int? summaryPassed = Counter(counters, "passed");
             int? summaryFailed = Counter(counters, "failed");
+            int? executed = Counter(counters, "executed");
+            int? notExecuted = counters.Attribute("notExecuted") is null
+                ? null : Counter(counters, "notExecuted");
             if (total is null || summaryPassed is null || summaryFailed is null ||
-                total != results.Length || summaryPassed != passed ||
-                summaryFailed != failed)
+                executed is null || total != results.Length || summaryPassed != passed ||
+                summaryFailed != failed || executed < passed + failed ||
+                executed > total ||
+                (counters.Attribute("notExecuted") is not null &&
+                    (notExecuted is null || notExecuted != total - executed)))
                 errors.Add("Счётчики TRX не совпадают с результатами тестов.");
         }
 
@@ -121,8 +132,13 @@ internal static class ReleaseReportEvaluator
                 !result.Status.Equals("Passed", StringComparison.OrdinalIgnoreCase));
         }).ToArray();
 
-        return new SuiteResult(suite, passed, failed, other, missing, errors);
+        return new SuiteResult(suite, passed, failed, other, missing, errors, runId);
     }
+
+    /// <summary>Each project must provide evidence from a distinct execution, not a copied TRX.</summary>
+    internal static bool AreIndependentRuns(IReadOnlyList<SuiteResult> reports) =>
+        reports.Count > 0 && reports.All(report => report.RunId is not null) &&
+        reports.Select(report => report.RunId!.Value).Distinct().Count() == reports.Count;
 
     // Do not accept e.g. TestFoo_Fake instead of TestFoo. Fully-qualified
     // MSTest class names in TRX have the exact method as the last segment.
