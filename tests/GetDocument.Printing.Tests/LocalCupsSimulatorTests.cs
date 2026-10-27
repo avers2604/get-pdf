@@ -111,6 +111,26 @@ public sealed class LocalCupsSimulatorTests
     }
 
     [TestMethod]
+    public async Task ChangedSnapshotDuringPrinterDiscoveryIsRejectedEvenWithoutOptionsProbe()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Inconclusive("Fake CUPS executable tests require Linux.");
+
+        using var cups = new FakeCups();
+        using var frozen = await cups.CreateSnapshotAsync("test.pdf");
+        cups.TamperDuringPrinterDiscovery(frozen.Path);
+        // The default A4/simplex job does not call lpoptions; the second
+        // digest must still detect changes made during lpstat -e.
+        var plan = PrintJobPlan.Create("GET_SIMULATOR", 1, "", 1,
+            PrintDuplex.OneSided, PrintPaper.A4);
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+            LocalPrintBroker.SubmitPdfAsync(frozen.Path, plan,
+                CancellationToken.None, frozen.Sha256Hex));
+        Assert.IsFalse(File.Exists(cups.ArgumentsFile));
+        Assert.IsFalse(await frozen.VerifyAsync(CancellationToken.None));
+    }
+
+    [TestMethod]
     public async Task ChangedSnapshotDuringCupsCapabilityProbeIsRejectedBeforeLp()
     {
         if (!OperatingSystem.IsLinux())
@@ -322,6 +342,7 @@ public sealed class LocalCupsSimulatorTests
         private readonly string? _previousNoReceipt;
         private readonly string? _previousHugeReply;
         private readonly string? _previousTamperTarget;
+        private readonly string? _previousDiscoveryTamperTarget;
         private readonly string _folder;
 
         public FakeCups()
@@ -334,7 +355,10 @@ public sealed class LocalCupsSimulatorTests
             WriteExecutable("lpstat", """
                 #!/bin/sh
                 case "$1" in
-                  -e) if [ "${GETDOC_FAKE_CUPS_NO_QUEUE:-0}" != "1" ]; then printf 'GET_SIMULATOR\n'; fi ;;
+                  -e) if [ -n "${GETDOC_FAKE_CUPS_DISCOVERY_TAMPER_TARGET:-}" ]; then
+                        printf '%s\n' '%PDF-1.7 modified during lpstat' > "$GETDOC_FAKE_CUPS_DISCOVERY_TAMPER_TARGET"
+                      fi
+                      if [ "${GETDOC_FAKE_CUPS_NO_QUEUE:-0}" != "1" ]; then printf 'GET_SIMULATOR\n'; fi ;;
                   -d) printf 'system default destination: GET_SIMULATOR\n' ;;
                   -p) printf 'printer GET_SIMULATOR is idle.\n' ;;
                   *) exit 2 ;;
@@ -383,6 +407,7 @@ public sealed class LocalCupsSimulatorTests
             _previousNoReceipt = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_RECEIPT");
             _previousHugeReply = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_HUGE_REPLY");
             _previousTamperTarget = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_TAMPER_TARGET");
+            _previousDiscoveryTamperTarget = Environment.GetEnvironmentVariable("GETDOC_FAKE_CUPS_DISCOVERY_TAMPER_TARGET");
             // The fake commands rely only on /bin/sh shell builtins. Excluding
             // the original PATH makes fallback to a real lp impossible.
             Environment.SetEnvironmentVariable("PATH", _folder);
@@ -394,6 +419,7 @@ public sealed class LocalCupsSimulatorTests
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_RECEIPT", "0");
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_HUGE_REPLY", "0");
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_TAMPER_TARGET", null);
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_DISCOVERY_TAMPER_TARGET", null);
         }
 
         public string ArgumentsFile { get; }
@@ -422,6 +448,9 @@ public sealed class LocalCupsSimulatorTests
 
         public void TamperDuringCapabilitiesProbe(string pdfPath) =>
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_TAMPER_TARGET", pdfPath);
+
+        public void TamperDuringPrinterDiscovery(string pdfPath) =>
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_DISCOVERY_TAMPER_TARGET", pdfPath);
 
         public async Task<PrintFileSnapshot> CreateSnapshotAsync(string name)
         {
@@ -453,6 +482,7 @@ public sealed class LocalCupsSimulatorTests
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_NO_RECEIPT", _previousNoReceipt);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_HUGE_REPLY", _previousHugeReply);
             Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_TAMPER_TARGET", _previousTamperTarget);
+            Environment.SetEnvironmentVariable("GETDOC_FAKE_CUPS_DISCOVERY_TAMPER_TARGET", _previousDiscoveryTamperTarget);
             try { Directory.Delete(_folder, recursive: true); }
             catch (IOException) { }
         }
