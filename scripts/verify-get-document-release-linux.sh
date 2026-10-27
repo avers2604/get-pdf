@@ -8,6 +8,7 @@ if [[ -z "$feed" ]]; then
   echo "Usage: bash scripts/verify-get-document-release-linux.sh /local/nuget-feed" >&2
   exit 2
 fi
+bash scripts/check-get-document-lab-linux.sh "$feed"
 bash scripts/verify-get-document-offline-linux.sh "$feed"
 
 dotnet restore tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
