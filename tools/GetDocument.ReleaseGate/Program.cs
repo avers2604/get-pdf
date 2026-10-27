@@ -19,6 +19,14 @@ internal static class Program
 
         string directory = Path.GetFullPath(args[0]);
         string platform = args[1];
+        // An OS-specific sign-off is invalid if the reports were generated
+        // by a different operating system, even when TRX filenames match.
+        if ((platform == "windows" && !OperatingSystem.IsWindows()) ||
+            (platform == "linux" && !OperatingSystem.IsLinux()))
+        {
+            Console.Error.WriteLine("RELEASE BLOCKED: target OS does not match laboratory OS.");
+            return 2;
+        }
         var suites = new List<SuiteResult>();
 
         foreach (string suite in ReleaseReportEvaluator.ExpectedSuites(platform))
@@ -42,7 +50,12 @@ internal static class Program
         var summary = new
         {
             Platform = platform,
-            Approved = approved,
+            CheckedAtUtc = DateTimeOffset.UtcNow,
+            RuntimeVersion = Environment.Version.ToString(),
+            Approved = approved, // Backward-compatible automated gate field only.
+            AutomatedTestsApproved = approved,
+            HardwareAcceptance = "NotVerified",
+            ReleaseAuthorized = false, // Human hardware/WORM acceptance is separate.
             Suites = suites,
             RequiredSuiteCount = ReleaseReportEvaluator.ExpectedSuites(platform).Count
         };
