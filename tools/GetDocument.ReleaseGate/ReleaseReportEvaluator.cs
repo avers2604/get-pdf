@@ -160,6 +160,8 @@ internal static class ReleaseReportEvaluator
             "SubmitsExactArgumentVectorWithUnicodePdfPathAndFrozenDigest",
             "FullDocumentFourUpOmitsOutputPageRange",
             "MissingLocalLpIsDefiniteFailureBeforeSubmission",
+            "ChangedSnapshotDuringPrinterDiscoveryIsRejectedEvenWithoutOptionsProbe",
+            "ChangedSnapshotDuringCupsCapabilityProbeIsRejectedBeforeLp",
             "ExcessivePrinterOutputIsRejectedWithoutUnboundedBuffering",
             "UnboundedDriverOutputIsFullyDrainedButNeverBuffered"
         ],
