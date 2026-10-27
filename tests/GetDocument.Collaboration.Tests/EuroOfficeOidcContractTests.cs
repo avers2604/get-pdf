@@ -10,7 +10,7 @@ public sealed class EuroOfficeOidcContractTests
     private const string Issuer = "https://sso.intra.get.test/realms/get";
     private const string ClientId = "get-documents-broker";
     private static readonly string ClientSecret = new('X', 40);
-    private const string UserUuid = "11111111-2222-4333-8444-555555555555";
+    private const string UserUuid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
     [TestMethod]
     public void DisabledOidcRequiresNeitherIssuerNorSecret()
