@@ -29,6 +29,8 @@ if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate restore failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate build failed.' }
 & dotnet run --project tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj -c Release --no-build --no-restore -- --self-test
 if ($LASTEXITCODE -ne 0) { throw 'ReleaseGate self-tests failed.' }
+& dotnet run --project tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj -c Release --no-build --no-restore -- --audit-contracts (Get-Location).Path windows
+if ($LASTEXITCODE -ne 0) { throw 'Mandatory MSTest source-contract audit failed.' }
 
 # Reports may contain document paths: use the private current-user data area,
 # not a shared source checkout or publicly readable artifacts directory.
