@@ -70,8 +70,10 @@ internal static class TestContractAuditor
                 string trimmed = line.Trim();
                 if (trimmed.StartsWith("//", StringComparison.Ordinal))
                     continue;
-                if (trimmed.Contains("[TestMethod]", StringComparison.Ordinal) ||
-                    trimmed.Contains("[DataTestMethod]", StringComparison.Ordinal))
+                // An attribute must start the source line; matching a word
+                // inside a comment/string would give a false contract approval.
+                if (trimmed.StartsWith("[TestMethod]", StringComparison.Ordinal) ||
+                    trimmed.StartsWith("[DataTestMethod]", StringComparison.Ordinal))
                     attributed = true;
                 if (!attributed) continue;
 
