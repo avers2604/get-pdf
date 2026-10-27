@@ -1,4 +1,5 @@
 using GetDocument.Collaboration;
+using GetDocument.EuroOfficeHost;
 
 var builder = WebApplication.CreateBuilder(args);
 // Do not log request-start paths containing one-time launch handles.
@@ -41,21 +42,29 @@ if (signingKey.Length < 32)
 // Incoming editor config JWT and outgoing callback JWT may use different
 // Document Server secrets. Require an independent pinned outbox secret before
 // the callback route can ever be enabled.
-// Explicitly keep editor launches switched off until a validated OIDC/SSO
-// authentication handler is registered and its issuer/audience/revocation
-// checks have passed the local corporate acceptance suite.
+// GD-25.4: a real OIDC authorization-code/PKCE web authentication handler
+// can be enabled independently of Office document access. No OIDC secret,
+// issuer or client is inferred; the signed ID token MUST carry an explicit
+// gup_user_id claim supplied by the enterprise IdP's configured mapper.
+bool oidcEnabled =
+    Environment.GetEnvironmentVariable("GET_EUROOFFICE_OIDC_ENABLED") == "1";
+EuroOfficeOidcConfiguration? corporateOidc = EuroOfficeOidcConfiguration.Create(
+    oidcEnabled,
+    Environment.GetEnvironmentVariable("GET_EUROOFFICE_OIDC_ISSUER"),
+    Environment.GetEnvironmentVariable("GET_EUROOFFICE_OIDC_CLIENT_ID"),
+    Environment.GetEnvironmentVariable("GET_EUROOFFICE_OIDC_CLIENT_SECRET"));
+if (corporateOidc is not null)
+    builder.Services.AddCorporateOidc(corporateOidc);
+
+// Document access remains *separately* denied until the actual corporate
+// GUP-2 launch store + content gateway + callback revision sink are installed.
 bool enterpriseLaunchEnabled =
     Environment.GetEnvironmentVariable("GET_EUROOFFICE_ENTERPRISE_LAUNCH_ENABLED") == "1";
-string? validatedSsoScheme =
-    Environment.GetEnvironmentVariable("GET_EUROOFFICE_VALIDATED_SSO_SCHEME");
 if (enterpriseLaunchEnabled)
-{
-    // A configured name alone is not an authentication handler.
-    // There is deliberately no real SSO middleware registered in this host.
     throw new InvalidOperationException(
-        "Enterprise Euro-Office launch requires a reviewed corporate SSO " +
-        "authentication handler, issuer/audience verification and revocation.");
-}
+        "Enterprise Office launch needs the reviewed GUP-2 launch store, " +
+        "content delivery, callback CAS sink and live revocation; OIDC alone " +
+        "cannot authorize document access.");
 
 bool callbacksEnabled =
     Environment.GetEnvironmentVariable("GET_EUROOFFICE_CALLBACKS_ENABLED") == "1";
@@ -104,6 +113,18 @@ app.Use(async (context, next) =>
 });
 
 // Liveness does not imply that real company files are accessible.
+// Authentication is enabled only with a validated corporate OIDC configuration.
+// No unsigned proxy identity headers or development/test authentication scheme.
+if (corporateOidc is not null)
+{
+    app.UseAuthentication();
+    app.MapGet("/get-document/auth/login",
+        () => EuroOfficeOidcAuthentication.ChallengeCorporateSso());
+    app.MapGet("/get-document/auth/status",
+        (HttpContext context) => EuroOfficeOidcAuthentication.AuthenticationStatus(
+            context.User));
+}
+
 app.MapGet("/health/live", () => Results.Ok(new { status = "live", authorizedStorage = false }));
 
 app.MapGet("/get-document/editor/launch/{launchId}", async (
@@ -114,12 +135,10 @@ app.MapGet("/get-document/editor/launch/{launchId}", async (
     // A matching path is not itself proof of permission to read the document.
     if (!enterpriseLaunchEnabled)
         return Results.NotFound();
-    // This additional policy is not a substitute for an ASP.NET SSO
-    // authentication handler. The host refuses startup if the feature is
-    // enabled without that handler.
-    IReadOnlySet<string> trustedSchemes = validatedSsoScheme is { Length: > 0 }
-        ? new HashSet<string>(StringComparer.Ordinal) { validatedSsoScheme }
-        : new HashSet<string>(StringComparer.Ordinal);
+    // An OIDC login never authorizes file access by itself.
+    // The corporate store remains DenyAll until independently reviewed.
+    IReadOnlySet<string> trustedSchemes = new HashSet<string>(StringComparer.Ordinal)
+        { EuroOfficeOidcIdentityMapper.Scheme };
     if (!EuroOfficeEnterprisePrincipalPolicy.IsApproved(
         context.User, trustedSchemes))
         return Results.Unauthorized();

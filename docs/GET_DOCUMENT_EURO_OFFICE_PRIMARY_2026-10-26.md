@@ -19,6 +19,8 @@
 
 > **GD-25.1–25.2:** GUP-2 [PR #185](https://github.com/avers2604/Gup-2/pull/185) добавляет SSO browser one-use editor launch / внутренний HMAC redeem; в GET Documents доступен [строгий C# клиент и контракт](GET_DOCUMENT_EUROOFFICE_SSO_SESSION_GD25_2026-10-27.md). Реальный ASP.NET middleware/запуск Document Server и подключённый callback sink — следующий этап, пока DenyAll.
 
+> **GD-25.4:** [OIDC SSO Keycloak/authentik](GET_DOCUMENT_EUROOFFICE_OIDC_GD25_4_2026-10-27.md) в EuroOfficeHost: реальный Code+PKCE middleware с короткой cookie и pin JWKS/issuer/audience, строгий `gup_user_id` mapping, но editor content/launch/callback сохраняют deny-by-default.
+
 ## 1. Приоритет движков
 
 1. **Euro-Office Document Server** — основной движок для DOCX/XLSX/PPTX в локальной сети и совместного редактирования. Это **не** файловый сервер, не система ACL и не замена ГЭТ Файлы/GUP-2.
