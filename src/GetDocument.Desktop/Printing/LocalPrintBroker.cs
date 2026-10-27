@@ -84,16 +84,8 @@ internal static class LocalPrintBroker
             expectedSha256.Any(c => c is not (>= '0' and <= '9'
                 or >= 'a' and <= 'f')))
             throw new ArgumentException("Некорректная контрольная сумма PDF.", nameof(expectedSha256));
-        await using (var input = new FileStream(pdfPath, FileMode.Open, FileAccess.Read,
-                         FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan))
-        {
-            if (input.Length is < 5 or > PrintFileSnapshot.MaxBytes)
-                throw new InvalidDataException("PDF превышает допустимый размер.");
-            var computed = await SHA256.HashDataAsync(input, ct);
-            if (!CryptographicOperations.FixedTimeEquals(
-                Convert.FromHexString(expectedSha256), computed))
-                throw new InvalidDataException("PDF изменился перед отправкой на печать.");
-        }
+        byte[] approvedDigest = Convert.FromHexString(expectedSha256);
+        await VerifyPrintableDigestAsync(pdfPath, approvedDigest, ct);
 
         // Immediately re-check queue existence, not only the stale dropdown.
         var discovered = await PrintersAsync(ct);
@@ -132,6 +124,10 @@ internal static class LocalPrintBroker
                 throw new InvalidOperationException(
                     "Принтер не подтверждает бумагу A3/A4 или двустороннюю печать.");
 
+            // lp opens the path by itself. Recheck after every CUPS discovery /
+            // capability subprocess: those asynchronous probes create a window
+            // in which even a private snapshot could have been altered.
+            await VerifyPrintableDigestAsync(pdfPath, approvedDigest, ct);
             var args = CupsPrintArguments.Create(plan, Path.GetFullPath(pdfPath));
             string receipt = await RunAsync("lp", args, null, ct);
             string? job = PrintSubmissionReceipt.CupsJobId(receipt, plan.PrinterName);
@@ -161,6 +157,18 @@ internal static class LocalPrintBroker
             return "Windows принял задание в очередь. Фактическую печать проверьте на принтере.";
         }
         throw new PlatformNotSupportedException();
+    }
+
+    private static async Task VerifyPrintableDigestAsync(
+        string pdfPath, byte[] expectedDigest, CancellationToken ct)
+    {
+        await using var input = new FileStream(pdfPath, FileMode.Open, FileAccess.Read,
+            FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        if (input.Length is < 5 or > PrintFileSnapshot.MaxBytes)
+            throw new InvalidDataException("PDF превышает допустимый размер.");
+        byte[] computed = await SHA256.HashDataAsync(input, ct);
+        if (!CryptographicOperations.FixedTimeEquals(expectedDigest, computed))
+            throw new InvalidDataException("PDF изменился перед отправкой на печать.");
     }
 
     /// <summary>The user's default printer (Windows setting / CUPS default), or null.</summary>

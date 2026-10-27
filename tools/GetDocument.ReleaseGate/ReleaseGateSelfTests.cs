@@ -30,8 +30,13 @@ internal static class ReleaseGateSelfTests
         var valid = MakeTrx(requiredCore.Select(name => (Name: name, Status: "Passed")));
         Check("standard TRX passes", () =>
             ReleaseReportEvaluator.EvaluateDocument("Core", "linux", valid).Approved);
-        Check("Linux printing mandatory tests exist", () =>
-            ReleaseReportEvaluator.RequiredTests("Printing", "linux").Length >= 5);
+        Check("Linux printing includes tamper checks across both CUPS discovery probes", () =>
+        {
+            var required = ReleaseReportEvaluator.RequiredTests("Printing", "linux");
+            return required.Length >= 7 &&
+                required.Contains("ChangedSnapshotDuringPrinterDiscoveryIsRejectedEvenWithoutOptionsProbe") &&
+                required.Contains("ChangedSnapshotDuringCupsCapabilityProbeIsRejectedBeforeLp");
+        });
         Check("Windows Office test is mandatory", () =>
             ReleaseReportEvaluator.RequiredTests("Office", "windows")
                 .Contains("UnsavedOfficeEditsAreFrozenIntoPdfSnapshotForGetPrintWizard"));
