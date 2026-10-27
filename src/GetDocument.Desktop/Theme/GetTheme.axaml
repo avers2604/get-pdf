@@ -186,6 +186,10 @@
   <Style Selector="CheckBox">
     <Setter Property="Foreground" Value="{StaticResource GetInkBrush}"/>
   </Style>
+  <!-- The 10 px control radius would turn the 20 px check box into a circle (a radio button look). -->
+  <Style Selector="CheckBox /template/ Border#NormalRectangle">
+    <Setter Property="CornerRadius" Value="4"/>
+  </Style>
 
   <!-- Document tabs: compact 14 px headers instead of Fluent's 24 px "pivot" headers. -->
   <Style Selector="TabControl">

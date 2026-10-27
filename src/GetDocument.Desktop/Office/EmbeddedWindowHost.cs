@@ -72,6 +72,29 @@ internal sealed class EmbeddedWindowHost : NativeControlHost
         Fit();
     }
 
+    /// <summary>
+    /// Takes the keyboard back from the embedded window to GET Document's own window, so that an
+    /// Avalonia text box (find bar, dialogs) receives typing.
+    /// </summary>
+    public static void FocusTopLevel(TopLevel? top)
+    {
+        if (OperatingSystem.IsWindows() && top?.TryGetPlatformHandle()?.Handle is { } handle && handle != IntPtr.Zero)
+            SetFocus(handle);
+    }
+
+    /// <summary>Mouse position in <paramref name="control"/>'s coordinates (Avalonia does not track the
+    /// pointer while it is over the embedded window).</summary>
+    public static Point CursorIn(Control control)
+    {
+        if (!OperatingSystem.IsWindows() || !GetCursorPos(out var screen) || TopLevel.GetTopLevel(control) is not { } top)
+            return default;
+        Point client = top.PointToClient(new PixelPoint(screen.X, screen.Y));
+        Point inside = top.TranslatePoint(client, control) ?? default;
+        // Keyboard context-menu key: the mouse may be anywhere - fall back to the middle of the control.
+        return new Avalonia.Rect(control.Bounds.Size).Contains(inside)
+            ? inside : new Point(control.Bounds.Width / 2, control.Bounds.Height / 3);
+    }
+
     /// <summary>Gives keyboard focus to the embedded window (Windows attaches the input queues).</summary>
     public void FocusChild()
     {
@@ -139,6 +162,11 @@ internal sealed class EmbeddedWindowHost : NativeControlHost
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Rect { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X, Y; }
+
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out NativePoint point);
 
     private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);

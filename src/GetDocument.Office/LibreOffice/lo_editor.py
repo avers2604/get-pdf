@@ -2,9 +2,9 @@
 # LibreOffice opens each document in its own hidden window without menus, toolbars, sidebar or
 # info bars; GET Document reparents that window into its tab and drives it from GET DS controls.
 # Protocol: one JSON object per line.
-#   stdin : {"re": n, "op": "open"|"show"|"focus"|"dispatch"|"save"|"saveas"|"pdf"|"close", ...}
+#   stdin : {"re": n, "op": "open"|"show"|"focus"|"dispatch"|"find"|"save"|"saveas"|"pdf"|"close"|"convert", ...}
 #   stdout: {"re": n, "ok": true, ...} | {"re": n, "ok": false, "error": "..."}
-#           {"event": "state"|"modified"|"command"|"closed", "id": ..., ...}   (any time)
+#           {"event": "state"|"modified"|"command"|"contextmenu"|"closed", "id": ..., ...}   (any time)
 # Documents never run macros. When stdin closes the bridge closes every document and LibreOffice.
 import json
 import os
@@ -19,6 +19,7 @@ from com.sun.star.connection import NoConnectException
 from com.sun.star.frame import (XDispatch, XDispatchProviderInterceptor, XFrameActionListener,
                                 XLayoutManagerListener, XStatusListener)
 from com.sun.star.task import XInteractionHandler
+from com.sun.star.ui import XContextMenuInterceptor
 from com.sun.star.util import XCloseListener, XModifyListener
 
 # com.sun.star.document.MacroExecMode.FROM_LIST_NO_WARN: only macros from trusted locations run, and
@@ -40,7 +41,11 @@ STATE = {
 # Keyboard shortcuts that would open LibreOffice's own dialogs are handed to GET Document instead.
 INTERCEPTED = {".uno:Save", ".uno:SaveAs", ".uno:SaveAll", ".uno:Print", ".uno:PrintDefault",
                ".uno:PrintPreview", ".uno:ExportToPDF", ".uno:ExportDirectToPDF", ".uno:CloseDoc",
-               ".uno:CloseWin", ".uno:Quit", ".uno:Open", ".uno:AddDirect", ".uno:NewDoc"}
+               ".uno:CloseWin", ".uno:Quit", ".uno:Open", ".uno:AddDirect", ".uno:NewDoc",
+               # Ctrl+F / Ctrl+H open GET Document's own find & replace bar.
+               ".uno:SearchDialog", ".uno:Find", ".uno:FindBar", ".uno:FindReplace"}
+# com.sun.star.util.SearchFlags / TransliterationModules used by .uno:ExecuteSearch
+SEARCH_IGNORE_CASE = 256          # TransliterationModules.IGNORE_CASE
 
 _out = threading.Lock()
 
@@ -245,6 +250,76 @@ class Interceptor(unohelper.Base, XDispatchProviderInterceptor, XDispatch):
         pass
 
 
+class _Probe(unohelper.Base, XStatusListener):
+    """Reads a command's current enabled state (LibreOffice answers while the listener is added)."""
+    def __init__(self):
+        self.enabled = None
+
+    def statusChanged(self, event):
+        self.enabled = bool(event.IsEnabled)
+
+    def disposing(self, source):
+        pass
+
+
+class ContextMenuGuard(unohelper.Base, XContextMenuInterceptor):
+    """LibreOffice's own right-click menu is replaced by GET Document's: the commands LibreOffice
+    would have offered here (table rows, spelling suggestions...) are passed on with whether they are
+    available right now, and its menu is cancelled."""
+    def __init__(self, bridge, doc_id, frame):
+        self.bridge = bridge
+        self.doc_id = doc_id
+        self.frame = frame
+
+    def enabled(self, command):
+        try:
+            url = self.bridge.url(command)
+            dispatch = self.frame.queryDispatch(url, "", 0)
+            if dispatch is None:
+                return False
+            probe = _Probe()
+            dispatch.addStatusListener(probe, url)
+            dispatch.removeStatusListener(probe, url)
+            return probe.enabled is not False
+        except Exception:
+            return True
+
+    def notifyContextMenuExecute(self, event):
+        items = []
+        def collect(container):
+            if container is None:
+                return
+            for index in range(container.getCount()):
+                entry = container.getByIndex(index)
+                try:
+                    command = entry.getPropertyValue("CommandURL")
+                    text = entry.getPropertyValue("Text")
+                except Exception:
+                    continue
+                if command and len(items) < 200:
+                    items.append({"cmd": command, "text": (text or "").replace("~", "")})
+                try:
+                    collect(entry.getPropertyValue("SubContainer"))
+                except Exception:
+                    pass
+        try:
+            collect(event.ActionTriggerContainer)
+        except Exception:
+            pass
+        for command in (".uno:Cut", ".uno:Copy", ".uno:Paste"):
+            if not any(item["cmd"] == command for item in items):
+                items.append({"cmd": command, "text": ""})
+        # The right click has just moved the cursor; LibreOffice refreshes command states on its next
+        # idle pass, so they are read a moment later, after its menu has been cancelled.
+        def report():
+            time.sleep(0.15)
+            for item in items:
+                item["enabled"] = self.enabled(item["cmd"])
+            emit({"event": "contextmenu", "id": self.doc_id, "items": items})
+        threading.Thread(target=report, daemon=True).start()
+        return uno.Enum("com.sun.star.ui.ContextMenuInterceptorAction", "CANCELLED")
+
+
 class Interactions(unohelper.Base, XInteractionHandler):
     """Answers LibreOffice's questions during a hidden load, where no dialog could be shown.
     A lock left by a crash of this user's own LibreOffice is ignored (the document opens for editing);
@@ -367,6 +442,10 @@ class Bridge:
             except Exception:
                 pass
         frame.registerDispatchProviderInterceptor(Interceptor(doc_id))
+        try:
+            controller.registerContextMenuInterceptor(ContextMenuGuard(self, doc_id, frame))
+        except Exception:
+            pass
         modify = ModifyListener(doc_id, doc)
         doc.addModifyListener(modify)
         doc.addCloseListener(CloseListener(self, doc_id))
@@ -409,6 +488,109 @@ class Bridge:
         self.dispatcher.executeDispatch(entry.frame, request["cmd"], "", 0, arguments)
         if request.get("focus", True):
             entry.frame.getComponentWindow().setFocus()
+        return {}
+
+    def op_find(self, request):
+        """Find / replace with the document's own search API (no LibreOffice dialog, no "not found"
+        bar). Moves the selection to the match, wraps around at the end, reports what happened."""
+        entry = self.document(request)
+        text = request.get("text", "")
+        mode = request.get("mode", "next")
+        backwards = mode == "prev"
+        replace = request.get("replace", "")
+        controller = entry.doc.getCurrentController()
+
+        def descriptor(target, replacing=False):
+            d = target.createReplaceDescriptor() if replacing else target.createSearchDescriptor()
+            d.SearchString = text
+            if replacing:
+                d.ReplaceString = replace
+            d.SearchCaseSensitive = bool(request.get("matchCase"))
+            d.SearchWords = bool(request.get("wholeWords"))
+            d.SearchBackwards = backwards
+            return d
+
+        if entry.kind == "writer":
+            doc = entry.doc
+            if mode == "replaceall":
+                count = doc.replaceAll(descriptor(doc, True))
+                return {"found": count > 0, "count": count}
+            cursor = controller.getViewCursor()
+            if mode == "replace" and self._selection_matches(cursor.getString(), text, request):
+                cursor.setString(replace)
+                cursor.collapseToEnd()
+            d = descriptor(doc)
+            found = doc.findNext(cursor.getStart() if backwards else cursor.getEnd(), d)
+            if found is None:   # wrap around
+                matches = doc.findAll(d)
+                if matches.getCount() > 0:
+                    found = matches.getByIndex(matches.getCount() - 1 if backwards else 0)
+            if found is None:
+                return {"found": False}
+            controller.select(found)
+            return {"found": True}
+
+        if entry.kind == "calc":
+            sheets = entry.doc.getSheets()
+            if mode == "replaceall":
+                count = 0
+                for index in range(sheets.getCount()):
+                    sheet = sheets.getByIndex(index)
+                    count += sheet.replaceAll(descriptor(sheet, True))
+                return {"found": count > 0, "count": count}
+            active = controller.getActiveSheet()
+            selection = controller.getSelection()
+            if mode == "replace" and selection is not None and hasattr(selection, "replaceAll"):
+                selection.replaceAll(descriptor(selection, True))
+            order = [active] + [sheets.getByIndex(i) for i in range(sheets.getCount())
+                                if sheets.getByIndex(i).getName() != active.getName()]
+            for position, sheet in enumerate(order):
+                d = descriptor(sheet)
+                found = None
+                if position == 0 and selection is not None and hasattr(selection, "getCellAddress"):
+                    found = sheet.findNext(selection, d)
+                if found is None:
+                    found = sheet.findFirst(d)
+                if found is not None:
+                    if position > 0:
+                        controller.setActiveSheet(sheet)
+                    controller.select(found)
+                    return {"found": True}
+            return {"found": False}
+
+        # Presentations: LibreOffice's own search moves through the slides; say "not found" ourselves.
+        pages = entry.doc.getDrawPages()
+        present = any(pages.getByIndex(i).findFirst(descriptor(pages.getByIndex(i))) is not None
+                      for i in range(pages.getCount()))
+        if not present:
+            return {"found": False}
+        command = {"replace": 2, "replaceall": 3}.get(mode, 0)
+        self.dispatcher.executeDispatch(entry.frame, ".uno:ExecuteSearch", "", 0, (
+            prop("SearchItem.SearchString", text), prop("SearchItem.ReplaceString", replace),
+            prop("SearchItem.Command", command), prop("SearchItem.Backward", backwards),
+            prop("SearchItem.TransliterateFlags", 0 if request.get("matchCase") else SEARCH_IGNORE_CASE),
+            prop("SearchItem.WordOnly", bool(request.get("wholeWords"))), prop("Quiet", True)))
+        return {"found": True}
+
+    @staticmethod
+    def _selection_matches(selected, text, request):
+        if request.get("matchCase"):
+            return selected == text
+        return selected.lower() == text.lower()
+
+    def op_convert(self, request):
+        """Preview / print PDF of a file that is not open in a tab, in this same LibreOffice."""
+        arguments = (prop("Hidden", True), prop("ReadOnly", True),
+                     prop("MacroExecutionMode", NO_MACROS_NO_BAR), prop("UpdateDocMode", NO_LINK_UPDATE),
+                     prop("InteractionHandler", Interactions()))
+        doc = self.desktop.loadComponentFromURL(uno.systemPathToFileUrl(request["in"]), "_blank", 0, arguments)
+        if doc is None:
+            raise RuntimeError("LibreOffice не смог открыть документ")
+        try:
+            doc.storeToURL(uno.systemPathToFileUrl(request["out"]),
+                           (prop("FilterName", PDF_FILTER.get(kind_of(doc), "writer_pdf_Export")),))
+        finally:
+            doc.close(True)
         return {}
 
     def op_save(self, request):

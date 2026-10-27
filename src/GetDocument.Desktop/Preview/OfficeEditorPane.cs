@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -37,6 +38,12 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     private readonly Button _save;
     private readonly Button _undo;
     private readonly Button _redo;
+    private readonly Border _findBar = new() { IsVisible = false };
+    private readonly TextBox _findText = new() { Width = 220, MinHeight = 36, PlaceholderText = "Найти" };
+    private readonly TextBox _replaceText = new() { Width = 200, MinHeight = 36, PlaceholderText = "Заменить на" };
+    private readonly CheckBox _matchCase = new() { Content = "С учётом регистра", VerticalAlignment = VerticalAlignment.Center };
+    private readonly CheckBox _wholeWords = new() { Content = "Слово целиком", VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock _findStatus = new() { VerticalAlignment = VerticalAlignment.Center };
     private ComboBox? _font;
     private ComboBox? _size;
     private ComboBox? _style;
@@ -56,12 +63,14 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
         Add(_save, _undo, _redo);
 
         var right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Top };
-        right.Children.Add(Track(IconButton(Icons.Minus, "Уменьшить масштаб", () => Dispatch(".uno:ZoomMinus"))));
-        right.Children.Add(Track(IconButton(Icons.ZoomIn, "Увеличить масштаб", () => Dispatch(".uno:ZoomPlus"))));
-        right.Children.Add(Track(IconButton(Icons.Search, "Найти и заменить (Ctrl+H)", () => Dispatch(".uno:SearchDialog"))));
-        right.Children.Add(Track(TextButton("PDF", Icons.FileText, "Сохранить как PDF", () => _ = ExportPdfAsync())));
-        right.Children.Add(Track(TextButton("Копия…", Icons.Files, "Сохранить копию в другом формате или папке", () => _ = SaveCopyAsync())));
-        right.Children.Add(Track(TextButton("Печать", Icons.Printer, "Печать через мастер ГЭТ (Ctrl+P)", () => PrintRequested?.Invoke())));
+        // Icons only on the right: the document tools keep one row at the usual window width.
+        right.Children.Add(Track(MenuButton(null, Icons.ZoomIn, "Масштаб (также Ctrl + колесо мыши)",
+            ("Крупнее", ".uno:ZoomPlus"), ("Мельче", ".uno:ZoomMinus"), ("100 %", ".uno:Zoom100Percent"),
+            ("По ширине страницы", ".uno:ZoomPageWidth"), ("Страница целиком", ".uno:ZoomPage"))));
+        right.Children.Add(Track(IconButton(Icons.Search, "Найти и заменить (Ctrl+F)", ToggleFind)));
+        right.Children.Add(Track(MenuButton(null, Icons.Files, "Сохранить как…",
+            ("PDF…", "export:pdf"), ("Копию в другом формате или папке…", "export:copy"))));
+        right.Children.Add(Track(IconButton(Icons.Printer, "Печать через мастер ГЭТ (Ctrl+P)", () => PrintRequested?.Invoke())));
 
         var bar = new DockPanel { Margin = new Thickness(16, 8), LastChildFill = true };
         DockPanel.SetDock(right, Dock.Right);
@@ -71,6 +80,9 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
         header.Classes.Add("header");
         SetDock(header, Dock.Top);
         Children.Add(header);
+        BuildFindBar();
+        SetDock(_findBar, Dock.Top);
+        Children.Add(_findBar);
 
         var body = new Grid();
         _host.IsVisible = false;
@@ -115,6 +127,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             document.ModifiedChanged += modified => Dispatcher.UIThread.Post(() => OnModified(modified));
             document.CommandRequested += command => Dispatcher.UIThread.Post(() => OnCommand(command));
             document.Closed += () => Dispatcher.UIThread.Post(OnClosedByOffice);
+            document.ContextMenuRequested += items => Dispatcher.UIThread.Post(() => ShowContextMenu(items));
             BuildTools(document.Kind);
 
             IntPtr window = IntPtr.Zero;
@@ -154,7 +167,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
         Add(Separator());
         if (kind == "writer")
         {
-            _style = Combo(ParagraphStyles.Select(s => s.Title), 140, "Стиль абзаца");
+            _style = Combo(ParagraphStyles.Select(s => s.Title), 150, "Стиль абзаца");
             _style.SelectionChanged += (_, _) =>
             {
                 if (_syncing || _style.SelectedIndex < 0) return;
@@ -162,7 +175,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             };
             Add(_style);
         }
-        _font = Combo(FontManager.Current.SystemFonts.Select(f => f.Name).Distinct().OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase), 170, "Шрифт");
+        _font = Combo(FontManager.Current.SystemFonts.Select(f => f.Name).Distinct().OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase), 150, "Шрифт");
         _font.SelectionChanged += (_, _) =>
         {
             if (_syncing || _font.SelectedItem is not string name) return;
@@ -188,7 +201,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
                 Toggle(".uno:WrapText", Icons.WrapText, "Переносить текст"),
                 Toggle(".uno:ToggleMergeCells", Icons.Merge, "Объединить ячейки"));
             Add(Separator());
-            Add(MenuButton("Формат", Icons.Sliders, "Формат чисел",
+            Add(MenuButton(null, Icons.Sliders, "Формат чисел",
                 ("Общий", ".uno:NumberFormatStandard"), ("Число 0,00", ".uno:NumberFormatDecimal"),
                 ("Денежный", ".uno:NumberFormatCurrency"), ("Процент", ".uno:NumberFormatPercent"),
                 ("Дата", ".uno:NumberFormatDate")));
@@ -209,14 +222,14 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             Toggle(".uno:DefaultNumbering", Icons.ListNumbers, "Нумерованный список"));
         if (kind == "writer")
         {
-            Add(IconButton(Icons.IndentLess, "Уменьшить отступ", () => Dispatch(".uno:DecrementIndent")),
-                IconButton(Icons.IndentMore, "Увеличить отступ", () => Dispatch(".uno:IncrementIndent")));
             Add(Separator());
-            Add(MenuButton("Таблица", Icons.Table, "Вставить таблицу",
+            Add(MenuButton(null, Icons.Table, "Вставить таблицу",
                     ("2 × 2", "table:2:2"), ("3 × 3", "table:3:3"), ("4 × 4", "table:4:4"), ("5 × 5", "table:5:5"),
-                    ("Другой размер…", ".uno:InsertTable")),
+                    ("Другой размер…", "table:ask")),
                 IconButton(Icons.Image, "Вставить изображение", () => _ = InsertImageAsync()),
-                IconButton(Icons.PageBreak, "Разрыв страницы (Ctrl+Enter)", () => Dispatch(".uno:InsertPagebreak")));
+                MenuButton(null, Icons.ChevronDown, "Ещё: отступы, разрыв страницы",
+                    ("Увеличить отступ", ".uno:IncrementIndent"), ("Уменьшить отступ", ".uno:DecrementIndent"),
+                    ("Разрыв страницы (Ctrl+Enter)", ".uno:InsertPagebreak")));
             return;
         }
         Add(Separator());
@@ -294,7 +307,8 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
         return button;
     }
 
-    private Button MenuButton(string text, Geometry icon, string tip, params (string Title, string Command)[] items)
+    /// <param name="text">Caption next to the icon, or null for an icon-only button.</param>
+    private Button MenuButton(string? text, Geometry icon, string tip, params (string Title, string Command)[] items)
     {
         var flyout = new MenuFlyout();
         foreach (var (title, command) in items)
@@ -303,13 +317,20 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             item.Click += (_, _) => RunMenuCommand(command);
             flyout.Items.Add(item);
         }
-        var button = TextButton(text, icon, tip, () => { });
+        var button = text is null ? IconButton(icon, tip, () => { }) : TextButton(text, icon, tip, () => { });
         button.Flyout = flyout;
         return button;
     }
 
     private void RunMenuCommand(string command)
     {
+        if (command == "export:pdf") { _ = ExportPdfAsync(); return; }
+        if (command == "export:copy") { _ = SaveCopyAsync(); return; }
+        if (command == "table:ask")
+        {
+            _ = AskTableSizeAsync();
+            return;
+        }
         if (command.StartsWith("table:", StringComparison.Ordinal))
         {
             var size = command.Split(':');
@@ -401,6 +422,12 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             case ".uno:ExportDirectToPDF":
                 _ = ExportPdfAsync();
                 break;
+            case ".uno:SearchDialog":
+            case ".uno:Find":
+            case ".uno:FindBar":
+            case ".uno:FindReplace":
+                OpenFind();
+                break;
             case ".uno:CloseDoc":
             case ".uno:CloseWin":
                 CloseRequested?.Invoke();
@@ -409,6 +436,169 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
                 _status("Эта команда в ГЭТ Документ выполняется кнопками на панели и стартовом экране.");
                 break;
         }
+    }
+
+    // --- find & replace (GET DS bar instead of LibreOffice's dialog) ---------------------------------
+
+    private void BuildFindBar()
+    {
+        Avalonia.Automation.AutomationProperties.SetName(_findText, "Найти");
+        Avalonia.Automation.AutomationProperties.SetName(_replaceText, "Заменить на");
+        _findStatus.Classes.Add("hint");
+        var row = new WrapPanel { ItemSpacing = 6, LineSpacing = 6, Margin = new Thickness(16, 6) };
+        row.Children.Add(_findText);
+        row.Children.Add(IconButton(Icons.ChevronUp, "Найти предыдущее (Shift+Enter)", () => _ = FindAsync(FindMode.Previous)));
+        row.Children.Add(IconButton(Icons.ChevronDown, "Найти далее (Enter)", () => _ = FindAsync(FindMode.Next)));
+        row.Children.Add(_replaceText);
+        row.Children.Add(TextButton("Заменить", Icons.Edit, "Заменить найденное и найти следующее", () => _ = FindAsync(FindMode.Replace)));
+        row.Children.Add(TextButton("Заменить все", Icons.Check, "Заменить во всём документе", () => _ = FindAsync(FindMode.ReplaceAll)));
+        row.Children.Add(_matchCase);
+        row.Children.Add(_wholeWords);
+        row.Children.Add(_findStatus);
+        var close = IconButton(Icons.X, "Закрыть поиск (Esc)", CloseFind);
+        close.Margin = new Thickness(0, 6, 16, 6);
+        close.VerticalAlignment = VerticalAlignment.Top;
+        var dock = new DockPanel();
+        DockPanel.SetDock(close, Dock.Right);
+        dock.Children.Add(close);
+        dock.Children.Add(row);
+        _findBar.Child = dock;
+        _findBar.Classes.Add("header");
+        _findText.KeyDown += (_, e) => OnFindKey(e, e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? FindMode.Previous : FindMode.Next);
+        _replaceText.KeyDown += (_, e) => OnFindKey(e, FindMode.Replace);
+        _findText.TextChanged += (_, _) => _findStatus.Text = "";
+    }
+
+    private void OnFindKey(KeyEventArgs e, FindMode onEnter)
+    {
+        if (e.Key == Key.Enter) { e.Handled = true; _ = FindAsync(onEnter); }
+        else if (e.Key == Key.Escape) { e.Handled = true; CloseFind(); }
+    }
+
+    private void ToggleFind()
+    {
+        if (_findBar.IsVisible) CloseFind();
+        else OpenFind();
+    }
+
+    private void OpenFind()
+    {
+        if (_document is null) return;
+        _findBar.IsVisible = true;
+        // The keyboard may be inside the LibreOffice window: bring it back to this window first.
+        EmbeddedWindowHost.FocusTopLevel(TopLevel.GetTopLevel(this));
+        Dispatcher.UIThread.Post(() => { _findText.Focus(); _findText.SelectAll(); }, DispatcherPriority.Input);
+    }
+
+    private void CloseFind()
+    {
+        _findBar.IsVisible = false;
+        _findStatus.Text = "";
+        if (_document is { } document) _ = Run(document.FocusAsync);
+    }
+
+    private async Task FindAsync(FindMode mode)
+    {
+        if (_document is not { } document) return;
+        string text = _findText.Text ?? "";
+        if (text.Length == 0) { _findStatus.Text = "Введите, что найти."; _findText.Focus(); return; }
+        try
+        {
+            var result = await document.FindAsync(text, mode, _replaceText.Text ?? "",
+                _matchCase.IsChecked == true, _wholeWords.IsChecked == true);
+            _findStatus.Text = mode == FindMode.ReplaceAll
+                ? (result.Replaced > 0 ? $"Заменено: {result.Replaced}." : "Не найдено.")
+                : result.Found ? "" : "Не найдено.";
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException)
+        {
+            _findStatus.Text = ex.Message;
+        }
+    }
+
+    // --- table size and context menu (GET DS instead of LibreOffice's dialogs and menus) ----------
+
+    private async Task AskTableSizeAsync()
+    {
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
+        var columns = new TextBox { Text = "3", Width = 96 };
+        var rows = new TextBox { Text = "3", Width = 96 };
+        Avalonia.Automation.AutomationProperties.SetName(columns, "Столбцов");
+        Avalonia.Automation.AutomationProperties.SetName(rows, "Строк");
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto"),
+            RowSpacing = 10, ColumnSpacing = 16
+        };
+        void Put(Control control, int row, int column)
+        {
+            Grid.SetRow(control, row);
+            Grid.SetColumn(control, column);
+            grid.Children.Add(control);
+        }
+        Put(new TextBlock { Text = "Столбцов", VerticalAlignment = VerticalAlignment.Center }, 0, 0);
+        Put(columns, 0, 1);
+        Put(new TextBlock { Text = "Строк", VerticalAlignment = VerticalAlignment.Center }, 1, 0);
+        Put(rows, 1, 1);
+        static int Read(TextBox box, int max) =>
+            int.TryParse(box.Text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture,
+                out int value) && value >= 1 && value <= max ? value : 0;
+        if (!await GetDialogs.FormAsync(owner, "Вставить таблицу", "Таблица появится в месте курсора: до 30 столбцов и 200 строк.",
+                grid, "Вставить", () => Read(columns, 30) > 0 && Read(rows, 200) > 0))
+            return;
+        Dispatch(".uno:InsertTable", new() { ["Columns"] = Read(columns, 30), ["Rows"] = Read(rows, 200) });
+    }
+
+    // Commands GET Document offers on right click when LibreOffice would have offered them here.
+    private static readonly (string Command, string Title)[] ContextCommands =
+    [
+        (".uno:InsertRowsBefore", "Вставить строку выше"), (".uno:InsertRowsAfter", "Вставить строку ниже"),
+        (".uno:InsertColumnsBefore", "Вставить столбец слева"), (".uno:InsertColumnsAfter", "Вставить столбец справа"),
+        (".uno:DeleteRows", "Удалить строки"), (".uno:DeleteColumns", "Удалить столбцы"),
+        (".uno:MergeCells", "Объединить ячейки"), (".uno:DeleteTable", "Удалить таблицу"),
+        (".uno:InsertPage", "Новый слайд"), (".uno:DuplicatePage", "Дублировать слайд"), (".uno:DeletePage", "Удалить слайд"),
+        (".uno:OpenHyperlinkOnCursor", "Открыть ссылку"), (".uno:RemoveHyperlink", "Убрать ссылку"),
+        (".uno:SpellCheckIgnoreAll", "Пропустить все")
+    ];
+
+    private void ShowContextMenu(IReadOnlyList<(string Command, string Text, bool Enabled)> offered)
+    {
+        if (_disposed || _document is null) return;
+        var flyout = new MenuFlyout
+        {
+            Placement = PlacementMode.AnchorAndGravity,
+            PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft,
+            PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight
+        };
+        bool Available(string command) =>
+            offered.FirstOrDefault(o => o.Command.Split('?')[0] == command) is not { Command: not null } match || match.Enabled;
+        void Item(string title, string command)
+        {
+            var item = new MenuItem { Header = title, IsEnabled = Available(command) };
+            item.Click += (_, _) => Dispatch(command);
+            flyout.Items.Add(item);
+        }
+        // Spelling suggestions first, as LibreOffice and Word show them.
+        var suggestions = offered
+            .Where(o => o.Command.StartsWith(".uno:SpellCheckApplySuggestion", StringComparison.Ordinal) && o.Text.Length > 0)
+            .Take(8).ToList();
+        foreach (var (command, text, _) in suggestions) Item(text, command);
+        if (suggestions.Count > 0) flyout.Items.Add(new Separator());
+        Item("Вырезать", ".uno:Cut");
+        Item("Копировать", ".uno:Copy");
+        Item("Вставить", ".uno:Paste");
+        // Only what LibreOffice offers here AND is available now (it always lists link commands, disabled).
+        var commands = offered.Where(o => o.Enabled).Select(o => o.Command.Split('?')[0]).ToHashSet(StringComparer.Ordinal);
+        var contextual = ContextCommands.Where(c => commands.Contains(c.Command)).ToList();
+        if (contextual.Count > 0) flyout.Items.Add(new Separator());
+        foreach (var (command, title) in contextual) Item(title, command);
+
+        // The pointer is over the LibreOffice window, which Avalonia does not track: place the menu
+        // at the mouse position translated into this control's coordinates.
+        var point = EmbeddedWindowHost.CursorIn(_host);
+        flyout.HorizontalOffset = point.X;
+        flyout.VerticalOffset = point.Y;
+        flyout.ShowAt(_host);
     }
 
     private void OnClosedByOffice()

@@ -77,6 +77,13 @@ public sealed class LibreOfficeEditor : IDisposable
         }
     }
 
+    /// <summary>
+    /// PDF of a file that is not open in a tab (previews, printing from file lists), made by this
+    /// same LibreOffice: one office process serves editing and previews.
+    /// </summary>
+    public Task ConvertToPdfAsync(string input, string output, CancellationToken cancellationToken = default) =>
+        CallAsync(new { op = "convert", @in = Path.GetFullPath(input), @out = Path.GetFullPath(output) }, cancellationToken);
+
     internal async Task<JsonElement> CallAsync(object request, CancellationToken cancellationToken)
     {
         await EnsureStartedAsync(cancellationToken);
@@ -292,6 +299,12 @@ public sealed class EditorDocument
     public event Action<string>? CommandRequested;
     /// <summary>LibreOffice closed the document or exited.</summary>
     public event Action? Closed;
+    /// <summary>
+    /// Right click in the document: LibreOffice's own menu was cancelled; these are the commands it
+    /// would have offered here (command URL, LibreOffice's text, available right now), for GET
+    /// Document's menu.
+    /// </summary>
+    public event Action<IReadOnlyList<(string Command, string Text, bool Enabled)>>? ContextMenuRequested;
 
     internal void Raise(string name, JsonElement message)
     {
@@ -308,6 +321,14 @@ public sealed class EditorDocument
             case "command":
                 CommandRequested?.Invoke(message.GetProperty("cmd").GetString() ?? "");
                 break;
+            case "contextmenu":
+                var items = new List<(string, string, bool)>();
+                if (message.TryGetProperty("items", out var list) && list.ValueKind == JsonValueKind.Array)
+                    foreach (var item in list.EnumerateArray())
+                        items.Add((item.GetProperty("cmd").GetString() ?? "", item.GetProperty("text").GetString() ?? "",
+                            !item.TryGetProperty("enabled", out var enabled) || enabled.ValueKind != JsonValueKind.False));
+                ContextMenuRequested?.Invoke(items);
+                break;
             case "closed":
                 _closed = true;
                 Closed?.Invoke();
@@ -321,6 +342,29 @@ public sealed class EditorDocument
     /// <summary>Runs a LibreOffice command (".uno:Bold", ".uno:InsertTable"...) on the document.</summary>
     public Task DispatchAsync(string command, IReadOnlyDictionary<string, object>? arguments = null, bool focus = true) =>
         _editor.CallAsync(new { op = "dispatch", id = Id, cmd = command, args = arguments, focus }, CancellationToken.None);
+
+    /// <summary>
+    /// Find or replace with the document's search, without LibreOffice's dialog: the match is
+    /// selected (wrapping around at the end). For "replace all" <see cref="FindResult.Replaced"/>
+    /// is the number of replacements.
+    /// </summary>
+    public async Task<FindResult> FindAsync(string text, FindMode mode, string replace = "", bool matchCase = false, bool wholeWords = false)
+    {
+        var reply = await _editor.CallAsync(new
+        {
+            op = "find", id = Id, text, replace, matchCase, wholeWords,
+            mode = mode switch
+            {
+                FindMode.Previous => "prev",
+                FindMode.Replace => "replace",
+                FindMode.ReplaceAll => "replaceall",
+                _ => "next"
+            }
+        }, CancellationToken.None);
+        bool foundText = reply.TryGetProperty("found", out var found) && found.ValueKind == JsonValueKind.True;
+        int replaced = reply.TryGetProperty("count", out var count) && count.ValueKind == JsonValueKind.Number ? count.GetInt32() : 0;
+        return new FindResult(foundText, replaced);
+    }
 
     public async Task SaveAsync()
     {
@@ -374,3 +418,7 @@ public sealed class EditorDocument
         _ => throw new NotSupportedException("Этот формат LibreOffice не сохраняет.")
     };
 }
+
+public enum FindMode { Next, Previous, Replace, ReplaceAll }
+
+public readonly record struct FindResult(bool Found, int Replaced);

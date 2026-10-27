@@ -151,6 +151,22 @@ public static class LibreOfficeRuntime
                 await from.CopyToAsync(to, cancellationToken);
 
             string produced = Path.Combine(work, "document.pdf");
+            // On Windows the editor's LibreOffice is already running (prewarmed at start-up): use it
+            // rather than a second, headless LibreOffice process.
+            if (LibreOfficeEditor.IsSupported)
+            {
+                try
+                {
+                    await LibreOfficeEditor.Shared.ConvertToPdfAsync(input, produced, cancellationToken);
+                    if (File.Exists(produced) && new FileInfo(produced).Length > 0)
+                    {
+                        File.Move(produced, cached, overwrite: true);
+                        PruneCache(Path.GetDirectoryName(cached)!);
+                        return cached;
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException) { }
+            }
             // Fast path: the warm LibreOffice behind the UNO bridge.
             if (await LibreOfficeBridge.Shared.TryConvertAsync(input, produced, ConversionTimeout, cancellationToken))
             {

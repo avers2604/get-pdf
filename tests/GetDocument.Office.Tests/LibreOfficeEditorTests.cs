@@ -70,6 +70,28 @@ public sealed class LibreOfficeEditorTests
 
     [TestMethod]
     [Timeout(240_000, CooperativeCancellation = true)]
+    public async Task ConvertsFilesThatAreNotOpenInTheSameLibreOffice()
+    {
+        if (!LibreOfficeEditor.IsSupported)
+            Assert.Inconclusive("Встроенный редактор LibreOffice недоступен (нет Windows или GETDOC_SOFFICE).");
+        string folder = Path.Combine(Path.GetTempPath(), "gdconv-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string sheet = Path.Combine(folder, "Смета.xlsx");
+            OfficeDocumentFactory.CreateNew(GetDocument.Core.Workspace.WorkspaceDocumentKind.Spreadsheet, sheet);
+            string pdf = Path.Combine(folder, "Смета.pdf");
+            await LibreOfficeEditor.Shared.ConvertToPdfAsync(sheet, pdf);
+            byte[] head = new byte[5];
+            await using (var stream = File.OpenRead(pdf)) await stream.ReadExactlyAsync(head);
+            Assert.AreEqual("%PDF-", System.Text.Encoding.ASCII.GetString(head));
+            Assert.IsFalse(File.Exists(Path.Combine(folder, ".~lock.Смета.xlsx#")), "the converted file is closed again");
+        }
+        finally { try { Directory.Delete(folder, recursive: true); } catch (IOException) { } }
+    }
+
+    [TestMethod]
+    [Timeout(240_000, CooperativeCancellation = true)]
     public async Task EditsSavesAndExportsARealDocumentWhenLibreOfficeIsInstalled()
     {
         if (!LibreOfficeEditor.IsSupported)
@@ -100,6 +122,19 @@ public sealed class LibreOfficeEditorTests
                 await document.SaveAsAsync(copy);
                 Assert.IsTrue(File.Exists(copy));
                 Assert.IsTrue(document.IsModified, "a copy does not save the original");
+
+                // Find and replace through LibreOffice's search, without its dialog.
+                Assert.IsTrue((await document.FindAsync("гэт", FindMode.Next)).Found, "case-insensitive by default");
+                Assert.IsFalse((await document.FindAsync("гэт", FindMode.Next, matchCase: true)).Found);
+                Assert.IsFalse((await document.FindAsync("такого слова нет", FindMode.Next)).Found);
+                Assert.AreEqual(1, (await document.FindAsync("Проверка", FindMode.ReplaceAll, "Приёмка")).Replaced);
+                Assert.IsTrue((await document.FindAsync("Приёмка ГЭТ", FindMode.Next)).Found);
+
+                // Ctrl+F / Ctrl+H open GET Document's find bar, not LibreOffice's dialog.
+                var findShortcut = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                document.CommandRequested += command => { if (command == ".uno:SearchDialog") findShortcut.TrySetResult(command); };
+                await document.DispatchAsync(".uno:SearchDialog", focus: false);
+                Assert.AreEqual(".uno:SearchDialog", await findShortcut.Task.WaitAsync(TimeSpan.FromSeconds(10)));
 
                 // Ctrl+S inside the document reaches GET Document instead of LibreOffice's own save.
                 var intercepted = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
