@@ -181,3 +181,7 @@ pwsh -File scripts/verify-get-document-release-windows.ps1 -OfflineNuGetFeed 'D:
 [GD-26 — технический разбор и порядок приёмки](docs/GET_DOCUMENT_GD26_RELEASE_GATE_SELFTEST_2026-10-26.md). **Новая версия ещё не собрана и её C# self-test не запускался в этом окружении** — нужен локальный .NET 10 SDK; оборудование Windows/Astra Linux также ожидает испытаний.
 
 План завершения с критериями приёмки: [GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md](docs/GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md). Исходное описание ГЭТ PDF: [LEGACY_GET_PDF_README_2026-10-24.md](docs/LEGACY_GET_PDF_README_2026-10-24.md).
+
+## GD-27 — проверка подлинности TRX-результатов локальной приёмки (27.10.2026)
+
+Release gate дополнительно отвергает неполный/неуспешный общий `ResultSummary`, противоречивые `executed`/`notExecuted` и повторное использование одного `TestRun id` для разных наборов тестов. В JSON-отчёт добавлен признак `IndependentRuns`; расширена самопроверка `--self-test`. Всё запускается только локально: [инструкция и ограничения](docs/GET_DOCUMENT_GD27_TRX_INTEGRITY_2026-10-27.md). Сборка, .NET/MSTest и физическая печать в текущем окружении не проверены; PR остаётся Draft.
