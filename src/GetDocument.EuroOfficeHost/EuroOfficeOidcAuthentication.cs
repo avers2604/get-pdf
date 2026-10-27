@@ -100,7 +100,10 @@ public static class EuroOfficeOidcAuthentication
                 ClockSkew = TimeSpan.FromSeconds(30),
                 ValidAlgorithms = [SecurityAlgorithms.RsaSha256]
             };
-            options.Events.OnTokenValidated = context =>
+            // Only replace the identity AFTER the completed remote OIDC flow,
+            // including nonce/state checks, and just before issuing the
+            // short-lived local authentication ticket.
+            options.Events.OnTicketReceived = context =>
             {
                 try
                 {
@@ -109,7 +112,7 @@ public static class EuroOfficeOidcAuthentication
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    context.Fail("SSO ID token missing required GUP-2 identity.");
+                    context.Fail("SSO ticket missing required GUP-2 identity.");
                 }
                 return Task.CompletedTask;
             };
