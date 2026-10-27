@@ -44,9 +44,12 @@ internal static class Program
                 Console.Error.WriteLine("  invalid report: " + message);
         }
 
+        bool independentRuns = ReleaseReportEvaluator.AreIndependentRuns(suites);
+        if (!independentRuns)
+            Console.Error.WriteLine("RELEASE BLOCKED: duplicate or absent TRX TestRun IDs.");
         bool approved = suites.Count ==
             ReleaseReportEvaluator.ExpectedSuites(platform).Count &&
-            suites.All(x => x.Approved);
+            independentRuns && suites.All(x => x.Approved);
         var summary = new
         {
             Platform = platform,
@@ -54,6 +57,7 @@ internal static class Program
             RuntimeVersion = Environment.Version.ToString(),
             Approved = approved, // Backward-compatible automated gate field only.
             AutomatedTestsApproved = approved,
+            IndependentRuns = independentRuns,
             HardwareAcceptance = "NotVerified",
             ReleaseAuthorized = false, // Human hardware/WORM acceptance is separate.
             Suites = suites,
