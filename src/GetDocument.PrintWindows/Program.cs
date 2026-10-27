@@ -1,0 +1,256 @@
+using System.IO;
+using System.Printing;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Xps;
+using GetDocument.Core.Printing;
+using GetDocument.Core.Preview;
+using PDFtoImage;
+
+namespace GetDocument.PrintWindows;
+
+/// <summary>
+/// Headless native print worker, launched only by the GET-owned wizard.
+/// No PrintDialog, visible window, internet or shell. Runs on Windows STA.
+/// </summary>
+internal static class Program
+{
+    [STAThread]
+    private static int Main(string[] args)
+    {
+        try
+        {
+            if (args.Length is < 1 or > 2) return 2;
+            using var server = new LocalPrintServer();
+            if (args[0] == "trays" && args.Length == 2)
+            {
+                string queueName = args[1];
+                if (string.IsNullOrWhiteSpace(queueName) ||
+                    !server.GetPrintQueues().Any(q => q.Name == queueName)) return 3;
+                using var printer = server.GetPrintQueue(queueName);
+                // The driver's own trays with its own names (see WindowsTrayCapabilities).
+                var trays = WindowsTrayCapabilities.Parse(CapabilitiesXml(printer))
+                    .Select(t => new TrayReply(t.LocalName, t.Label))
+                    .ToArray();
+                Console.Write(JsonSerializer.Serialize(trays));
+                return 0;
+            }
+            if (args.Length != 1) return 2;
+            if (args[0] == "printers")
+            {
+                var queues = server.GetPrintQueues()
+                    .Select(q => q.Name)
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+                Console.Write(JsonSerializer.Serialize(queues));
+                return 0;
+            }
+            if (args[0] != "print") return 2;
+            char[] input = new char[8193];
+            int length = 0;
+            while (length < input.Length)
+            {
+                int read = Console.In.Read(input, length, input.Length - length);
+                if (read == 0) break;
+                length += read;
+            }
+            if (length == input.Length) return 2;
+            var request = JsonSerializer.Deserialize<PrintRequest>(new string(input, 0, length))
+                ?? throw new InvalidDataException("Отсутствуют настройки печати.");
+            PrintJobPlan plan = PrintJobPlan.Create(request.PrinterName,
+                request.SourcePageCount, request.PageRange, request.Copies,
+                request.Duplex, request.Paper,
+                request.Orientation, request.Color, request.PagesPerSheet, request.Tray);
+            if (string.IsNullOrWhiteSpace(request.PdfPath) ||
+                !Path.IsPathFullyQualified(request.PdfPath) ||
+                !request.PdfPath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                return 2;
+
+            using var source = new FileStream(request.PdfPath, FileMode.Open, FileAccess.Read,
+                FileShare.Read, 65536, FileOptions.SequentialScan);
+            PdfPreviewPlan.ValidateInputLength(source.Length);
+            int actualPages = Conversion.GetPageCount(source, leaveOpen: true);
+            if (actualPages != plan.SourcePageCount) return 3;
+            source.Position = 0;
+
+            var names = server.GetPrintQueues().Select(q => q.Name).ToArray();
+            if (!names.Contains(plan.PrinterName, StringComparer.Ordinal)) return 3;
+            using var queue = server.GetPrintQueue(plan.PrinterName);
+            var capabilities = queue.GetPrintCapabilities();
+            Duplexing duplex = plan.Duplex switch
+            {
+                PrintDuplex.LongEdge => Duplexing.TwoSidedLongEdge,
+                PrintDuplex.ShortEdge => Duplexing.TwoSidedShortEdge,
+                _ => Duplexing.OneSided
+            };
+            PageMediaSizeName paper = plan.Paper == PrintPaper.A3
+                ? PageMediaSizeName.ISOA3 : PageMediaSizeName.ISOA4;
+            // Drivers without a duplex unit (Microsoft Print to PDF, XPS Writer, many
+            // single-sided printers) report an EMPTY duplexing list: one-sided is still
+            // the only thing they do. Two-sided must be advertised explicitly.
+            bool duplexSupported = PrintCapabilityPolicy.SupportsDuplexing(
+                capabilities.DuplexingCapability.Select(x => x.ToString()).ToArray(), duplex.ToString());
+            // Unsupported by the actual driver: never silently downgrade, and say which setting.
+            if (!duplexSupported) return Unsupported("duplex");
+            if (!capabilities.PageMediaSizeCapability.Any(x => x.PageMediaSizeName == paper))
+                return Unsupported("paper");
+
+            var ticket = new PrintTicket
+            {
+                CopyCount = plan.Copies,
+                PageMediaSize = new PageMediaSize(paper)
+            };
+            if (capabilities.DuplexingCapability.Count > 0) ticket.Duplexing = duplex;
+
+            if (plan.Orientation != PrintOrientation.Automatic)
+            {
+                var orientation = plan.Orientation == PrintOrientation.Landscape
+                    ? PageOrientation.Landscape : PageOrientation.Portrait;
+                if (capabilities.PageOrientationCapability is null ||
+                    !capabilities.PageOrientationCapability.Contains(orientation))
+                    return Unsupported("orientation"); // Never claim it unless the driver supports it.
+                ticket.PageOrientation = orientation;
+            }
+            if (plan.Color != PrintColorMode.PrinterDefault)
+            {
+                var color = plan.Color == PrintColorMode.Color
+                    ? OutputColor.Color : OutputColor.Monochrome;
+                if (capabilities.OutputColorCapability is null ||
+                    !capabilities.OutputColorCapability.Contains(color))
+                    return Unsupported("color");
+                ticket.OutputColor = color;
+            }
+            if (plan.PagesPerSheet != PrintPagesPerSheet.One)
+            {
+                int pagesPerSheet = (int)plan.PagesPerSheet;
+                if (capabilities.PagesPerSheetCapability is null ||
+                    !capabilities.PagesPerSheetCapability.Contains(pagesPerSheet))
+                    return Unsupported("nup");
+                ticket.PagesPerSheet = pagesPerSheet;
+            }
+            if (plan.Tray is { } requestedTray)
+            {
+                // Vendor trays cannot be set through the InputBin enum: merge a Print Schema
+                // fragment and make sure the driver kept it after validation.
+                var choice = requestedTray.Option == "InputBin"
+                    ? WindowsTrayCapabilities.Parse(CapabilitiesXml(queue))
+                        .FirstOrDefault(t => t.LocalName == requestedTray.Value)
+                    : null;
+                if (choice is null) return Unsupported("tray");
+                using var delta = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(WindowsTrayCapabilities.TicketDelta(choice)));
+                PrintTicket merged = queue.MergeAndValidatePrintTicket(ticket, new PrintTicket(delta)).ValidatedPrintTicket;
+                using var mergedXml = merged.GetXmlStream();
+                if (!WindowsTrayCapabilities.TicketSelects(new StreamReader(mergedXml).ReadToEnd(), choice))
+                    return Unsupported("tray");
+                ticket = merged;
+            }
+            // Read raster pages lazily. Do not decode a 1,000 page job into RAM.
+            double width = plan.Paper == PrintPaper.A3 ? 1122.52 : 793.70;
+            double height = plan.Paper == PrintPaper.A3 ? 1587.40 : 1122.52;
+            if (plan.Orientation == PrintOrientation.Landscape)
+                (width, height) = (height, width);
+            var paginator = new PdfRasterPaginator(source, plan.Pages, new Size(width, height));
+            XpsDocumentWriter writer = PrintQueue.CreateXpsDocumentWriter(queue);
+            writer.Write(paginator, ticket);
+            Console.Write("submitted");
+            return 0;
+        }
+        catch
+        {
+            // Printer driver exceptions may contain network shares and document names.
+            // Never expose them in stdout/stderr to a separate untrusted process.
+            return 5;
+        }
+    }
+
+    private static string CapabilitiesXml(PrintQueue queue)
+    {
+        using var stream = queue.GetPrintCapabilitiesAsXml();
+        return new StreamReader(stream).ReadToEnd();
+    }
+
+    private sealed record TrayReply(string Value, string Label);
+
+    /// <summary>Refusal before anything is spooled; the wizard lets the user change the setting.</summary>
+    private static int Unsupported(string feature)
+    {
+        Console.Write(PrintRejection.UnsupportedPrefix + feature);
+        return PrintRejection.Unsupported;
+    }
+
+    private sealed record PrintRequest(string PdfPath, string PrinterName,
+        int SourcePageCount, string PageRange, int Copies, PrintDuplex Duplex, PrintPaper Paper,
+        PrintOrientation Orientation, PrintColorMode Color, PrintPagesPerSheet PagesPerSheet,
+        PrintTrayOption? Tray);
+
+    private sealed class PdfRasterPaginator : DocumentPaginator
+    {
+        private readonly Stream _source;
+        private readonly IReadOnlyList<int> _pages;
+        private Size _pageSize;
+
+        public PdfRasterPaginator(Stream source, IReadOnlyList<int> pages, Size pageSize)
+        {
+            _source = source;
+            _pages = pages;
+            _pageSize = pageSize;
+        }
+
+        public override bool IsPageCountValid => true;
+        public override int PageCount => _pages.Count;
+        public override Size PageSize { get => _pageSize; set => _pageSize = value; }
+        public override IDocumentPaginatorSource Source => null!;
+
+        public override DocumentPage GetPage(int pageNumber)
+        {
+            if (pageNumber < 0 || pageNumber >= _pages.Count)
+                return DocumentPage.Missing;
+
+            int index = _pages[pageNumber] - 1;
+            _source.Position = 0;
+            var points = Conversion.GetPageSize(_source, page: index, leaveOpen: true);
+            var raster = PdfPrintRasterPlan.GetRasterSize(points.Width, points.Height);
+            _source.Position = 0;
+            using var png = new MemoryStream();
+            Conversion.SavePng(png, _source, page: index, leaveOpen: true,
+                options: new PDFtoImage.RenderOptions(Width: raster.Width, Height: raster.Height,
+                    WithAnnotations: true, WithFormFill: true));
+            png.Position = 0;
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = png;
+            bitmap.EndInit();
+            bitmap.Freeze();
+
+            const double margin = 18; // WPF DIP, reserved for physical print margins.
+            var surface = new FixedPage { Width = _pageSize.Width, Height = _pageSize.Height };
+            double areaWidth = Math.Max(1, _pageSize.Width - margin * 2);
+            double areaHeight = Math.Max(1, _pageSize.Height - margin * 2);
+            // A landscape page on portrait paper (or vice versa) is turned 90° to fill the
+            // sheet instead of printing shrunk to a strip.
+            bool rotate = PdfPrintRasterPlan.ShouldRotate(
+                points.Width, points.Height, _pageSize.Width, _pageSize.Height);
+            var image = new Image
+            {
+                Source = bitmap,
+                Width = rotate ? areaHeight : areaWidth,
+                Height = rotate ? areaWidth : areaHeight,
+                Stretch = Stretch.Uniform,
+                LayoutTransform = rotate ? new RotateTransform(90) : Transform.Identity
+            };
+            FixedPage.SetLeft(image, margin);
+            FixedPage.SetTop(image, margin);
+            surface.Children.Add(image);
+            surface.Measure(_pageSize);
+            surface.Arrange(new Rect(_pageSize));
+            surface.UpdateLayout();
+            return new DocumentPage(surface, _pageSize,
+                new Rect(_pageSize), new Rect(_pageSize));
+        }
+    }
+}

@@ -18,7 +18,7 @@ public partial class SetupWindow : Window
 
     private static readonly Version PackageVersion = typeof(App).Assembly.GetName().Version ?? new Version(0, 0);
     private static string PackageVersionText => $"{PackageVersion.Major}.{PackageVersion.Minor}.{PackageVersion.Build}";
-    private const string DefaultAppsUri = "ms-settings:defaultapps?registeredAppMachine=GetPdf";
+    private const string DefaultAppsUri = "ms-settings:defaultapps?registeredAppMachine=" + Product.RegisteredApp;
 
     private Mode _mode;
     private Stage _stage;
@@ -31,18 +31,45 @@ public partial class SetupWindow : Window
     {
         InitializeComponent();
         VersionText.Text = "Версия " + PackageVersionText;
+        Title = WelcomeTitle.Text = "Установка " + Product.Name;
+        ProductText.Text = Product.Name;
+        WelcomeText.Text = Product.Description;
+        DefaultAppText.Text = Product.DefaultAppsText;
+        DefaultAppHint.Text = Product.DefaultAppsHint;
+        System.Windows.Automation.AutomationProperties.SetName(DefaultAppCheck, Product.DefaultAppsText);
+        LaunchCheck.Content = "Запустить " + Product.Name;
+        RemoveButton.Content = "Удалить " + Product.Name;
+        foreach (string feature in Product.Features) FeatureList.Children.Add(FeatureRow(feature));
+    }
+
+    private System.Windows.Controls.StackPanel FeatureRow(string text)
+    {
+        var check = new System.Windows.Shapes.Path
+        {
+            Data = (Geometry)FindResource("IconCheck"), Stroke = (Brush)FindResource("Teal"), StrokeThickness = 2.5,
+            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round
+        };
+        var canvas = new System.Windows.Controls.Canvas { Width = 24, Height = 24 };
+        canvas.Children.Add(check);
+        var row = new System.Windows.Controls.StackPanel
+        {
+            Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8)
+        };
+        row.Children.Add(new System.Windows.Controls.Viewbox { Width = 16, Height = 16, Margin = new Thickness(0, 0, 10, 0), Child = canvas });
+        row.Children.Add(new System.Windows.Controls.TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 430 });
+        return row;
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
         if (!Environment.Is64BitOperatingSystem)
         {
-            ShowFailure("Нужна 64-разрядная Windows", "ГЭТ PDF работает только в 64-разрядной Windows 10 или 11.", log: false);
+            ShowFailure("Нужна 64-разрядная Windows", Product.Name + " работает только в 64-разрядной Windows 10 или 11.", log: false);
             return;
         }
         _installed = MsiSession.FindInstalled();
         FolderBox.Text = InstalledFolder() ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "GET PDF");
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Product.DefaultFolder);
         if (_installed is { } current)
         {
             string was = $"{current.Version.Major}.{current.Version.Minor}.{current.Version.Build}";
@@ -51,7 +78,7 @@ public partial class SetupWindow : Window
             if (compare < 0)
             {
                 _mode = Mode.Upgrade;
-                WelcomeTitle.Text = "Обновление ГЭТ PDF";
+                WelcomeTitle.Text = "Обновление " + Product.Name;
                 WelcomeText.Text = $"Установлена версия {was}. Она будет обновлена до {PackageVersionText}. " +
                                    "История, избранное и настройки сохранятся.";
                 PrimaryButton.Content = "Обновить";
@@ -60,7 +87,7 @@ public partial class SetupWindow : Window
             else if (compare == 0)
             {
                 _mode = Mode.Maintenance;
-                WelcomeTitle.Text = "ГЭТ PDF уже установлен";
+                WelcomeTitle.Text = Product.Name + " уже установлен";
                 WelcomeText.Text = $"Версия {was}. Можно переустановить программу (восстановить её файлы) или удалить её.";
                 PrimaryButton.Content = "Переустановить";
                 FolderSection.Visibility = Visibility.Collapsed;
@@ -70,7 +97,7 @@ public partial class SetupWindow : Window
             {
                 _mode = Mode.NewerInstalled;
                 WelcomeTitle.Text = "Установлена более новая версия";
-                WelcomeText.Text = $"На компьютере уже есть ГЭТ PDF {was}. Эта программа установки ({PackageVersionText}) не нужна.";
+                WelcomeText.Text = $"На компьютере уже есть {Product.Name} {was}. Эта программа установки ({PackageVersionText}) не нужна.";
                 FeatureList.Visibility = FolderSection.Visibility = DefaultAppCheck.Visibility = Visibility.Collapsed;
                 PrimaryButton.Visibility = Visibility.Collapsed;
                 SecondaryButton.Content = "Закрыть";
@@ -80,7 +107,7 @@ public partial class SetupWindow : Window
         if (OpenPackageStream() is null)
         {
             ShowFailure("Пакет установки повреждён",
-                "Внутри программы установки нет пакета ГЭТ PDF. Скачайте установщик заново.", log: false);
+                $"Рядом с программой установки и внутри неё нет пакета {Product.Name}. Скачайте установщик заново.", log: false);
             return;
         }
         PrimaryButton.Focus();
@@ -92,32 +119,54 @@ public partial class SetupWindow : Window
         try
         {
             using var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-            using var key = hive.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\GetPdf.exe");
+            using var key = hive.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\" + Product.Executable);
             return key?.GetValue(null) is string exe && exe.Length > 0 ? Path.GetDirectoryName(exe) : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         { return null; }
     }
 
-    private static Stream? OpenPackageStream() =>
-        typeof(App).Assembly.GetManifestResourceStream("GetPdf.msi");
+    private static string PackageName => Product.RegisteredApp + ".msi";
+
+    /// <summary>
+    /// The MSI is embedded in the wizard, or (for ГЭТ Документ, whose bundled LibreOffice makes the
+    /// package too large to embed comfortably) lies next to it as &lt;RegisteredApp&gt;-&lt;version&gt;-win-x64.msi.
+    /// </summary>
+    private static Stream? OpenPackageStream()
+    {
+        var embedded = typeof(App).Assembly.GetManifestResourceStream(PackageName);
+        if (embedded is not null) return embedded;
+        string? beside = SiblingPackage();
+        return beside is null ? null : File.OpenRead(beside);
+    }
+
+    private static string? SiblingPackage()
+    {
+        string folder = AppDomain.CurrentDomain.BaseDirectory;
+        foreach (string name in new[] { $"{Product.RegisteredApp}-{PackageVersionText}-win-x64.msi", PackageName })
+        {
+            string path = Path.Combine(folder, name);
+            if (File.Exists(path)) return path;
+        }
+        return null;
+    }
 
     private void ChangeFolder_Click(object sender, RoutedEventArgs e)
     {
         using var dialog = new System.Windows.Forms.FolderBrowserDialog
         {
-            Description = "Папка, в которую будет установлен ГЭТ PDF",
+            Description = "Папка, в которую будет установлен " + Product.Name,
             SelectedPath = Directory.Exists(FolderBox.Text) ? FolderBox.Text
                 : Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
             ShowNewFolderButton = true
         };
         if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
         string chosen = dialog.SelectedPath;
-        // A bare drive or an existing folder of other files: install into its own "GET PDF" subfolder.
+        // A bare drive or an existing folder of other files: install into the product's own subfolder.
         if (Path.GetPathRoot(chosen)?.TrimEnd('\\') == chosen.TrimEnd('\\') ||
             (Directory.Exists(chosen) && Directory.EnumerateFileSystemEntries(chosen).Any() &&
-             !File.Exists(Path.Combine(chosen, "GetPdf.exe"))))
-            chosen = Path.Combine(chosen, "GET PDF");
+             !File.Exists(Path.Combine(chosen, Product.Executable))))
+            chosen = Path.Combine(chosen, Product.DefaultFolder);
         FolderBox.Text = chosen;
     }
 
@@ -146,8 +195,8 @@ public partial class SetupWindow : Window
     private async void Remove_Click(object sender, RoutedEventArgs e)
     {
         if (_stage != Stage.Welcome || _installed is null) return;
-        if (MessageBox.Show(this, "Удалить ГЭТ PDF с этого компьютера? Ваши PDF-файлы не удаляются.",
-                "Удаление ГЭТ PDF", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show(this, $"Удалить {Product.Name} с этого компьютера? Ваши документы не удаляются.",
+                "Удаление " + Product.Name, MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         await RunAsync(uninstallOnly: true);
     }
 
@@ -163,21 +212,21 @@ public partial class SetupWindow : Window
     private void RequestCancel()
     {
         if (_session is null) return;
-        if (MessageBox.Show(this, "Прервать установку? Уже скопированные файлы будут удалены.", "Установка ГЭТ PDF",
+        if (MessageBox.Show(this, "Прервать установку? Уже скопированные файлы будут удалены.", "Установка " + Product.Name,
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         ActionText.Text = "Отменяем и возвращаем всё как было…";
         SecondaryButton.IsEnabled = false;
         _session.Cancel();
     }
 
-    private bool GetPdfIsRunning() =>
-        Process.GetProcessesByName("GetPdf").Any(p => { try { return !p.HasExited; } catch { return false; } finally { p.Dispose(); } });
+    private bool ProductIsRunning() =>
+        Process.GetProcessesByName(Product.ProcessName).Any(p => { try { return !p.HasExited; } catch { return false; } finally { p.Dispose(); } });
 
     private async Task RunAsync(bool uninstallOnly)
     {
-        if (GetPdfIsRunning())
+        if (ProductIsRunning())
         {
-            AlertText.Text = "ГЭТ PDF сейчас открыт. Сохраните документы, закройте программу и нажмите кнопку ещё раз.";
+            AlertText.Text = Product.Name + " сейчас открыт. Сохраните документы, закройте программу и нажмите кнопку ещё раз.";
             AlertBox.Visibility = Visibility.Visible;
             return;
         }
@@ -185,15 +234,15 @@ public partial class SetupWindow : Window
         string folder = FolderBox.Text.Trim();
         if (!uninstallOnly && (folder.Length == 0 || !Path.IsPathRooted(folder) || folder.IndexOfAny(Path.GetInvalidPathChars()) >= 0))
         {
-            AlertText.Text = "Укажите полный путь к папке установки, например C:\\Program Files\\GET PDF.";
+            AlertText.Text = "Укажите полный путь к папке установки, например C:\\Program Files\\" + Product.DefaultFolder + ".";
             AlertBox.Visibility = Visibility.Visible;
             return;
         }
 
         _uninstalling = uninstallOnly;
-        _logPath = Path.Combine(Path.GetTempPath(), $"GetPdf-Setup-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        _logPath = Path.Combine(Path.GetTempPath(), $"{Product.RegisteredApp}-Setup-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         SetStage(Stage.Busy);
-        ProgressTitle.Text = uninstallOnly ? "Удаляем ГЭТ PDF" : _mode == Mode.Upgrade ? "Обновляем ГЭТ PDF" : "Устанавливаем ГЭТ PDF";
+        ProgressTitle.Text = (uninstallOnly ? "Удаляем " : _mode == Mode.Upgrade ? "Обновляем " : "Устанавливаем ") + Product.Name;
         var session = _session = new MsiSession(new WindowInteropHelper(this).Handle);
         session.Progress += (fraction, action) => Dispatcher.BeginInvoke(new Action(() =>
         {
@@ -261,7 +310,7 @@ public partial class SetupWindow : Window
     {
         string folder = Path.Combine(PackageCacheRoot, PackageVersionText);
         Directory.CreateDirectory(folder);
-        string target = Path.Combine(folder, $"GetPdf-{PackageVersionText}-win-x64.msi");
+        string target = Path.Combine(folder, $"{Product.RegisteredApp}-{PackageVersionText}-win-x64.msi");
         string stage = target + ".part";
         using (var source = OpenPackageStream() ?? throw new InvalidOperationException("пакет не найден"))
         using (var file = new FileStream(stage, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -272,7 +321,7 @@ public partial class SetupWindow : Window
     }
 
     private static string PackageCacheRoot => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "GET-PDF", "Package");
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), Product.DataFolder, "Package");
 
     private static void TryDeletePackageCache(string? keep)
     {
@@ -330,16 +379,16 @@ public partial class SetupWindow : Window
         LogButton.Visibility = Visibility.Collapsed;
         if (_uninstalling)
         {
-            DoneTitle.Text = "ГЭТ PDF удалён";
-            DoneText.Text = "Программа удалена с компьютера. Ваши PDF-файлы остались на месте.";
+            DoneTitle.Text = Product.Name + " удалён";
+            DoneText.Text = "Программа удалена с компьютера. Ваши документы остались на месте.";
             LaunchCheck.Visibility = Visibility.Collapsed;
             return;
         }
-        DoneTitle.Text = _mode == Mode.Upgrade ? "ГЭТ PDF обновлён" : "ГЭТ PDF установлен";
+        DoneTitle.Text = Product.Name + (_mode == Mode.Upgrade ? " обновлён" : " установлен");
         DoneText.Text = "Программа добавлена в меню «Пуск». " +
             (DefaultAppCheck.IsChecked == true
-                ? "После нажатия «Готово» откроются параметры Windows: выберите ГЭТ PDF для файлов .pdf."
-                : "PDF-файлы можно открывать через «Открыть с помощью» → ГЭТ PDF.") +
+                ? $"После нажатия «Готово» откроются параметры Windows: выберите {Product.Name} для нужных типов файлов."
+                : $"Файлы можно открывать через «Открыть с помощью» → {Product.Name}.") +
             (rebootNeeded ? " Для завершения обновления перезагрузите компьютер." : "");
     }
 
@@ -359,14 +408,14 @@ public partial class SetupWindow : Window
 
     private void FinishAndClose()
     {
-        string exe = Path.Combine(InstalledFolder() ?? FolderBox.Text, "GetPdf.exe");
+        string exe = Path.Combine(InstalledFolder() ?? FolderBox.Text, Product.Executable);
         if (DefaultAppCheck.IsChecked == true) StartAsUser("explorer.exe", DefaultAppsUri);
         if (LaunchCheck.IsChecked == true && File.Exists(exe)) StartAsUser("explorer.exe", exe);
         Close();
     }
 
     /// <summary>
-    /// The wizard runs elevated; Explorer starts programs as the signed-in user, so ГЭТ PDF is not
+    /// The wizard runs elevated; Explorer starts programs as the signed-in user, so the program is not
     /// left running as administrator (which would break drag and drop from Explorer).
     /// </summary>
     private static void StartAsUser(string program, string argument)

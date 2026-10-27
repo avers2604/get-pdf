@@ -23,12 +23,25 @@
     <Prefer32Bit>false</Prefer32Bit>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
+  <!-- -p:SetupProduct=GetDocument builds the same wizard for ГЭТ Документ (see Product.cs). -->
+  <PropertyGroup Condition="'$(SetupProduct)' == 'GetDocument'">
+    <DefineConstants>$(DefineConstants);GETDOC</DefineConstants>
+    <AssemblyName>GetDocument.Setup</AssemblyName>
+    <Product>ГЭТ Документ</Product>
+    <AssemblyTitle>Установка ГЭТ Документ</AssemblyTitle>
+    <ApplicationIcon>..\GetDocument.Desktop\Assets\get-document.ico</ApplicationIcon>
+    <PackageLogicalName>GetDocument.msi</PackageLogicalName>
+  </PropertyGroup>
   <ItemGroup>
     <Resource Include="..\GetPdf\Assets\get-mark-inverse.png" Link="Assets\get-mark-inverse.png" />
     <Resource Include="..\GetPdf\Assets\get-mark.png" Link="Assets\get-mark.png" />
   </ItemGroup>
   <!-- The product MSI travels inside the wizard; without it the wizard explains what is missing. -->
+  <PropertyGroup>
+    <PackageLogicalName Condition="'$(PackageLogicalName)' == ''">GetPdf.msi</PackageLogicalName>
+  </PropertyGroup>
+  <!-- ГЭТ Документ ships its large MSI beside the wizard instead (-p:MsiPath left empty). -->
   <ItemGroup Condition="'$(MsiPath)' != '' And Exists('$(MsiPath)')">
-    <EmbeddedResource Include="$(MsiPath)" LogicalName="GetPdf.msi" />
+    <EmbeddedResource Include="$(MsiPath)" LogicalName="$(PackageLogicalName)" />
   </ItemGroup>
 </Project>

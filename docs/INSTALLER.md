@@ -128,3 +128,45 @@ Authenticode-подпись MSI.
 
 - **OCR:** `tessdata\rus.traineddata` и `tessdata\eng.traineddata` рядом с GetPdf.exe.
   Без них команда «Распознать текст (OCR)…» скрыта. (qpdf с 0.1.2 входит в установку.)
+
+---
+
+# ГЭТ Документ — установщик
+
+| Файл | Для кого | Что это |
+|---|---|---|
+| `GetDocument-0.1.0-Setup.exe` | пользователи | Тот же мастер GET DS, что у ГЭТ PDF, внутри — MSI |
+| `GetDocument-0.1.0-win-x64.msi` | ИТ-служба | Для GPO / SCCM / `msiexec /qn` |
+
+```powershell
+pwsh -File .\scripts\windows-build-get-document.ps1
+```
+
+Скрипт выполняет следующие шаги:
+
+1. `verify-get-document-windows.ps1` — сборка и все тесты.
+2. Self-contained publish `GetDocument.Desktop` и процесса печати `GetDocument.PrintWindows`.
+3. qpdf 12.4.2 — как у ГЭТ PDF.
+4. LibreOffice 26.2.6:
+   - официальный MSI, SHA-256 закреплён;
+   - административная распаковка (`msiexec /a`, права администратора не нужны);
+   - урезание до русского и английского (≈1,5 ГБ → ≈0,7 ГБ);
+   - VC++ runtime кладётся рядом с `soffice.exe`, шрифты — в `share\fonts`;
+   - результат кешируется в `packaging\third-party\libreoffice-26.2.6`.
+5. `wix build` с `packaging\GetDocument.wxs`.
+6. Мастер `GetPdf.Setup` с `-p:SetupProduct=GetDocument`.
+
+Для полностью офлайн-сборки передайте скачанные архивы: `-QpdfZip`, `-LibreOfficeMsi`,
+`-OfflineNuGetFeed`. С `-SideBySideMsi` MSI не встраивается в Setup.exe, а лежит рядом;
+тогда мастер ищет `GetDocument-<версия>-win-x64.msi` в своей папке.
+
+Для сборки нужно около 4 ГБ свободного места: распаковка LibreOffice занимает ~1,6 ГБ,
+а MSI и мастер — по ~0,3 ГБ.
+
+Что ставится:
+- `C:\Program Files\GET Document`, пункт «ГЭТ Документ» в меню «Пуск»;
+- свой UpgradeCode — программа ставится рядом с ГЭТ PDF и с системным LibreOffice;
+- «Открыть с помощью», «Приложения по умолчанию» (`registeredAppMachine=GetDocument`) и App Paths;
+- ProgID `GetDocument.PDF`, `.Word`, `.Excel`, `.PowerPoint`, `.Image` со своими иконками.
+
+Выбор программы по умолчанию остаётся за пользователем: Windows не даёт установщику менять UserChoice.

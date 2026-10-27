@@ -2,12 +2,17 @@
 # WixUI sizes: banner 493x58 (dialog title is drawn on its left), dialog 493x312 (Welcome/Finish:
 # the left 164 px are artwork, text is drawn on the right).
 [CmdletBinding()]
-param()
+param(
+    [string] $Product = 'ГЭТ PDF',
+    [string] $Tagline = 'Просмотр и печать PDF',
+    # Default packaging\art (GET PDF); GET Document uses packaging\art\get-document.
+    [string] $OutDir = ''
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$art = Join-Path $root 'packaging\art'
+$art = if ($OutDir) { [System.IO.Path]::GetFullPath($OutDir) } else { Join-Path $root 'packaging\art' }
 New-Item -ItemType Directory -Path $art -Force | Out-Null
 $navy = [System.Drawing.Color]::FromArgb(0x24, 0x30, 0x5E)
 $teal = [System.Drawing.Color]::FromArgb(0x00, 0x9C, 0xBC)
@@ -38,9 +43,9 @@ $g.FillRectangle((New-Object System.Drawing.SolidBrush($teal)), 0, 0, 164, 4)
 $g.DrawImage($markInverse, 24, 32, 56, 56)
 $font = New-Object System.Drawing.Font('Segoe UI Semibold', 15, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
 $small = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
-$g.DrawString('ГЭТ PDF', $font, [System.Drawing.Brushes]::White, 22, 100)
+$g.DrawString($Product, $font, [System.Drawing.Brushes]::White, 22, 100)
 $muted = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(0xB9, 0xC0, 0xD6))
-$g.DrawString('Просмотр и печать PDF', $small, $muted, 23, 124)
+$g.DrawString($Tagline, $small, $muted, 23, 124)
 $g.DrawString('СПб ГУП', $small, $muted, 23, 266)
 $g.DrawString('«Горэлектротранс»', $small, $muted, 23, 281)
 $bmp.Save((Join-Path $art 'dialog.bmp'), [System.Drawing.Imaging.ImageFormat]::Bmp)

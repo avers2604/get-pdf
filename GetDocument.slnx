@@ -1,0 +1,17 @@
+<Solution>
+  <Project Path="src/GetDocument.Core/GetDocument.Core.csproj" />
+  <Project Path="src/GetDocument.Office/GetDocument.Office.csproj" />
+  <Project Path="src/GetDocument.Pdf/GetDocument.Pdf.csproj" />
+  <Project Path="src/GetDocument.Images/GetDocument.Images.csproj" />
+  <Project Path="src/GetDocument.Revisions/GetDocument.Revisions.csproj" />
+  <Project Path="src/GetDocument.Collaboration/GetDocument.Collaboration.csproj" />
+  <Project Path="src/GetDocument.WopiGateway/GetDocument.WopiGateway.csproj" />
+  <Project Path="src/GetDocument.WopiHost/GetDocument.WopiHost.csproj" />
+  <Project Path="tests/GetDocument.WopiGateway.Tests/GetDocument.WopiGateway.Tests.csproj" />
+  <Project Path="tests/GetDocument.Collaboration.Tests/GetDocument.Collaboration.Tests.csproj" />
+  <Project Path="tests/GetDocument.Revisions.Tests/GetDocument.Revisions.Tests.csproj" />
+  <Project Path="tests/GetDocument.Office.Tests/GetDocument.Office.Tests.csproj" />
+  <Project Path="tests/GetDocument.Images.Tests/GetDocument.Images.Tests.csproj" />
+  <Project Path="src/GetDocument.Desktop/GetDocument.Desktop.csproj" />
+  <Project Path="tests/GetDocument.Core.Tests/GetDocument.Core.Tests.csproj" />
+</Solution>

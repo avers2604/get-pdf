@@ -1,0 +1,176 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <!--
+    ГЭТ Документ: own product identity (coexists with ГЭТ PDF and with a system LibreOffice).
+    Built by scripts/windows-build-get-document.ps1; the payload is a fresh self-contained publish
+    plus qpdf in tools\qpdf and a private, trimmed LibreOffice in libreoffice\ (from the build cache).
+  -->
+  <Package Name="ГЭТ Документ" Language="1049" Codepage="1251" Version="$(var.Version)"
+           Manufacturer="SPb GUP Gorelektrotrans"
+           UpgradeCode="6D0B7F35-2C0E-4B8E-9C1D-4E5A9B2F7C31" Scope="perMachine">
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="Установлена более новая версия ГЭТ Документ." />
+    <!-- Several cabinets: one ~700 MB cabinet compresses slowly and strains the 2 GB CAB limit. -->
+    <MediaTemplate EmbedCab="yes" CompressionLevel="mszip" MaximumUncompressedMediaSize="200" />
+
+    <Icon Id="GetDocumentIcon" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="GetDocumentIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/avers2604/get-pdf" />
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" />
+
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.BannerBmp)" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.DialogBmp)" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="GET Document">
+        <Directory Id="LibreOfficeFolder" Name="libreoffice" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="GetDocumentStartMenuFolder" Name="ГЭТ Документ" />
+    </StandardDirectory>
+    <Files Directory="INSTALLFOLDER" Include="$(var.PublishDir)\**" />
+    <!-- Private trimmed LibreOffice, harvested straight from the build cache. -->
+    <Files Directory="LibreOfficeFolder" Include="$(var.LibreOfficeDir)\**">
+      <Exclude Files="$(var.LibreOfficeDir)\.getdoc-trimmed" />
+    </Files>
+    <ComponentRef Id="GetDocumentAssociations" />
+    <ComponentRef Id="GetDocumentStartMenuShortcut" />
+
+    <!-- Classic WixUI for IT / direct msiexec use; users get the GET DS wizard (GetDocument.Setup.exe). -->
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <UI>
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2" />
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="OpenDefaultAppsSettings"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT"
+              Value="Открыть «Приложения по умолчанию», чтобы назначить ГЭТ Документ для нужных файлов" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WixShellExecTarget" Value="ms-settings:defaultapps?registeredAppMachine=GetDocument" />
+    <CustomAction Id="OpenDefaultAppsSettings" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+                  DllEntry="WixShellExec" Impersonate="yes" Return="ignore" />
+  </Package>
+
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="GetDocumentAssociations" Guid="*">
+        <!-- Windows 10/11: register availability only; the user picks defaults (UserChoice). -->
+        <!-- PDF-документ: .pdf -->
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.PDF" Type="string" Value="PDF-документ (ГЭТ Документ)" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.PDF" Name="FriendlyTypeName" Type="string" Value="PDF-документ (ГЭТ Документ)" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.PDF\DefaultIcon" Type="string" Value="[INSTALLFOLDER]Assets\pdf-document.ico" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.PDF\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]GetDocument.Desktop.exe&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.pdf\OpenWithProgids" Name="GetDocument.PDF" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".pdf" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".pdf" Type="string" Value="GetDocument.PDF" />
+        <!-- Текстовый документ: .docx .doc .odt .rtf -->
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Word" Type="string" Value="Текстовый документ (ГЭТ Документ)" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Word" Name="FriendlyTypeName" Type="string" Value="Текстовый документ (ГЭТ Документ)" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Word\DefaultIcon" Type="string" Value="[INSTALLFOLDER]Assets\word-document.ico" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Word\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]GetDocument.Desktop.exe&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.docx\OpenWithProgids" Name="GetDocument.Word" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".docx" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".docx" Type="string" Value="GetDocument.Word" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.doc\OpenWithProgids" Name="GetDocument.Word" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".doc" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".doc" Type="string" Value="GetDocument.Word" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.odt\OpenWithProgids" Name="GetDocument.Word" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".odt" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".odt" Type="string" Value="GetDocument.Word" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.rtf\OpenWithProgids" Name="GetDocument.Word" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".rtf" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".rtf" Type="string" Value="GetDocument.Word" />
+        <!-- Таблица: .xlsx .xls .ods .csv -->
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Excel" Type="string" Value="Таблица (ГЭТ Документ)" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Excel" Name="FriendlyTypeName" Type="string" Value="Таблица (ГЭТ Документ)" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Excel\DefaultIcon" Type="string" Value="[INSTALLFOLDER]Assets\excel-document.ico" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Excel\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]GetDocument.Desktop.exe&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.xlsx\OpenWithProgids" Name="GetDocument.Excel" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".xlsx" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".xlsx" Type="string" Value="GetDocument.Excel" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.xls\OpenWithProgids" Name="GetDocument.Excel" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".xls" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".xls" Type="string" Value="GetDocument.Excel" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.ods\OpenWithProgids" Name="GetDocument.Excel" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".ods" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".ods" Type="string" Value="GetDocument.Excel" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.csv\OpenWithProgids" Name="GetDocument.Excel" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".csv" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".csv" Type="string" Value="GetDocument.Excel" />
+        <!-- Презентация: .pptx .ppt .odp -->
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.PowerPoint" Type="string" Value="Презентация (ГЭТ Документ)" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.PowerPoint" Name="FriendlyTypeName" Type="string" Value="Презентация (ГЭТ Документ)" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.PowerPoint\DefaultIcon" Type="string" Value="[INSTALLFOLDER]Assets\powerpoint-document.ico" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.PowerPoint\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]GetDocument.Desktop.exe&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.pptx\OpenWithProgids" Name="GetDocument.PowerPoint" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".pptx" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".pptx" Type="string" Value="GetDocument.PowerPoint" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.ppt\OpenWithProgids" Name="GetDocument.PowerPoint" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".ppt" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".ppt" Type="string" Value="GetDocument.PowerPoint" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.odp\OpenWithProgids" Name="GetDocument.PowerPoint" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".odp" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".odp" Type="string" Value="GetDocument.PowerPoint" />
+        <!-- Изображение: .png .jpg .jpeg .tif .tiff .bmp .gif .webp -->
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Image" Type="string" Value="Изображение (ГЭТ Документ)" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Image" Name="FriendlyTypeName" Type="string" Value="Изображение (ГЭТ Документ)" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Image\DefaultIcon" Type="string" Value="[INSTALLFOLDER]GetDocument.Desktop.exe,0" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\GetDocument.Image\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]GetDocument.Desktop.exe&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.png\OpenWithProgids" Name="GetDocument.Image" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".png" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".png" Type="string" Value="GetDocument.Image" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.jpg\OpenWithProgids" Name="GetDocument.Image" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".jpg" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".jpg" Type="string" Value="GetDocument.Image" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.jpeg\OpenWithProgids" Name="GetDocument.Image" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".jpeg" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".jpeg" Type="string" Value="GetDocument.Image" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.tif\OpenWithProgids" Name="GetDocument.Image" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".tif" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".tif" Type="string" Value="GetDocument.Image" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.tiff\OpenWithProgids" Name="GetDocument.Image" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".tiff" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".tiff" Type="string" Value="GetDocument.Image" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.bmp\OpenWithProgids" Name="GetDocument.Image" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".bmp" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".bmp" Type="string" Value="GetDocument.Image" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.gif\OpenWithProgids" Name="GetDocument.Image" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".gif" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".gif" Type="string" Value="GetDocument.Image" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\.webp\OpenWithProgids" Name="GetDocument.Image" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\SupportedTypes" Name=".webp" Type="string" Value="" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities\FileAssociations" Name=".webp" Type="string" Value="GetDocument.Image" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe"
+                       Name="FriendlyAppName" Type="string" Value="ГЭТ Документ" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\DefaultIcon"
+                       Type="string" Value="[INSTALLFOLDER]GetDocument.Desktop.exe,0" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\GetDocument.Desktop.exe\shell\open\command"
+                       Type="string" Value="&quot;[INSTALLFOLDER]GetDocument.Desktop.exe&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities"
+                       Name="ApplicationName" Type="string" Value="ГЭТ Документ" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities"
+                       Name="ApplicationDescription" Type="string"
+                       Value="PDF, документы Word, таблицы Excel, презентации и изображения во вкладках одного окна" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument\Capabilities"
+                       Name="ApplicationIcon" Type="string" Value="[INSTALLFOLDER]GetDocument.Desktop.exe,0" />
+        <RegistryValue Root="HKLM" Key="Software\RegisteredApplications"
+                       Name="GetDocument" Type="string" Value="Software\GetDocument\Capabilities" />
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\GetDocument.Desktop.exe"
+                       Type="string" Value="[INSTALLFOLDER]GetDocument.Desktop.exe" />
+      </Component>
+    </DirectoryRef>
+    <DirectoryRef Id="GetDocumentStartMenuFolder">
+      <Component Id="GetDocumentStartMenuShortcut" Guid="*">
+        <Shortcut Id="GetDocumentStartMenuEntry" Name="ГЭТ Документ"
+                  Description="PDF, Word, Excel, PowerPoint и изображения в одном окне"
+                  Target="[INSTALLFOLDER]GetDocument.Desktop.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="GetDocumentRemoveStartMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\GetDocument"
+                       Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

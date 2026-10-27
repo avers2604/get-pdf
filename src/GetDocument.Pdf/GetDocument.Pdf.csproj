@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    PDF document operations for GET Document, shared with GET PDF: the same page plan,
+    stamps, page numbering, writer, qpdf compression, text selection, signature check and
+    form filling. Sources are LINKED from src/GetPdf (one implementation, two shells);
+    only WPF-free files are linked. PDFsharp core build (cross-platform) instead of PDFsharp-WPF.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>GetPdf</RootNamespace>
+    <!-- Linked GET PDF sources target Windows APIs only where guarded at runtime. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
+    <PackageReference Include="Aspose.PDF.FOSS" Version="26.10.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="GetDocument.Desktop" />
+    <InternalsVisibleTo Include="GetDocument.Pdf.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../GetPdf/PdfPagePlan.cs" Link="Shared/PdfPagePlan.cs" />
+    <Compile Include="../GetPdf/PdfEditHistory.cs" Link="Shared/PdfEditHistory.cs" />
+    <Compile Include="../GetPdf/PdfBatchPageLabels.cs" Link="Shared/PdfBatchPageLabels.cs" />
+    <Compile Include="../GetPdf/PdfPageRange.cs" Link="Shared/PdfPageRange.cs" />
+    <Compile Include="../GetPdf/PdfDocumentWriter.cs" Link="Shared/PdfDocumentWriter.cs" />
+    <Compile Include="../GetPdf/PdfOutputVerifier.cs" Link="Shared/PdfOutputVerifier.cs" />
+    <Compile Include="../GetPdf/PdfStructureGuard.cs" Link="Shared/PdfStructureGuard.cs" />
+    <Compile Include="../GetPdf/PdfSaveSafety.cs" Link="Shared/PdfSaveSafety.cs" />
+    <Compile Include="../GetPdf/PdfMarkupPolicy.cs" Link="Shared/PdfMarkupPolicy.cs" />
+    <Compile Include="../GetPdf/PdfQpdfBinaryApproval.cs" Link="Shared/PdfQpdfBinaryApproval.cs" />
+    <Compile Include="../GetPdf/PdfQpdfProcessRunner.cs" Link="Shared/PdfQpdfProcessRunner.cs" />
+    <Compile Include="../GetPdf/PdfQpdfValidator.cs" Link="Shared/PdfQpdfValidator.cs" />
+    <Compile Include="../GetPdf/PdfLosslessOptimizer.cs" Link="Shared/PdfLosslessOptimizer.cs" />
+    <Compile Include="../GetPdf/PdfTextComparisonService.cs" Link="Shared/PdfTextComparisonService.cs" />
+    <Compile Include="../GetPdf/PdfSearchHighlightGeometry.cs" Link="Shared/PdfSearchHighlightGeometry.cs" />
+    <Compile Include="../GetPdf/PdfTextSelectionReader.cs" Link="Shared/PdfTextSelectionReader.cs" />
+    <Compile Include="../GetPdf/PdfSignatureInspector.cs" Link="Shared/PdfSignatureInspector.cs" />
+    <Compile Include="../GetPdf/PdfTextFormService.cs" Link="Shared/PdfTextFormService.cs" />
+    <Compile Include="../GetPdf/PdfRecentDocuments.cs" Link="Shared/PdfRecentDocuments.cs" />
+    <Compile Include="../GetPdf/PdfSafeDisplayName.cs" Link="Shared/PdfSafeDisplayName.cs" />
+    <Compile Include="../GetPdf/PdfTextIndex.cs" Link="Shared/PdfTextIndex.cs" />
+    <Compile Include="../GetPdf/PdfInteractiveInspector.cs" Link="Shared/PdfInteractiveInspector.cs" />
+    <Compile Include="../GetPdf/PdfFormFillLabPolicy.cs" Link="Shared/PdfFormFillLabPolicy.cs" />
+    <Compile Include="../GetPdf/PdfFormPreflight.cs" Link="Shared/PdfFormPreflight.cs" />
+    <Compile Include="../GetPdf/PdfSearchGeometryReader.cs" Link="Shared/PdfSearchGeometryReader.cs" />
+  </ItemGroup>
+</Project>
