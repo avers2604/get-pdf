@@ -131,17 +131,16 @@ public partial class PdfViewerWindow
         {
             cancellation.ThrowIfCancellationRequested();
             var reference = references[index];
-            var image = await store.GetPageAsync(reference.SourcePage, cancellation);
-            cancellation.ThrowIfCancellationRequested();
-            // Decode/scale the multi-megapixel raster off the UI thread; only the frozen
+            // Rendered off the UI thread straight at preview size; only the frozen
             // result crosses back, so fast scrolling never waits on it.
-            return await Task.Run(() =>
+            BitmapSource bitmap = await store.RenderPreviewAsync(reference.SourcePage, cancellation);
+            cancellation.ThrowIfCancellationRequested();
+            if (reference.Rotation != 0)
             {
-                BitmapSource bitmap = PdfPreviewRenderer.RenderBounded(image);
-                if (reference.Rotation != 0) bitmap = new TransformedBitmap(bitmap, new RotateTransform(reference.Rotation));
+                bitmap = new TransformedBitmap(bitmap, new RotateTransform(reference.Rotation));
                 bitmap.Freeze();
-                return bitmap;
-            }, cancellation);
+            }
+            return bitmap;
         }, ++_continuousRevision);
     }
 }

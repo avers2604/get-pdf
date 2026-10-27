@@ -114,7 +114,7 @@ public partial class PdfViewerWindow
             await Task.Run(() => PdfDocumentWriter.AppendSourceRevision(_sourcePath, edited, master));
             await StopThumbnailWorkerAsync(); await DocumentView.StopAsync();
             _pageStore?.Dispose(); _sourcePath = master;
-            _pageStore = new PdfLazyPageStore(_context, master);
+            _pageStore = new PdfLazyPageStore(master);
             int newSource = _plan.RegisterSourcePage();
             _history.Execute(p => p.ReplaceSourcePage(index, newSource));
             _markupAllowed = PdfMarkupPolicy.ReadEligibleSourcePages(master);

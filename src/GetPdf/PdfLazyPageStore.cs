@@ -1,38 +1,39 @@
-using NAPS2.Images;
-using NAPS2.ImportExport;
-using NAPS2.Pdf;
-using NAPS2.Scan;
+using System.Windows.Media.Imaging;
 
 namespace GetPdf;
 
 /// <summary>
-/// Lazily imports individual PDF pages using the existing NAPS2 PDFium backend.
-/// Only three ProcessedImage page objects remain in memory. Page count comes
-/// from PdfPig and is read once without decoding page bitmaps.
+/// Renders individual PDF pages on demand, straight at preview or thumbnail size
+/// (<see cref="PdfPageRasterizer"/>), so a large-format sheet never needs a
+/// full-resolution intermediate bitmap. Page count comes from PdfPig and is read
+/// once without decoding page content.
 /// </summary>
 internal sealed class PdfLazyPageStore : IDisposable
 {
-    private readonly ScanningContext _context;
     private readonly string _path;
-    private readonly PdfLruCache<int, ProcessedImage> _pages =
-        new(3, image => image.Dispose());
     private readonly SemaphoreSlim _mutex = new(1, 1);
     private bool _disposed;
 
     public int PageCount { get; }
-    public int CachedPageCount => _pages.Count;
 
-    public PdfLazyPageStore(ScanningContext context, string path)
+    public PdfLazyPageStore(string path)
     {
-        _context = context ?? throw new ArgumentNullException(nameof(context));
         _path = Path.GetFullPath(path);
         using var pdf = UglyToad.PdfPig.PdfDocument.Open(_path);
         PageCount = pdf.NumberOfPages;
         if (PageCount < 1) throw new InvalidDataException("PDF не содержит страниц.");
     }
 
-    public async Task<ProcessedImage> GetPageAsync(int zeroBasedPage,
-        CancellationToken cancellation = default)
+    /// <summary>Screen preview of a page, within <see cref="PdfPreviewBounds"/>.</summary>
+    public Task<BitmapSource> RenderPreviewAsync(int zeroBasedPage, CancellationToken cancellation = default) =>
+        RenderAsync(zeroBasedPage, PdfPreviewBounds.Fit, cancellation);
+
+    /// <summary>Thumbnail of a page, within <see cref="PdfThumbnailBounds"/>.</summary>
+    public Task<BitmapSource> RenderThumbnailAsync(int zeroBasedPage, CancellationToken cancellation = default) =>
+        RenderAsync(zeroBasedPage, PdfThumbnailBounds.Fit, cancellation);
+
+    private async Task<BitmapSource> RenderAsync(int zeroBasedPage,
+        Func<int, int, (int Width, int Height)> fit, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
         if (_disposed) throw new ObjectDisposedException(nameof(PdfLazyPageStore));
@@ -43,44 +44,10 @@ internal sealed class PdfLazyPageStore : IDisposable
         {
             cancellation.ThrowIfCancellationRequested();
             if (_disposed) throw new ObjectDisposedException(nameof(PdfLazyPageStore));
-            if (_pages.TryGet(zeroBasedPage, out var hit) && hit is not null)
-                return hit;
-            // Bound native PDFium imports across all WPF document tabs.
-            using var importQuota = await PdfRenderConcurrency.EnterAsync(cancellation);
+            // PDFium is not thread-safe: own it exclusively against NAPS2 work in other tabs.
+            using var exclusive = await PdfRenderConcurrency.EnterExclusiveAsync(cancellation);
             cancellation.ThrowIfCancellationRequested();
-            if (_disposed) throw new ObjectDisposedException(nameof(PdfLazyPageStore));
-            var importer = new PdfImporter(_context);
-            ProcessedImage? result = null;
-            try
-            {
-                await foreach (var image in importer.Import(_path,
-                    new ImportParams { Slice = Slice.Item(zeroBasedPage) })
-                    .WithCancellation(cancellation))
-                {
-                    if (cancellation.IsCancellationRequested)
-                    {
-                        image.Dispose();
-                        cancellation.ThrowIfCancellationRequested();
-                    }
-                    if (result is not null)
-                    {
-                        image.Dispose();
-                        throw new InvalidDataException("Выборочный импорт PDF вернул больше одной страницы.");
-                    }
-                    result = image;
-                }
-                if (result is null)
-                    throw new InvalidDataException("Не удалось загрузить выбранную страницу PDF.");
-                cancellation.ThrowIfCancellationRequested();
-                _pages.Add(zeroBasedPage, result);
-                return result;
-            }
-            catch
-            {
-                if (result is not null && !_pages.TryGet(zeroBasedPage, out _))
-                    result.Dispose();
-                throw;
-            }
+            return await Task.Run(() => PdfPageRasterizer.Render(_path, zeroBasedPage, fit), cancellation);
         }
         finally { _mutex.Release(); }
     }
@@ -88,9 +55,8 @@ internal sealed class PdfLazyPageStore : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        // Caller must wait for active GetPageAsync before disposing the store.
+        // Caller must wait for active renders before disposing the store.
         _disposed = true;
-        _pages.Dispose();
         _mutex.Dispose();
     }
 }

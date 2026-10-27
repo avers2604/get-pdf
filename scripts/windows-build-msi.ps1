@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 if ([Environment]::OSVersion.Platform -ne 'Win32NT') {
     throw 'Get PDF gate must run on Windows with .NET SDK 10 and WiX Toolset 5.'
 }
-$version = '0.1.2'
+$version = '0.1.3'
 # qpdf (Apache-2.0) ships with GET PDF since 0.1.2 for lossless compression and structure checks.
 # The zip is pinned to the SHA-256 published in qpdf-12.4.2.sha256 of the official release.
 $qpdfVersion = '12.4.2'
@@ -54,7 +54,7 @@ Invoke-Checked 'dotnet' (@('restore', $setupProject) + $restores)
 Invoke-Checked 'dotnet' @('build', $project, '-c', 'Release', '-r', 'win-x64', '--no-restore')
 # MSTest.Sdk uses MTP via root global.json. Reject zero/partial discovery.
 Invoke-Checked 'dotnet' @('test', $tests, '-c', 'Release', '--no-restore',
-    '--minimum-expected-tests', '192')
+    '--minimum-expected-tests', '195')
 
 # A dirty publish dir could carry old TWAIN/scan binaries into a new MSI.
 if (Test-Path -LiteralPath $publish) {
