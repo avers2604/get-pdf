@@ -177,6 +177,20 @@ internal static class ReleaseGateSelfTests
             }
             finally { Directory.Delete(root, recursive: true); }
         });
+        Check("a string literal cannot impersonate a TestMethod annotation", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gd29-contract-string-" +
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                File.WriteAllText(Path.Combine(root, "Fixture.cs"),
+                    "const string annotation = \"[TestMethod]\";\n" +
+                    "public void ForgedRequiredCase() { }\n");
+                return !TestContractAuditor.HasRequiredMethod(root, "ForgedRequiredCase");
+            }
+            finally { Directory.Delete(root, recursive: true); }
+        });
         Check("a real MSTest annotation and an intervening Timeout count", () =>
         {
             string root = Path.Combine(Path.GetTempPath(), "gd29-contract-positive-" +
