@@ -161,6 +161,50 @@ internal static class ReleaseGateSelfTests
                 MakeTrx(ReleaseReportEvaluator.RequiredTests("Office", "windows")
                     .Select(x => (x, "Passed")))).Approved);
 
+        Check("an attribute without a real test method cannot satisfy a release contract", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gd29-contract-negative-" +
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                File.WriteAllText(Path.Combine(root, "Fixture.cs"),
+                    "// [TestMethod] public void RequiredCase() { }\\n" +
+                    "public void RequiredCase() { }\\n" +
+                    "[TestMethod] public void FakeRequiredCase() { }\\n");
+                return !TestContractAuditor.HasRequiredMethod(root, "RequiredCase") &&
+                    TestContractAuditor.HasRequiredMethod(root, "FakeRequiredCase");
+            }
+            finally { Directory.Delete(root, recursive: true); }
+        });
+        Check("a real MSTest annotation and an intervening Timeout count", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gd29-contract-positive-" +
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                File.WriteAllText(Path.Combine(root, "Fixture.cs"),
+                    "[TestMethod]\\n[Timeout(240_000, CooperativeCancellation = true)]\\n" +
+                    "public async Task RequiredCase() => await Task.CompletedTask;\\n");
+                return TestContractAuditor.HasRequiredMethod(root, "RequiredCase");
+            }
+            finally { Directory.Delete(root, recursive: true); }
+        });
+        Check("method name spoofing never satisfies required source contract", () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gd29-contract-spoof-" +
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                File.WriteAllText(Path.Combine(root, "Fixture.cs"),
+                    "[TestMethod] public void RequiredCaseSuffix() { }\\n");
+                return !TestContractAuditor.HasRequiredMethod(root, "RequiredCase");
+            }
+            finally { Directory.Delete(root, recursive: true); }
+        });
+
         string folder = Path.Combine(Path.GetTempPath(),
             "gd26-gate-selftest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
