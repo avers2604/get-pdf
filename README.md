@@ -180,4 +180,14 @@ pwsh -File scripts/verify-get-document-release-windows.ps1 -OfflineNuGetFeed 'D:
 
 [GD-26 — технический разбор и порядок приёмки](docs/GET_DOCUMENT_GD26_RELEASE_GATE_SELFTEST_2026-10-26.md). **Новая версия ещё не собрана и её C# self-test не запускался в этом окружении** — нужен локальный .NET 10 SDK; оборудование Windows/Astra Linux также ожидает испытаний.
 
+## GD-27 — подготовка лаборатории Windows/Astra Linux и акт физической печати (27.10.2026)
+
+Перед `restore/build/test` теперь запускаются отдельные preflight-скрипты, которые проверяют .NET 10+, локальный NuGet feed и состав решения. Исправлен порядок аргументов `dotnet test` для MTP: `--results-directory` перед `--`, а `--report-trx` после него. Самопроверка XML DTD теперь использует корректный TRX, а не заведомо испорченный пример.
+
+Итоговый `get-document-release-gate.json` различает **автоматически пройденные тесты** и **не пройденную аппаратную приёмку**: поле `ReleaseAuthorized` всегда `false` до отдельно подтверждённой приёмки на реальных МФУ. Подготовлена матрица A4/A3, дуплекс, лотки, Windows/CUPS, Office с несохранёнными правками, WORM и восстановление после ошибок.
+
+[GD-27: команды стенда и матрица аппаратной приёмки](docs/GET_DOCUMENT_GD27_RELEASE_LAB_2026-10-27.md).
+
+**Новая ветка остаётся Draft:** код и пробы принтеров ещё не прошли настоящий .NET build/MSTest и физические испытания.
+
 План завершения с критериями приёмки: [GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md](docs/GET_DOCUMENT_TRANSITION_RELEASE_GATE_2026-10-24.md). Исходное описание ГЭТ PDF: [LEGACY_GET_PDF_README_2026-10-24.md](docs/LEGACY_GET_PDF_README_2026-10-24.md).

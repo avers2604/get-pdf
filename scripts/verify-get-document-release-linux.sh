@@ -8,6 +8,7 @@ if [[ -z "$feed" ]]; then
   echo "Usage: bash scripts/verify-get-document-release-linux.sh /local/nuget-feed" >&2
   exit 2
 fi
+bash scripts/check-get-document-lab-linux.sh "$feed"
 bash scripts/verify-get-document-offline-linux.sh "$feed"
 
 dotnet restore tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
@@ -29,9 +30,9 @@ echo "Local TRX reports: $reports"
 for suite in Core Office Printing Images Revisions Collaboration WopiGateway; do
   project="tests/GetDocument.${suite}.Tests/GetDocument.${suite}.Tests.csproj"
   # MSTest.Sdk 4.5 uses Microsoft.Testing.Platform, not the old --logger trx.
-  dotnet test --project "$project" -c Release --no-restore -- \
-    --report-trx --report-trx-filename "${suite}.trx" \
-    --results-directory "$reports"
+  dotnet test --project "$project" -c Release --no-restore \
+    --results-directory "$reports" -- \
+    --report-trx --report-trx-filename "${suite}.trx"
 done
 dotnet run --project tools/GetDocument.ReleaseGate/GetDocument.ReleaseGate.csproj \
   -c Release --no-build --no-restore -- "$reports" linux

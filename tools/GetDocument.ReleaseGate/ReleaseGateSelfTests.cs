@@ -114,9 +114,18 @@ internal static class ReleaseGateSelfTests
             File.WriteAllText(corrupt, "<TestRun");
             Check("truncated TRX blocks", () =>
                 !ReleaseReportEvaluator.EvaluateFile("Core", "linux", corrupt).Approved);
-            File.WriteAllText(corrupt,
-                "<!DOCTYPE TestRun [<!ENTITY dangerous SYSTEM 'file:///etc/passwd'>]>" +
-                "<TestRun>&dangerous;</TestRun>");
+            // Keep the TRX otherwise fully valid: if the XML parser were to
+            // permit DTDs, this fixture would pass all mandatory Core checks.
+            // This proves that DTD blocking works rather than merely detecting
+            // an unrelated wrong XML namespace or missing test results.
+            string validTrx = MakeTrx(requiredCore.Select(name =>
+                (Name: name, Status: "Passed"))).ToString(SaveOptions.DisableFormatting);
+            const string externalEntity =
+                "<!DOCTYPE TestRun [<!ENTITY dangerous SYSTEM 'file:///etc/passwd'>]>";
+            string maliciousTrx = externalEntity +
+                validTrx.Replace("<TestRun ", "<TestRun operator=\"&dangerous;\" ",
+                    StringComparison.Ordinal);
+            File.WriteAllText(corrupt, maliciousTrx);
             Check("XML DTD/entity resolution blocks", () =>
                 !ReleaseReportEvaluator.EvaluateFile("Core", "linux", corrupt).Approved);
         }
