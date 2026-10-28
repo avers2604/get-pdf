@@ -8,6 +8,7 @@ public interface IEuroOfficeNativeSessionTransport : IAsyncDisposable
 {
     Task AttachAsync(CancellationToken cancellationToken);
     Task ResizeAsync(int width, int height, double scale, CancellationToken cancellationToken);
+    Task<EuroOfficeNativeDiagnosticFrame> RequestPreviewFrameAsync(CancellationToken cancellationToken);
     Task CloseAsync(CancellationToken cancellationToken);
     Task WaitForExitAsync(CancellationToken cancellationToken);
 }
@@ -21,6 +22,8 @@ public interface IEuroOfficeNativeSessionView
     Task OpenAsync(Guid tabId, Guid sessionId, string documentId, string title,
         CancellationToken cancellationToken);
     Task ConnectedAsync(Guid tabId, Guid sessionId, CancellationToken cancellationToken);
+    Task PreviewFrameAsync(Guid tabId, Guid sessionId, EuroOfficeNativeDiagnosticFrame frame,
+        CancellationToken cancellationToken);
     Task HostLostAsync(Guid tabId, Guid sessionId, CancellationToken cancellationToken);
     Task<bool> HasUnverifiedChangesAsync(Guid tabId, Guid sessionId,
         CancellationToken cancellationToken);
@@ -124,6 +127,38 @@ public sealed class EuroOfficeNativeSessionCoordinator : IAsyncDisposable
             try
             {
                 await entry.Transport.ResizeAsync(width, height, scale, cancellationToken);
+            }
+            catch
+            {
+                await FaultAsync(tabId, entry);
+                throw;
+            }
+        }
+        finally { _gate.Release(); }
+    }
+
+    /// <summary>
+    /// Request one bounded Qt-painter PNG (NOT CEF OSR) from the current host.
+    /// The view adapter is responsible for decoding only on the UI thread.
+    /// A failed/forged frame terminates this experimental transport.
+    /// </summary>
+    public async Task RefreshDiagnosticFrameAsync(Guid tabId, Guid sessionId,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var entry = RequireCurrent(tabId, sessionId);
+            if (entry.Closing || entry.Faulted)
+                throw new InvalidOperationException("Нельзя показывать кадр закрытого сеанса.");
+            try
+            {
+                var frame = await entry.Transport.RequestPreviewFrameAsync(cancellationToken);
+                if (frame.SessionId != sessionId || frame.TabId != tabId ||
+                    frame.CefRendered || frame.OfficeDocumentVerified ||
+                    frame.RevisionCommitted || frame.PrintApproved)
+                    throw new InvalidDataException("Кадр принадлежит чужому сеансу или содержит неподтверждённые права.");
+                await _view.PreviewFrameAsync(tabId, sessionId, frame, cancellationToken);
             }
             catch
             {

@@ -3,6 +3,8 @@
 Requires the separately compiled Qt-only diagnostic binary; tests are authored
 now and intentionally not executed until the final offline laboratory phase.
 """
+import base64
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -58,6 +60,30 @@ class QtNativeIpcTests(unittest.TestCase):
         self.assertEqual([], messages[0]["features"])
         self.assertTrue(all(m["sessionId"] == SESSION for m in messages))
         self.assertEqual([0, 1, 2, 3], [m["sequence"] for m in messages])
+
+    def test_session_bound_qt_only_png_frame_not_an_office_document(self):
+        result = self.invoke([
+            request("hello"),
+            request("attach-tab", sequence=1),
+            request("request-frame", sequence=2),
+            request("close", sequence=3)
+        ])
+        self.assertEqual(0, result.returncode,
+                         result.stderr.decode(errors="replace"))
+        messages = [json.loads(line) for line in result.stdout.decode().splitlines()]
+        self.assertEqual(4, len(messages))
+        frame = messages[2]
+        self.assertEqual("frame", frame["command"])
+        self.assertEqual("preview", frame["state"])
+        self.assertEqual("qt-painter-test-only", frame["source"])
+        self.assertEqual((320, 180), (frame["width"], frame["height"]))
+        self.assertEqual(2, frame["sequence"])
+        self.assertEqual(SESSION, frame["sessionId"])
+        self.assertEqual(TAB, frame["tabId"])
+        png = base64.b64decode(frame["payloadBase64"], validate=True)
+        self.assertLessEqual(len(png), 48 * 1024)
+        self.assertEqual(b"\x89PNG\r\n\x1a\n", png[:8])
+        self.assertEqual(hashlib.sha256(png).hexdigest(), frame["sha256"])
 
     def test_denies_document_operations(self):
         for command in ("open-local", "save-as-new-revision", "export-pdf",

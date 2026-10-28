@@ -83,6 +83,13 @@ public sealed class EuroOfficeNativeIpcProcessSession : IEuroOfficeNativeSession
         return _process.WaitForExitAsync(cancellationToken);
     }
 
+    public Task<EuroOfficeNativeDiagnosticFrame> RequestPreviewFrameAsync(
+        CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        return _channel.RequestPreviewFrameAsync(cancellationToken);
+    }
+
     public async Task CloseAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
