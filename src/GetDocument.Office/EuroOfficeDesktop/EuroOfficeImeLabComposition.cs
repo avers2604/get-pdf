@@ -45,7 +45,12 @@ public sealed class EuroOfficeImeLabComposition : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_composing)
             throw new InvalidOperationException("IME preedit не был начат.");
-        EuroOfficeImeLabTextPolicy.Validate(preedit);
+        try { EuroOfficeImeLabTextPolicy.Validate(preedit); }
+        catch
+        {
+            Cancel(); // invalid preedit cannot leave a previous draft armed
+            throw;
+        }
         if (_updates >= MaxUpdatesPerComposition)
         {
             Cancel();
