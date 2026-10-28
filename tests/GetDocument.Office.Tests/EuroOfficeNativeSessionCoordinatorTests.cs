@@ -77,6 +77,51 @@ public sealed class EuroOfficeNativeSessionCoordinatorTests
     }
 
     [TestMethod]
+    public async Task ValidQtPainterFrameUpdatesOnlyItsOwnTab()
+    {
+        var ui = new FakeView();
+        await using var coordinator = new EuroOfficeNativeSessionCoordinator(ui);
+        Guid tab = Guid.Parse("b70b9c8b-7341-4d99-ae3b-2db31d9c25c7");
+        Guid session = Guid.Parse("25fe7878-23da-4d76-b28d-2fd5ffb187e8");
+        var transport = new FakeTransport
+        {
+            Frame = EuroOfficeNativeDiagnosticFrame.Parse(
+                EuroOfficeNativeDiagnosticFrameTests.Reply(), session, tab, 2)
+        };
+        await coordinator.StartAsync(tab, session, "fixture", "Qt-only", transport,
+            labApproved: true, CancellationToken.None);
+        await coordinator.RefreshDiagnosticFrameAsync(tab, session, CancellationToken.None);
+        Assert.AreEqual(1, transport.FrameRequests);
+        Assert.AreEqual(1, ui.PreviewCount);
+        Assert.IsFalse(ui.Preview!.CefRendered);
+        Assert.IsFalse(ui.Preview.OfficeDocumentVerified);
+        await coordinator.CloseAsync(tab, session, false, CancellationToken.None);
+    }
+
+    [TestMethod]
+    public async Task ForeignQtFrameFailsSessionWithoutShowingIt()
+    {
+        var ui = new FakeView();
+        await using var coordinator = new EuroOfficeNativeSessionCoordinator(ui);
+        var transport = new FakeTransport
+        {
+            Frame = EuroOfficeNativeDiagnosticFrame.Parse(
+                EuroOfficeNativeDiagnosticFrameTests.Reply(),
+                Guid.Parse("25fe7878-23da-4d76-b28d-2fd5ffb187e8"),
+                Guid.Parse("b70b9c8b-7341-4d99-ae3b-2db31d9c25c7"), 2)
+        };
+        Guid tab = Guid.NewGuid(), session = Guid.NewGuid();
+        await coordinator.StartAsync(tab, session, "fixture", "Qt-only", transport, true,
+            CancellationToken.None);
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+            coordinator.RefreshDiagnosticFrameAsync(tab, session, CancellationToken.None));
+        Assert.AreEqual(0, ui.PreviewCount);
+        Assert.AreEqual(1, ui.Failures);
+        Assert.AreEqual(1, transport.DisposeCalls);
+        await coordinator.CloseAsync(tab, session, false, CancellationToken.None);
+    }
+
+    [TestMethod]
     public async Task StaleHostIdCannotResizeOrCloseNewSession()
     {
         var ui = new FakeView();
@@ -124,8 +169,12 @@ public sealed class EuroOfficeNativeSessionCoordinatorTests
 
     private sealed class FakeView : IEuroOfficeNativeSessionView
     {
-        public int Opened, Removed, Failures;
+        public int Opened, Removed, Failures, PreviewCount;
         public bool Connected, UnverifiedChanges;
+        public EuroOfficeNativeDiagnosticFrame? Preview;
+        public Task PreviewFrameAsync(Guid tab, Guid session,
+            EuroOfficeNativeDiagnosticFrame frame, CancellationToken ct)
+        { ++PreviewCount; Preview = frame; return Task.CompletedTask; }
         public Task OpenAsync(Guid tab, Guid session, string document, string title, CancellationToken ct)
         { ++Opened; return Task.CompletedTask; }
         public Task ConnectedAsync(Guid tab, Guid session, CancellationToken ct)
@@ -141,8 +190,17 @@ public sealed class EuroOfficeNativeSessionCoordinatorTests
     private sealed class FakeTransport : IEuroOfficeNativeSessionTransport
     {
         private readonly TaskCompletionSource _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public int Attaches, Resizes, Closes, DisposeCalls;
+        public int Attaches, Resizes, Closes, DisposeCalls, FrameRequests;
         public bool FailAttach;
+        public EuroOfficeNativeDiagnosticFrame? Frame;
+        public Task<EuroOfficeNativeDiagnosticFrame> RequestPreviewFrameAsync(CancellationToken ct)
+        {
+            ++FrameRequests;
+            return Frame is { } frame
+                ? Task.FromResult(frame)
+                : Task.FromException<EuroOfficeNativeDiagnosticFrame>(
+                    new InvalidDataException("No frame provided by the test transport."));
+        }
         public Task AttachAsync(CancellationToken ct)
         {
             ++Attaches;
