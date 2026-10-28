@@ -63,6 +63,23 @@ public sealed class EuroOfficeNativeLabHostTests
             EuroOfficeDesktopProbeProtocol.Require(features, "open-local", labApproved: false));
     }
 
+    [TestMethod]
+    [Timeout(45_000, CooperativeCancellation = true)]
+    public async Task LocalCompiledQtHostStartsWithPinnedHashAndExposesZeroPermissions()
+    {
+        string? executable = Environment.GetEnvironmentVariable("GD31J2_QT_HOST_BINARY");
+        string? pinnedHash = Environment.GetEnvironmentVariable("GD31J2_QT_HOST_SHA256");
+        if (string.IsNullOrWhiteSpace(executable) || string.IsNullOrWhiteSpace(pinnedHash))
+            Assert.Inconclusive("Нужны локально собранный Qt host и заранее подтверждённый SHA-256.");
+
+        var policy = new EuroOfficeNativeLabHostPolicy(
+            Path.GetDirectoryName(Path.GetFullPath(executable!))!, executable!, pinnedHash!);
+        await using var session = await EuroOfficeNativeLabHostSession.StartAsync(
+            policy, headless: true, labApproved: true);
+        Assert.AreEqual(0, session.Capabilities.Features.Count);
+        Assert.IsFalse(session.IsRunning);
+    }
+
     private sealed class Fixture : IDisposable
     {
         public string Root { get; } =
