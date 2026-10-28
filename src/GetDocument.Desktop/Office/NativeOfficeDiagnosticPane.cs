@@ -26,6 +26,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     private bool _labButtonHeld;
     private IPointer? _capturedLabPointer;
     private readonly SemaphoreSlim _labGestureGate = new(1, 1);
+    private bool _labReservedModifierActive;
     private readonly TextBlock _state = new()
     {
         FontSize = 16,
@@ -80,6 +81,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         _preview.PointerReleased += OnLabPointerReleased;
         _preview.PointerCaptureLost += OnLabPointerCaptureLost;
         _preview.KeyDown += OnLabKeyDown;
+        _preview.KeyUp += OnLabKeyUp;
         _preview.TextInput += OnLabTextInput;
         _preview.PointerMoved += OnLabPointerMoved;
         _preview.PointerWheelChanged += OnLabPointerWheel;
@@ -183,6 +185,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         if (expectedChannel is not null && !ReferenceEquals(_labInput, expectedChannel))
             return; // late callback from an older laboratory generation
         _labFocused = false;
+        _labReservedModifierActive = false;
         _labInput = null;
         _onLabInputFailure = null;
         _lastMoveTimestamp = 0;
@@ -205,6 +208,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             if (_labFocused)
             {
                 _labFocused = false;
+                _labReservedModifierActive = false;
                 await input.SendFocusAsync(false, CancellationToken.None);
             }
         }
@@ -343,6 +347,8 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     /// </summary>
     private async void OnLabKeyDown(object? sender, KeyEventArgs e)
     {
+        _labReservedModifierActive = (e.KeyModifiers &
+            (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0;
         if (!_labFocused || _labButtonHeld ||
             _labInput is not { KeyboardLabApproved: true } input)
             return;
@@ -378,13 +384,19 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         finally { _labGestureGate.Release(); }
     }
 
+    private void OnLabKeyUp(object? sender, KeyEventArgs e)
+    {
+        _labReservedModifierActive = (e.KeyModifiers &
+            (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0;
+    }
+
     /// <summary>
     /// TextInput delivers already committed characters. Do not forward
     /// preedit/intermediate IME strings or multi-character paste payloads.
     /// </summary>
     private async void OnLabTextInput(object? sender, TextInputEventArgs e)
     {
-        if (!_labFocused || _labButtonHeld ||
+        if (!_labFocused || _labButtonHeld || _labReservedModifierActive ||
             _labInput is not { KeyboardLabApproved: true } input ||
             e.Text is not { Length: 1 } text)
             return;
