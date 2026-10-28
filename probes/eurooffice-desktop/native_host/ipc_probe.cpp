@@ -1,10 +1,16 @@
 // GD-31J.8: process-level Qt CORE diagnostic IPC, not an Office runtime.
 //
-// The only supported commands are hello, attach-tab, resize and close.
+// Only hello, attach-tab, resize, request-frame (Qt painter), and close.
 // No file path, URL, printer, window handle, shell command or document data
 // is processed. A Qt QWidget / CEF editor is never created here.
 // This process MUST NOT be used as proof that native editor embedding works.
 #include "ipc_probe.h"
+#include <QBuffer>
+#include <QColor>
+#include <QCryptographicHash>
+#include <QImage>
+#include <QPainter>
+#include <QPen>
 #include <QByteArray>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -66,6 +72,47 @@ bool Emit(QJsonObject object) {
         static_cast<size_t>(bytes.size())) return false;
     if (std::fputc('\n', stdout) == EOF) return false;
     return std::fflush(stdout) == 0;
+}
+
+// This deliberately paints an ORIGINAL Qt-only diagnostic raster. It is
+// NOT a screenshot of a CEF native child view or any office document.
+bool EmitDiagnosticFrame(const QString& session, const QString& tab, int sequence) {
+    QImage frame(320, 180, QImage::Format_ARGB32_Premultiplied);
+    if (frame.isNull()) return false;
+    frame.fill(QColor(247, 248, 250));
+    {
+        QPainter painter(&frame);
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.fillRect(QRect(0, 0, 320, 24), QColor(33, 66, 91));
+        painter.setPen(QPen(QColor(150, 170, 182), 1));
+        painter.drawRect(QRect(8, 36, 304, 135));
+        painter.setPen(QPen(QColor(57, 125, 139), 3));
+        painter.drawLine(25, 74, 270, 74);
+        painter.drawLine(25, 100, 185, 100);
+        painter.drawLine(25, 126, 230, 126);
+    }
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QIODevice::WriteOnly) ||
+        !frame.save(&buffer, "PNG") || bytes.size() > 48 * 1024)
+        return false;
+    const QString hash = QString::fromLatin1(
+        QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+    const QJsonObject response{
+        {"command", "frame"},
+        {"encoding", "png-base64"},
+        {"height", 180},
+        {"payloadBase64", QString::fromLatin1(bytes.toBase64())},
+        {"protocol", kProtocol},
+        {"sequence", sequence},
+        {"sessionId", session},
+        {"sha256", hash},
+        {"source", "qt-painter-test-only"},
+        {"state", "preview"},
+        {"tabId", tab},
+        {"width", 320}
+    };
+    return Emit(response);
 }
 
 bool ValidInt(const QJsonValue& value, int min, int max) {
@@ -139,6 +186,9 @@ int RunIpcProbe() {
             // Only acknowledge bounded geometry. This does NOT resize a real
             // CEF/Avalonia editor and does not share native OS window handles.
             if (!Emit(Ack("ack", session, "resized", lastSeq, tabId))) return 2;
+        } else if (command == "request-frame" && attached &&
+                   ExactObject(request, {"command", "protocol", "sessionId", "tabId", "sequence"})) {
+            if (!EmitDiagnosticFrame(session, tabId, lastSeq)) return 2;
         } else if (command == "close" && attached &&
                    ExactObject(request, {"command", "protocol", "sessionId", "tabId", "sequence"})) {
             return Emit(Ack("ack", session, "closed", lastSeq, tabId)) ? 0 : 2;
