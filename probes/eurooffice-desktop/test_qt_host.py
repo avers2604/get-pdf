@@ -19,13 +19,10 @@ GOOD = {"command": "hello", "protocol": PROTOCOL, "upstreamCommit": PINNED}
 class QtHostBinaryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
-            cls.exe = Path(sys.argv.pop(1)).resolve()
-        else:
-            hint = os.environ.get("GD31J2_QT_HOST_BINARY")
-            if not hint:
-                raise unittest.SkipTest("Local Qt 6 native host binary not supplied")
-            cls.exe = Path(hint).resolve()
+        hint = os.environ.get("GD31J2_QT_HOST_BINARY")
+        if not hint:
+            raise unittest.SkipTest("Local Qt 6 native host binary not supplied")
+        cls.exe = Path(hint).resolve()
         if not cls.exe.is_file():
             raise RuntimeError("GD-31J.2 compiled Qt host missing: " + str(cls.exe))
 
@@ -75,4 +72,7 @@ class QtHostBinaryTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    # Parse the optional executable path BEFORE unittest consumes argv.
+    if len(sys.argv) == 2 and not sys.argv[1].startswith("-"):
+        os.environ["GD31J2_QT_HOST_BINARY"] = sys.argv.pop(1)
     unittest.main()
