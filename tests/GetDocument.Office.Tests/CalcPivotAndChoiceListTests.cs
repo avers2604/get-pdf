@@ -53,12 +53,12 @@ public sealed class CalcPivotAndChoiceListTests
             Assert.IsTrue(sheetNames.Any(x => x is not null && x.StartsWith("ГЭТ Сводная", StringComparison.Ordinal)));
 
             var originalPart = output.WorkbookPart.GetPartById(
-                output.WorkbookPart.Workbook.Sheets!.Elements<Sheet>().Single(x => x.Name == "Лист1").Id!.Value!)
+                output.WorkbookPart.Workbook.Sheets!.Elements<Sheet>().Single(x => x.Name?.Value == "Лист1").Id!.Value!)
                 as WorksheetPart;
             Assert.IsNotNull(originalPart);
             Assert.IsTrue(originalPart.Worksheet.Descendants<DataValidation>().Any(x =>
                 x.Type?.Value == DataValidationValues.List), "Список должен сохраниться как XLSX DataValidation.");
-            var rowA2 = originalPart.Worksheet.Descendants<Cell>().Single(x => x.CellReference == "A2");
+            var rowA2 = originalPart.Worksheet.Descendants<Cell>().Single(x => x.CellReference?.Value == "A2");
             Assert.IsNotNull(rowA2, "Первая исходная категория не удалена.");
 
             using var zip = ZipFile.OpenRead(source);
