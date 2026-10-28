@@ -11,7 +11,7 @@ using PDFtoImage;
 namespace GetDocument.Desktop.Printing;
 
 /// <summary>
-/// GET's own tabbed 3-step printing wizard. No OS print dialog is invoked.
+/// GET's own single-screen printing wizard in one document tab. No OS print dialog is invoked.
 /// The installed local spooler still owns the actual printer/driver job.
 /// </summary>
 internal sealed class PrintWizardPane : UserControl, IDisposable
@@ -57,23 +57,20 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
     private readonly ComboBox _nup = new() { Width = 270,
         ItemsSource = new[] { "1 страница на листе", "2 страницы на листе", "4 страницы на листе" },
         SelectedIndex = 0 };
-    private readonly ComboBox _tray = new() { Width = 350 };
+    private readonly ComboBox _tray = new() { Width = 270 };
     private readonly TextBox _pages = new() { Width = 270,
         PlaceholderText = "Все страницы или 1,3-5" };
     private readonly TextBox _copies = new() { Width = 140, Text = "1" };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly TextBlock _stepTitle = new() { Classes = { "title" },
-        FontWeight = FontWeight.SemiBold };
     private readonly TextBlock _summary = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _previewStatus = new() { Text = "Загрузка предпросмотра…" };
     private readonly Grid _sheetPreview = new() { Width = 235, Height = 325 };
     private readonly StackPanel _stage = new() { Spacing = 14 };
-    private readonly Button _back = new() { Content = "Назад", Classes = { "ghost" } };
-    private readonly Button _next = new() { Content = "Далее", IsEnabled = false, Classes = { "primary" } };
+    private readonly StackPanel _trayField;
+    private readonly Button _submit = new() { Content = "Отправить на печать", IsEnabled = false, Classes = { "primary" } };
     private readonly Button _cancel = new() { Content = "Закрыть", Classes = { "ghost" } };
     private readonly List<Bitmap> _previewPages = [];
     private int _pageCount;
-    private int _step = 1;
     private bool _busy;
     private bool _submitted;
     private bool _disposed;
@@ -95,14 +92,12 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         StyleField(_tray);
         StyleField(_pages);
         StyleField(_copies);
-        StyleButton(_back);
-        StyleButton(_next, primary: true);
+        StyleButton(_submit, primary: true);
         StyleButton(_cancel);
-        _stepTitle.Foreground = Palette("#24305E");
         _summary.Foreground = Palette("#141A33");
         _status.Foreground = Palette("#565C7B");
         _previewStatus.Foreground = Palette("#565C7B");
-        var left = new StackPanel { Spacing = 18 };
+        var left = new StackPanel { Spacing = 16 };
         left.Children.Add(new TextBlock
         {
             Text = "Мастер печати ГЭТ",
@@ -111,16 +106,34 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         });
         left.Children.Add(new TextBlock
         {
-            Text = "Настройки выбираются здесь. Системное окно печати не открывается.",
+            Text = "Все настройки доступны на одном экране. Системное окно печати не открывается.",
             TextWrapping = TextWrapping.Wrap
         });
-        left.Children.Add(_stepTitle);
+
+        _stage.Children.Add(Labeled("Локальный принтер", _printer, 450));
+        var refresh = new Button { Content = "Обновить список принтеров" };
+        StyleButton(refresh);
+        refresh.Click += async (_, _) => await LoadPrintersAsync();
+        _stage.Children.Add(refresh);
+        _trayField = Labeled("Источник бумаги / лоток", _tray);
+        _trayField.IsVisible = false;
+        _stage.Children.Add(FieldRow(Labeled("Страницы", _pages), Labeled("Копии (1–99)", _copies)));
+        _stage.Children.Add(FieldRow(Labeled("Размер бумаги", _paper), Labeled("Режим печати", _sides)));
+        _stage.Children.Add(FieldRow(_trayField, Labeled("Ориентация", _orientation)));
+        _stage.Children.Add(FieldRow(Labeled("Цветность", _color), Labeled("Страниц на листе", _nup)));
+        _stage.Children.Add(new TextBlock
+        {
+            Text = "Диапазон: все страницы или, например, 1,3-5. 2/4 страницы на листе доступны только при печати всего документа. " +
+                   "Настройки сверяются с возможностями выбранного драйвера.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 12
+        });
         left.Children.Add(_stage);
+        left.Children.Add(new TextBlock { Text = "Сводка задания", FontWeight = FontWeight.SemiBold,
+            Foreground = Palette("#24305E") });
         left.Children.Add(_summary);
         left.Children.Add(_status);
         var controls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-        controls.Children.Add(_back);
-        controls.Children.Add(_next);
+        controls.Children.Add(_submit);
         controls.Children.Add(_cancel);
         left.Children.Add(controls);
         var leftCard = new Border
@@ -175,87 +188,64 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             columns.Orientation = eventArgs.NewSize.Width < 1080
                 ? Orientation.Vertical : Orientation.Horizontal;
 
-        _back.Click += (_, _) => { if (_step > 1 && !_busy) { _step--; RenderStage(); } };
-        _next.Click += async (_, _) => await AdvanceAsync();
-        _printer.SelectionChanged += async (_, _) => await LoadTraysAsync();
-        _paper.SelectionChanged += (_, _) => RenderSheetPreview();
-        _orientation.SelectionChanged += (_, _) => RenderSheetPreview();
-        _nup.SelectionChanged += (_, _) => RenderSheetPreview();
+        _submit.Click += async (_, _) => await SubmitAsync();
+        _printer.SelectionChanged += async (_, _) =>
+        {
+            await LoadTraysAsync();
+            UpdatePlanState();
+        };
+        _paper.SelectionChanged += (_, _) => { RenderSheetPreview(); UpdatePlanState(); };
+        _sides.SelectionChanged += (_, _) => UpdatePlanState();
+        _orientation.SelectionChanged += (_, _) => { RenderSheetPreview(); UpdatePlanState(); };
+        _color.SelectionChanged += (_, _) => UpdatePlanState();
+        _nup.SelectionChanged += (_, _) => { RenderSheetPreview(); UpdatePlanState(); };
+        _tray.SelectionChanged += (_, _) => UpdatePlanState();
+        _pages.TextChanged += (_, _) => UpdatePlanState();
+        _copies.TextChanged += (_, _) => UpdatePlanState();
         _cancel.Click += (_, _) => _closeTab();
 
-        RenderStage();
+        UpdatePlanState();
         _ = InitializeAsync();
     }
 
-    private static StackPanel Labeled(string text, Control input)
+    private static StackPanel Labeled(string text, Control input, double width = 300)
     {
-        // The step is rebuilt on every change while the inputs are reused: detach an input from
-        // the previous step's panel first (Avalonia refuses a control with two visual parents).
-        if (input.Parent is Panel previous) previous.Children.Remove(input);
-        var result = new StackPanel { Spacing = 5 };
+        var result = new StackPanel { Spacing = 5, Width = width };
         result.Children.Add(new TextBlock { Text = text, FontWeight = FontWeight.SemiBold });
         result.Children.Add(input);
         return result;
     }
 
-    private void RenderStage()
+    private static WrapPanel FieldRow(params Control[] fields)
+    {
+        var row = new WrapPanel { Orientation = Orientation.Horizontal };
+        foreach (Control field in fields) row.Children.Add(field);
+        return row;
+    }
+
+    private void UpdatePlanState()
     {
         if (_disposed) return;
-        _stage.Children.Clear();
-        _summary.Text = "";
-        _back.IsEnabled = !_busy && _step > 1;
-        _next.IsEnabled = !_busy && !_submitted && _pageCount > 0 &&
-            _printer.SelectedItem is string;
-        _next.Content = _step == 3 ? "Отправить на печать" : "Далее";
-        _stepTitle.Text = _step switch
+        if (_pageCount < 1)
         {
-            1 => "Шаг 1 из 3 — выбор принтера",
-            2 => "Шаг 2 из 3 — параметры документа",
-            _ => "Шаг 3 из 3 — подтверждение"
-        };
-        if (_step == 1)
-        {
-            _stage.Children.Add(Labeled("Принтер из локальной очереди", _printer));
-            var refresh = new Button { Content = "Обновить список принтеров" };
-            StyleButton(refresh);
-            refresh.Click += async (_, _) => await LoadPrintersAsync();
-            _stage.Children.Add(refresh);
-            _stage.Children.Add(new TextBlock
-            {
-                Text = "Печать доступна только на принтерах, установленных и разрешённых на этом компьютере.",
-                TextWrapping = TextWrapping.Wrap
-            });
+            _summary.Text = "Сводка появится после загрузки PDF.";
+            _submit.IsEnabled = false;
+            return;
         }
-        else if (_step == 2)
+        if (!TryBuildPlan(out var plan, out var error))
         {
-            _stage.Children.Add(Labeled(
-                $"Страницы (в документе {_pageCount})", _pages));
-            _stage.Children.Add(Labeled("Копии (от 1 до 99)", _copies));
-            _stage.Children.Add(Labeled("Размер бумаги", _paper));
-            if (_hasTrays) _stage.Children.Add(Labeled("Источник бумаги / лоток", _tray));
-            _stage.Children.Add(Labeled("Режим печати", _sides));
-            _stage.Children.Add(Labeled("Ориентация", _orientation));
-            _stage.Children.Add(Labeled("Цветность", _color));
-            _stage.Children.Add(Labeled("Страниц на листе", _nup));
-            _stage.Children.Add(new TextBlock
-            {
-                Text = "2/4 страницы на листе доступны только при выборе всех страниц. " +
-                    "Возможности проверяются по драйверу; неподдерживаемые настройки запрещены.",
-                TextWrapping = TextWrapping.Wrap, FontSize = 12
-            });
+            _summary.Text = error ?? "Проверьте параметры печати.";
+            _submit.IsEnabled = false;
+            return;
         }
-        else
-        {
-            if (TryBuildPlan(out var plan))
-                _summary.Text = $"Принтер: {plan!.PrinterName}\n" +
-                    $"Страницы: {plan.CupsPageRange}\n" +
-                    $"Копии: {plan.Copies}; всего страниц отпечатков: {plan.PageCountToPrint}\n" +
-                    $"Бумага: {PrintRejection.Paper(plan.Paper)}; режим: {DuplexText(plan.Duplex)}\n" +
-                    $"Ориентация: {PrintRejection.Orientation(plan.Orientation)}; цвет: {PrintRejection.Color(plan.Color)}\n" +
-                    $"Страниц на листе: {(int)plan.PagesPerSheet}; печатных сторон: {plan.SheetSidesToPrint}\n" +
-                    $"Лоток: {plan.Tray?.Label ?? "выбор принтера (автоматически)"}\n" +
-                    "Проверьте бумагу, права и готовность принтера перед отправкой.";
-        }
+        _summary.Text = $"Принтер: {plan!.PrinterName}\n" +
+            $"Страницы: {plan.CupsPageRange}\n" +
+            $"Копии: {plan.Copies}; страниц отпечатков: {plan.PageCountToPrint}\n" +
+            $"Бумага: {PrintRejection.Paper(plan.Paper)}; режим: {DuplexText(plan.Duplex)}\n" +
+            $"Ориентация: {PrintRejection.Orientation(plan.Orientation)}; цвет: {PrintRejection.Color(plan.Color)}\n" +
+            $"Страниц на листе: {(int)plan.PagesPerSheet}; печатных сторон: {plan.SheetSidesToPrint}\n" +
+            $"Лоток: {plan.Tray?.Label ?? "выбор принтера (автоматически)"}";
+        _submit.IsEnabled = !_busy && !_submitted;
     }
 
     private static string DuplexText(PrintDuplex duplex) => duplex switch
@@ -265,9 +255,10 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         _ => "Односторонняя"
     };
 
-    private bool TryBuildPlan(out PrintJobPlan? result)
+    private bool TryBuildPlan(out PrintJobPlan? result, out string? error)
     {
         result = null;
+        error = null;
         try
         {
             if (_printer.SelectedItem is not string printer)
@@ -290,68 +281,48 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         }
         catch (ArgumentException ex)
         {
-            _status.Text = ex.Message;
+            error = ex.Message;
             return false;
         }
     }
 
-    private async Task AdvanceAsync()
+    private async Task SubmitAsync()
     {
         if (_disposed || _busy || _submitted || _pageCount < 1) return;
         _status.Text = "";
-        if (_step == 1)
+        if (!TryBuildPlan(out var plan, out var error))
         {
-            if (_printer.SelectedItem is null)
-            {
-                _status.Text = "Не выбран принтер.";
-                return;
-            }
-            _step = 2;
-            RenderStage();
-            return;
-        }
-        if (!TryBuildPlan(out var plan)) return;
-        if (_step == 2)
-        {
-            _step = 3;
-            RenderStage();
+            _status.Text = error ?? "Проверьте параметры задания.";
+            UpdatePlanState();
             return;
         }
         _busy = true;
-        _submitted = true; // Outcome may be ambiguous if queue accepts then connection times out.
-        RenderStage();
+        _submitted = true; // Outcome may be ambiguous if the queue accepts and then times out.
+        UpdatePlanState();
         _status.Text = "Задание передаётся в выбранную очередь печати…";
         try
         {
             string confirmation = await LocalPrintBroker.SubmitPdfAsync(
                 _pdfPath, plan!, _lifetime.Token);
-            if (!_disposed)
-            {
-                _status.Text = confirmation;
-                _next.IsEnabled = false; // Strictly one attempt per wizard instance.
-            }
+            if (!_disposed) _status.Text = confirmation;
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (PrintNotSubmittedException ex)
         {
-            // Refused before anything was queued: no risk of duplicate copies, so allow a retry.
+            // Refused before anything was queued: retry is safe.
             _submitted = false;
-            _busy = false;
-            if (!_disposed)
-            {
-                RenderStage();
-                _status.Text = ex.Message;
-            }
+            if (!_disposed) _status.Text = ex.Message;
         }
         catch (Exception)
         {
             if (!_disposed)
-                _status.Text = "Печать не подтверждена. Проверьте службу, принтер и поддерживаемые функции. " +
-                               "Задание могло быть принято. Проверьте очередь; для нового задания откройте мастер заново.";
+                _status.Text = "Печать не подтверждена. Проверьте службу и очередь: задание могло быть принято. " +
+                               "Кнопка останется заблокирована, чтобы не создать дубликат.";
         }
         finally
         {
             _busy = false;
+            UpdatePlanState();
         }
     }
 
@@ -424,7 +395,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             }
             _previewStatus.Text = $"Страниц в PDF: {_pageCount}. Макет первых страниц.";
             RenderSheetPreview();
-            RenderStage();
+            UpdatePlanState();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (Exception ex)
@@ -479,15 +450,15 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
 
     private void SetHasTrays(bool value)
     {
-        if (_hasTrays == value) return;
         _hasTrays = value;
-        if (_step == 2 && !_busy) RenderStage();
+        _trayField.IsVisible = value;
+        UpdatePlanState();
     }
 
     private async Task LoadPrintersAsync()
     {
         if (_disposed) return;
-        _next.IsEnabled = false;
+        _submit.IsEnabled = false;
         _status.Text = "Проверяются локальные очереди печати…";
         try
         {
@@ -500,7 +471,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             _status.Text = printers.Count == 0
                 ? "В системе нет доступных принтеров. Добавьте принтер через администратора."
                 : "Очереди печати загружены.";
-            RenderStage();
+            UpdatePlanState();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (Exception ex)
@@ -508,7 +479,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             if (!_disposed)
             {
                 _status.Text = "Служба печати недоступна или не установлен компонент Windows/CUPS. (" + ex.Message + ")";
-                RenderStage();
+                UpdatePlanState();
             }
         }
     }
@@ -556,3 +527,4 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         // Active worker cancellation is cooperative; job may already be in spool.
     }
 }
+
