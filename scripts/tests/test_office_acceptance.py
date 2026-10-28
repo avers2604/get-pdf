@@ -17,8 +17,12 @@ class AcceptancePlanTests(unittest.TestCase):
         steps = acceptance.build_steps(Path("/get-document"), Path("/approved/feed"), "Windows")
         restore = next(step for step in steps if step.name == "solution-restore")
         self.assertEqual(
-            ["dotnet", "restore", "GetDocument.slnx", "--source", "/approved/feed"],
+            ["dotnet", "restore", "GetDocument.slnx", "--source", "/approved/feed",
+             "-p:NuGetAudit=false"],
             restore.command)
+        for item in steps:
+            if item.command[:2] == ["dotnet", "restore"]:
+                self.assertIn("-p:NuGetAudit=false", item.command)
         self.assertEqual(1, len([s for s in steps if s.name == "solution-build"]))
         self.assertTrue(any(s.name == "windows-print-worker-build" for s in steps))
         suites = [s for s in steps if s.name.startswith("test-")]
