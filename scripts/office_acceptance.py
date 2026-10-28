@@ -55,7 +55,8 @@ class CommandStep:
     project: str | None = None
 
 
-def build_steps(root: Path, feed: Path, host: str) -> list[CommandStep]:
+def build_steps(root: Path, feed: Path, host: str,
+                qt_host_binary: Path | None = None) -> list[CommandStep]:
     """Offline restore is the ONLY allowed NuGet source; never guess a remote URL."""
     _ = root  # Callers and subprocess always operate at the checked-out repo root.
     steps = [
@@ -70,6 +71,13 @@ def build_steps(root: Path, feed: Path, host: str) -> list[CommandStep]:
         CommandStep("solution-build",
                     ["dotnet", "build", "GetDocument.slnx", "-c", "Release", "--no-restore"]),
     ]
+    if qt_host_binary is not None:
+        # This is a REAL local compiled Qt process test, never a mock. It
+        # advertises zero file permissions and does not load CEF or documents.
+        steps.insert(2, CommandStep("native-qt-headless-smoke", [
+            sys.executable, "probes/eurooffice-desktop/test_qt_host.py",
+            str(qt_host_binary)
+        ]))
     for label, project in TEST_PROJECTS.items():
         steps.append(CommandStep(
             "test-" + label,
@@ -228,6 +236,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--feed", type=Path,
                         help="Existing APPROVED offline NuGet directory (required for checks).")
     parser.add_argument("--plan", action="store_true", help="Inspect only; do not build/test.")
+    parser.add_argument("--qt-host-binary", type=Path,
+                        help="Locally compiled Qt host; enables REAL headless handshake smoke test.")
     parser.add_argument("--report", type=Path,
                         help="Output JSON path; default artifacts/local-acceptance/<unique>.json")
     args = parser.parse_args(argv)
@@ -244,11 +254,16 @@ def main(argv: list[str] | None = None) -> int:
         if host not in ("Windows", "Linux"):
             raise RuntimeError("Only Windows and Linux test hosts are supported.")
 
+        qt_binary = args.qt_host_binary.expanduser().resolve() if args.qt_host_binary else None
+        if qt_binary is not None and not args.plan and not qt_binary.is_file():
+            raise RuntimeError("Compiled local Qt host binary was not found.")
+
         if args.plan:
             report["status"] = "plan-only"
             report["steps"] = [
                 {"name": item.name, "status": "not-run", "command": item.command}
-                for item in build_steps(root, Path("<approved-offline-feed>"), host)
+                for item in build_steps(root, Path("<approved-offline-feed>"), host,
+                                        qt_host_binary=qt_binary)
             ]
             result_code = 0
         else:
@@ -258,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
             if not feed.is_dir():
                 raise RuntimeError("Approved local NuGet feed directory does not exist.")
             report["dotnetSdk"] = ensure_dotnet10()
-            steps = build_steps(root, feed, host)
+            steps = build_steps(root, feed, host, qt_host_binary=qt_binary)
             environment = os.environ.copy()
             environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
             environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1"
