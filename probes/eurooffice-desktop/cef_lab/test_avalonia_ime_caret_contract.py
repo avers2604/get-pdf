@@ -68,7 +68,6 @@ class NativeImeClientSourceContracts(unittest.TestCase):
         self.assertIn("new(0, 0)",self.adapter)
         self.assertIn('throw new NotSupportedException(',self.adapter)
         self.assertIn("OnLabImePreeditChanged(",self.pane)
-        self.assertIn("композицию",self.pane) if False else None
 
 
 if __name__=="__main__":
