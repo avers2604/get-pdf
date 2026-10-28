@@ -15,6 +15,12 @@ option(GETDOC_GD31J13_ENABLE_OSR_STREAM_LAB "Enable session-bound CEF OSR previe
 option(GETDOC_GD31J14_ENABLE_INPUT_LAB "Enable Wayland pointer/wheel/focus-only input experiment" OFF)
 # Additional explicit privilege for left click, double click and selection drag.
 option(GETDOC_GD31J15_ENABLE_CLICK_LAB "Enable synthetic-only Wayland CEF left-click and selection drag experiment" OFF)
+# Deliberately separate from mouse privileges: nav keys and single committed
+# BMP text char; full IME composition and clipboard remain prohibited.
+option(GETDOC_GD31J16_ENABLE_KEYBOARD_LAB "Enable synthetic-only Wayland CEF navigation and committed character experiment" OFF)
+if(GETDOC_GD31J16_ENABLE_KEYBOARD_LAB AND NOT GETDOC_GD31J15_ENABLE_CLICK_LAB)
+  message(FATAL_ERROR "GD-31J.16 requires explicitly enabled GD-31J.15 click lab.")
+endif()
 if(GETDOC_GD31J15_ENABLE_CLICK_LAB AND NOT GETDOC_GD31J14_ENABLE_INPUT_LAB)
   message(FATAL_ERROR "GD-31J.15 requires GD-31J.14 input lab with explicit approval.")
 endif()
@@ -151,6 +157,11 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
           target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
               GETDOC_GD31J15_CLICK_LAB=1)
           message(WARNING "GD-31J.15: left click/drag on synthetic-only Wayland VM; keyboard/IME/clipboard still forbidden.")
+          if(GETDOC_GD31J16_ENABLE_KEYBOARD_LAB)
+            target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+                GETDOC_GD31J16_KEYBOARD_LAB=1)
+            message(WARNING "GD-31J.16: nav keys/single BMP character only. No system shortcuts/IME/clipboard. Synthetic VM only.")
+          endif()
         endif()
       endif()
     endif()
