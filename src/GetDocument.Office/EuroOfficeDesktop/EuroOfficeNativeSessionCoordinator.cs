@@ -76,7 +76,11 @@ public sealed class EuroOfficeNativeSessionCoordinator : IAsyncDisposable
         bool opened = false;
         try
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_disposed)
+            {
+                await transport.DisposeAsync();
+                throw new ObjectDisposedException(nameof(EuroOfficeNativeSessionCoordinator));
+            }
             if (_entries.ContainsKey(tabId))
             {
                 await transport.DisposeAsync();
@@ -121,8 +125,7 @@ public sealed class EuroOfficeNativeSessionCoordinator : IAsyncDisposable
             {
                 await entry.Transport.ResizeAsync(width, height, scale, cancellationToken);
             }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or
-                                        OperationCanceledException or ObjectDisposedException)
+            catch
             {
                 await FaultAsync(tabId, entry);
                 throw;
@@ -149,8 +152,7 @@ public sealed class EuroOfficeNativeSessionCoordinator : IAsyncDisposable
                 if (!entry.Faulted && !entry.TransportDisposed)
                     await entry.Transport.CloseAsync(cancellationToken);
             }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or
-                                        OperationCanceledException or ObjectDisposedException)
+            catch
             {
                 await FaultAsync(tabId, entry);
                 throw;
