@@ -33,6 +33,16 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_cef_click_drag_contract_is_in_deferred_acceptance(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-osr-click-source-contract-tests", names)
+        self.assertLess(names.index("cef-osr-click-source-contract-tests"),
+                        names.index("solution-restore"))
+        check = next(step for step in steps
+                     if step.name == "cef-osr-click-source-contract-tests")
+        self.assertIn("test_osr_click_contract.py", check.command)
+
     def test_cef_pointer_input_contract_is_in_deferred_acceptance(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
