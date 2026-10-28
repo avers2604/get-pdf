@@ -85,6 +85,19 @@ public sealed class EuroOfficeOsrLabInputChannelTests
     }
 
     [TestMethod]
+    public async Task BrokenPipePermanentlyRevokesInputToPreventReplay()
+    {
+        var output = new StringWriter();
+        await using var input = new EuroOfficeOsrLabInputChannel(
+            output, Session, Tab, true);
+        output.Dispose();
+        await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() =>
+            input.SendFocusAsync(true, CancellationToken.None));
+        await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() =>
+            input.SendFocusAsync(true, CancellationToken.None));
+    }
+
+    [TestMethod]
     public async Task KeyboardClipboardClicksCannotCrossInputChannel()
     {
         using var output = new StringWriter();
