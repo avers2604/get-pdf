@@ -386,6 +386,9 @@ int main(int argc, char** argv) {
 #ifndef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
     if (osrLab || streamLab) return 2;
 #else
+#ifndef GETDOC_GD31J13_OSR_STREAM_LAB
+    if (streamLab) return 2;
+#endif
     // This pinned SDK supports CEF windowless rendering ONLY on Wayland.
     // Do not set QT_QPA_PLATFORM from the executable: verify lab isolation.
     if ((osrLab || streamLab) && qgetenv("QT_QPA_PLATFORM") != "wayland") return 9;
