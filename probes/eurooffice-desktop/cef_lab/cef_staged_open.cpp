@@ -333,6 +333,20 @@ int main(int argc, char** argv) {
     const QByteArray serialized = QJsonDocument(output).toJson(QJsonDocument::Compact);
     std::fwrite(serialized.constData(), 1, static_cast<size_t>(serialized.size()), stdout);
     std::fputc('\n', stdout);
+    if (!sessionId.isEmpty()) {
+        // A final terminal frame makes the managed tab leave its active state.
+        // This is NOT a document save/print confirmation.
+        QJsonObject closed;
+        closed["protocol"] = "getdoc-eurodesktop-ipc/1";
+        closed["kind"] = "event";
+        closed["sessionId"] = sessionId;
+        closed["sequence"] = 2;
+        closed["event"] = "closed";
+        closed["eventCode"] = 2001;
+        const QByteArray terminal = QJsonDocument(closed).toJson(QJsonDocument::Compact);
+        std::fwrite(terminal.constData(), 1, static_cast<size_t>(terminal.size()), stdout);
+        std::fputc('\n', stdout);
+    }
     std::fflush(stdout);
     return exitCode;
 }
