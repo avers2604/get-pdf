@@ -585,6 +585,37 @@ public sealed class MainWindow : Window
         return Task.CompletedTask;
     }
 
+    private async Task SaveRecoveredCopyAsync(string recoveredPath, string originalPath)
+    {
+        string extension = Path.GetExtension(originalPath).ToLowerInvariant();
+        try
+        {
+            var chosen = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Сохранить восстановленный документ отдельно",
+                SuggestedFileName = Path.GetFileNameWithoutExtension(originalPath) + " (восстановлено)" + extension,
+                DefaultExtension = extension.TrimStart('.'),
+                ShowOverwritePrompt = true,
+                FileTypeChoices = [new FilePickerFileType(extension.ToUpperInvariant()) { Patterns = ["*" + extension] }]
+            });
+            if (chosen is null || !chosen.Path.IsFile) return;
+            string target = Path.GetFullPath(chosen.Path.LocalPath);
+            if (string.Equals(target, Path.GetFullPath(originalPath),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                _status.Text = "Восстановление не должно перезаписывать исходный файл. Выберите другое имя.";
+                return;
+            }
+            await Task.Run(() => File.Copy(recoveredPath, target, overwrite: true));
+            await OpenSavedCopyAsync(target);
+            _status.Text = "Восстановленная копия открыта в отдельной вкладке. Исходный файл сохранён без изменений.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            _status.Text = "Не удалось открыть восстановленную копию: " + ex.Message;
+        }
+    }
+
     private async Task<bool> SaveXlsxRevisionAsync(
         WorkspaceDocumentTab tab, string expectedSha256, string[][] values)
     {
@@ -649,7 +680,7 @@ public sealed class MainWindow : Window
             ShowPrintWizard();
         };
         editor.CloseRequested += () => _ = CloseDocumentAsync(item.Id);
-        editor.RecoveryCopyRequested += recoveredPath => _ = OpenSavedCopyAsync(recoveredPath);
+        editor.RecoveryCopyRequested += recoveredPath => _ = SaveRecoveredCopyAsync(recoveredPath, editor.DocumentPath);
     }
 
     private async Task CloseDocumentAsync(Guid id)
