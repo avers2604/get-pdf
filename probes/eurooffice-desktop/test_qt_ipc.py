@@ -68,16 +68,20 @@ class QtNativeIpcTests(unittest.TestCase):
                 self.assertEqual(1, len(result.stdout.splitlines()))  # only hello ACK
 
     def test_denies_replay_wrong_session_out_of_order(self):
-        for bad in (
-            request("attach-tab", sequence=2),
-            request("attach-tab", sequence=1).replace(SESSION, "0" * 32),
-            request("attach-tab", sequence=1).replace(TAB, "f" * 32),
-            request("attach-tab", sequence=1) + ' ',
+        for commands, expected_replies in (
+            ([request("hello"), request("attach-tab", sequence=2)], 1),
+            ([request("hello"), request("attach-tab", sequence=1).replace(SESSION, "0" * 32)], 1),
+            ([request("hello"), request("attach-tab", sequence=1) + " "], 1),
+            ([request("hello"), request("attach-tab", sequence=1),
+              request("resize", sequence=2, width=800, height=600, scale=1.0,
+                      tabId="f" * 32)], 2),
+            ([request("hello"), request("attach-tab", sequence=1),
+              request("close", sequence=1)], 2),
         ):
-            with self.subTest(bad=bad):
-                result = self.invoke([request("hello"), bad])
+            with self.subTest(commands=commands):
+                result = self.invoke(commands)
                 self.assertNotEqual(0, result.returncode)
-                self.assertEqual(1, len(result.stdout.splitlines()))
+                self.assertEqual(expected_replies, len(result.stdout.splitlines()))
 
 
 if __name__ == "__main__":
