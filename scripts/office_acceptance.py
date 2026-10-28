@@ -74,6 +74,10 @@ def build_steps(root: Path, feed: Path, host: str,
                     [sys.executable, "-m", "unittest", "discover", "-s",
                      "probes/eurooffice-desktop/cef_lab",
                      "-p", "test_empty_view_contract.py"]),
+        CommandStep("qt-display-evidence-tests",
+                    [sys.executable, "-m", "unittest", "discover", "-s",
+                     "probes/eurooffice-desktop",
+                     "-p", "test_qt_display_evidence.py"]),
         CommandStep("solution-restore",
                     ["dotnet", "restore", "GetDocument.slnx", "--source", str(feed), "-p:NuGetAudit=false"]),
         CommandStep("solution-build",
@@ -84,6 +88,10 @@ def build_steps(root: Path, feed: Path, host: str,
         # advertises zero file permissions and does not load CEF or documents.
         steps.insert(2, CommandStep("native-qt-headless-smoke", [
             sys.executable, "probes/eurooffice-desktop/test_qt_host.py",
+            str(qt_host_binary)
+        ]))
+        steps.insert(3, CommandStep("native-qt-display-offscreen", [
+            sys.executable, "probes/eurooffice-desktop/test_qt_display.py",
             str(qt_host_binary)
         ]))
     for label, project in TEST_PROJECTS.items():

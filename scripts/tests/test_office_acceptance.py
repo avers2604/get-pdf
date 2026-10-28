@@ -33,6 +33,16 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_qt_display_evidence_validator_is_checked_before_dotnet(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("qt-display-evidence-tests", names)
+        self.assertLess(names.index("qt-display-evidence-tests"),
+                        names.index("solution-restore"))
+        evidence = next(item for item in steps if item.name == "qt-display-evidence-tests")
+        self.assertNotIn("--display-live", evidence.command)
+        self.assertIn("test_qt_display_evidence.py", evidence.command)
+
     def test_empty_view_source_contract_is_checked_offline_and_never_runs_cef(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
@@ -66,6 +76,10 @@ class AcceptancePlanTests(unittest.TestCase):
         self.assertEqual(str(qt_binary), checks[0].command[-1])
         self.assertLess([step.name for step in steps].index("native-qt-headless-smoke"),
                         [step.name for step in steps].index("solution-restore"))
+        display = [step for step in steps if step.name == "native-qt-display-offscreen"]
+        self.assertEqual(1, len(display))
+        self.assertIn("test_qt_display.py", display[0].command)
+        self.assertEqual(str(qt_binary), display[0].command[-1])
 
     def test_linux_plan_does_not_assume_windows_only_build_tools(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
