@@ -46,6 +46,10 @@ FEATURES = {
     "calc-freeze-first-column": ("calc", False),
     "calc-unfreeze": ("calc", False),
     "calc-recalculate": ("calc", True),
+    "calc-print-used-area": ("calc", True),
+    "calc-clear-print-area": ("calc", True),
+    "calc-repeat-first-row": ("calc", True),
+    "calc-stop-repeat-rows": ("calc", True),
     "impress-duplicate-slide": ("impress", True),
 }
 
@@ -465,6 +469,34 @@ class Bridge:
         if feature == "calc-recalculate":
             doc.calculateAll()
             return {}
+
+        if feature in ("calc-print-used-area", "calc-clear-print-area",
+                       "calc-repeat-first-row", "calc-stop-repeat-rows"):
+            controller = doc.getCurrentController()
+            sheet = controller.getActiveSheet()
+            if sheet is None or not hasattr(sheet, "setPrintAreas"):
+                raise RuntimeError("движок не поддерживает настройки печати таблицы")
+            if feature == "calc-print-used-area":
+                cursor = sheet.createCursor()
+                cursor.gotoEndOfUsedArea(True)
+                area = cursor.getRangeAddress()
+                # Avoid accidentally producing a PDF containing millions of mostly empty cells.
+                cells = (area.EndColumn - area.StartColumn + 1) * (area.EndRow - area.StartRow + 1)
+                if cells <= 0 or cells > 2000000:
+                    raise RuntimeError("слишком большая область печати; уточните диапазон в таблице")
+                sheet.setPrintAreas((area,))
+                return {"cells": cells}
+            if feature == "calc-clear-print-area":
+                sheet.setPrintAreas(())
+                return {}
+            if feature == "calc-repeat-first-row":
+                row = sheet.getCellRangeByPosition(0, 0, 0, 0).getRangeAddress()
+                sheet.setTitleRows(row)
+                sheet.setPrintTitleRows(True)
+                return {}
+            if feature == "calc-stop-repeat-rows":
+                sheet.setPrintTitleRows(False)
+                return {}
 
         if feature == "impress-duplicate-slide":
             controller = doc.getCurrentController()
