@@ -33,6 +33,13 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_cef_lab_preflight_suite_runs_before_any_office_restore(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-lab-offline-tests", names)
+        self.assertLess(names.index("cef-lab-offline-tests"),
+                        names.index("solution-restore"))
+
     def test_native_probe_test_double_runs_before_dotnet_restore(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Windows")
         names = [step.name for step in steps]
