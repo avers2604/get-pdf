@@ -8,6 +8,14 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QByteArray>
+#include <QEvent>
+#include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QScreen>
+#include <QTimer>
+#include <QWindow>
 #include <cstdio>
 #include <string>
 
@@ -43,6 +51,87 @@ bool ReplyHello() {
         return false;
     return std::fflush(stdout) == 0;
 }
+// Qt-only diagnostic telemetry. There are no device IDs, screenshots,
+// document names, CEF handles or credentials in this report.
+class WindowEventCounters final : public QObject {
+public:
+    int show = 0;
+    int resize = 0;
+    int move = 0;
+    int focus = 0;
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        Q_UNUSED(watched);
+        switch (event->type()) {
+        case QEvent::Show: ++show; break;
+        case QEvent::Resize: ++resize; break;
+        case QEvent::Move: ++move; break;
+        case QEvent::FocusIn:
+        case QEvent::WindowActivate: ++focus; break;
+        default: break;
+        }
+        return false;
+    }
+};
+
+int RunDisplayProbe(int argc, char** argv) {
+    QApplication application(argc, argv);
+    application.setQuitOnLastWindowClosed(false);
+
+    QWidget window;
+    window.setWindowTitle(QString::fromUtf8("ГЭТ — тест масштабирования Qt (без CEF)"));
+    WindowEventCounters counters;
+    window.installEventFilter(&counters);
+    window.resize(800, 500);
+    window.show();
+
+    int screenChanges = 0;
+    if (QWindow* handle = window.windowHandle()) {
+        QObject::connect(handle, &QWindow::screenChanged, &application,
+                         [&screenChanges](QScreen*) { ++screenChanges; });
+    }
+
+    // Exercise a second physical-widget size with a real Qt event loop.
+    // This is NOT a user-visible CEF editor, even if running on Windows/Astra.
+    QTimer::singleShot(70, &window, [&window]() { window.resize(1024, 640); });
+    QTimer::singleShot(250, &application, [&]() {
+        QJsonArray screens;
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (!screen) continue;
+            const QRect size = screen->geometry();
+            QJsonObject data;
+            data["width"] = size.width();
+            data["height"] = size.height();
+            data["devicePixelRatio"] = screen->devicePixelRatio();
+            data["logicalDpi"] = screen->logicalDotsPerInch();
+            screens.append(data);
+        }
+        window.close();
+        QJsonObject events;
+        events["show"] = counters.show;
+        events["resize"] = counters.resize;
+        events["move"] = counters.move;
+        events["focus"] = counters.focus;
+        events["screenChanged"] = screenChanges;
+
+        QJsonObject report;
+        report["protocol"] = "getdoc-qt-display-diagnostics/1";
+        report["runtimeKind"] = "qt-only-no-cef";
+        report["cefInitialized"] = false;
+        // Never claim physical multi-monitor correctness based on this probe.
+        report["realMonitorVerified"] = false;
+        report["screenCount"] = screens.size();
+        report["screens"] = screens;
+        report["windowEvents"] = events;
+        report["closed"] = !window.isVisible();
+        const QByteArray bytes = QJsonDocument(report).toJson(QJsonDocument::Compact);
+        std::fwrite(bytes.constData(), 1, static_cast<size_t>(bytes.size()), stdout);
+        std::fputc('\n', stdout);
+        std::fflush(stdout);
+        application.quit();
+    });
+    return application.exec();
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -53,6 +142,8 @@ int main(int argc, char** argv) {
         if (!ReadStrictHello() || !ReplyHello()) return 2;
         return 0;
     }
+    if (mode == "--display-probe")
+        return RunDisplayProbe(argc, argv);
     if (mode != "--gui-probe") return 2;
 
     // GUI is an OS-level Qt window only; intentionally DOES NOT initialize
