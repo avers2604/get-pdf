@@ -67,6 +67,18 @@ def git_head(folder: Path) -> str:
     return result.stdout.strip()
 
 
+def git_clean(folder: Path) -> bool:
+    try:
+        status = subprocess.run(
+            ["git", "-C", str(folder), "status", "--porcelain",
+             "--untracked-files=no"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+            text=True, timeout=15)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as ex:
+        raise LabBlocked("Git worktree cleanliness cannot be established.") from ex
+    return not status.stdout.strip()
+
+
 def check_revision_pins(root: Path) -> None:
     super_repo = _local_dir(root)
     targets = {
@@ -76,8 +88,8 @@ def check_revision_pins(root: Path) -> None:
     }
     for name, folder in targets.items():
         _local_dir(folder)
-        if git_head(folder) != REQUIRED_COMMITS[name]:
-            raise LabBlocked("Unreviewed " + name + " commit; stop CEF lab.")
+        if git_head(folder) != REQUIRED_COMMITS[name] or not git_clean(folder):
+            raise LabBlocked("Unreviewed or modified " + name + " tree; stop CEF lab.")
 
 
 def check_assets(root: Path, assets: AssetSet) -> CefLabAssessment:
@@ -88,7 +100,13 @@ def check_assets(root: Path, assets: AssetSet) -> CefLabAssessment:
         if not name or relative.is_absolute() or ".." in relative.parts:
             raise LabBlocked("Unsafe relative asset name.")
         asset = root / relative
-        if not asset.is_file() or asset.is_symlink():
+        # A symlink in ANY parent directory can escape the approved bundle.
+        current = root
+        for component in relative.parts:
+            current = current / component
+            if current.is_symlink():
+                raise LabBlocked("Symlinked CEF assets are forbidden: " + name)
+        if not asset.is_file():
             raise LabBlocked("Missing or unsafe CEF asset: " + name)
         if asset.stat().st_size <= 0:
             raise LabBlocked("Empty CEF asset: " + name)
