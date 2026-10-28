@@ -585,6 +585,53 @@ public sealed class MainWindow : Window
         return Task.CompletedTask;
     }
 
+    private async Task SaveRecoveredCopyAsync(string recoveredPath, string originalPath)
+    {
+        string extension = Path.GetExtension(originalPath).ToLowerInvariant();
+        try
+        {
+            var chosen = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Сохранить восстановленный документ отдельно",
+                SuggestedFileName = Path.GetFileNameWithoutExtension(originalPath) + " (восстановлено)" + extension,
+                DefaultExtension = extension.TrimStart('.'),
+                ShowOverwritePrompt = true,
+                FileTypeChoices = [new FilePickerFileType(extension.ToUpperInvariant()) { Patterns = ["*" + extension] }]
+            });
+            if (chosen is null || !chosen.Path.IsFile) return;
+            string target = Path.GetFullPath(chosen.Path.LocalPath);
+            if (string.Equals(target, Path.GetFullPath(originalPath),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                _status.Text = "Восстановление не должно перезаписывать исходный файл. Выберите другое имя.";
+                return;
+            }
+            if (!string.Equals(Path.GetExtension(target), extension, StringComparison.OrdinalIgnoreCase))
+            {
+                _status.Text = "Для восстановленной копии необходимо сохранить исходное расширение " + extension;
+                return;
+            }
+            // Stage in the destination directory, so a failed copy never truncates an existing file.
+            string staging = Path.Combine(Path.GetDirectoryName(target)!,
+                ".getdoc-restore-" + Guid.NewGuid().ToString("N") + extension);
+            try
+            {
+                await Task.Run(() => File.Copy(recoveredPath, staging));
+                File.Move(staging, target, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(staging)) File.Delete(staging);
+            }
+            await OpenSavedCopyAsync(target);
+            _status.Text = "Восстановленная копия открыта в отдельной вкладке. Исходный файл сохранён без изменений.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            _status.Text = "Не удалось открыть восстановленную копию: " + ex.Message;
+        }
+    }
+
     private async Task<bool> SaveXlsxRevisionAsync(
         WorkspaceDocumentTab tab, string expectedSha256, string[][] values)
     {
@@ -649,6 +696,7 @@ public sealed class MainWindow : Window
             ShowPrintWizard();
         };
         editor.CloseRequested += () => _ = CloseDocumentAsync(item.Id);
+        editor.RecoveryCopyRequested += recoveredPath => _ = SaveRecoveredCopyAsync(recoveredPath, editor.DocumentPath);
     }
 
     private async Task CloseDocumentAsync(Guid id)

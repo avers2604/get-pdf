@@ -336,6 +336,11 @@ public sealed class EditorDocument
         SetModified(reply);
     }
 
+    /// <summary>Exports an OOXML recovery snapshot without marking the original document as saved.</summary>
+    public Task ExportRecoveryCopyAsync(string path) =>
+        _editor.CallAsync(new { op = "saveas", id = Id, path = Path.GetFullPath(path), filter = FilterFor(path) },
+            CancellationToken.None);
+
     /// <summary>Writes the document as it is now (unsaved edits included) to a PDF.</summary>
     public Task ExportPdfAsync(string path) =>
         _editor.CallAsync(new { op = "pdf", id = Id, path = Path.GetFullPath(path) }, CancellationToken.None);
