@@ -18,6 +18,7 @@
 #include <QLabel>
 #include <QPointer>
 #include <QTemporaryDir>
+#include <QUuid>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -213,8 +214,21 @@ bool PrepareTemporaryProfile(QAscApplicationManager& manager, const QString& roo
 int main(int argc, char** argv) {
     // Only one named synthetic fixture from an existing approved staging dir.
     // No URL, arbitrary filename, output path, save or print commands.
-    if (argc != 4 || std::strcmp(argv[1], "--open-staged-lab") != 0)
+    if ((argc != 4 && argc != 6) ||
+        std::strcmp(argv[1], "--open-staged-lab") != 0)
         return 2;
+    // GD-31J.8 adds a ONE-WAY final snapshot envelope. Not a live editor
+    // command channel: no save, print, document bytes or network access.
+    QString sessionId;
+    if (argc == 6) {
+        if (std::strcmp(argv[4], "--ipc-session") != 0)
+            return 2;
+        sessionId = QString::fromLatin1(argv[5]);
+        const QUuid parsed(sessionId);
+        if (parsed.isNull() ||
+            parsed.toString(QUuid::WithoutBraces) != sessionId)
+            return 2;
+    }
     const QString staging = QString::fromLocal8Bit(argv[2]);
     const QString fixtureName = QString::fromLocal8Bit(argv[3]);
     QString path;
@@ -298,12 +312,27 @@ int main(int argc, char** argv) {
     receipt["pdfVerified"] = false;
     receipt["printApproved"] = false;
     receipt["laboratoryOnly"] = true;
-    // Preserve earlier diagnostic markers but never claim OOXML import.
-    std::puts(viewCallback
-        ? "GD31J6_CEF_VIEW_CALLBACK_OBSERVED_DOCUMENT_UNVERIFIED"
-        : "GD31J6_OPEN_REQUEST_DISPATCHED_NOT_VERIFIED");
-    const QByteArray serialized = QJsonDocument(receipt).toJson(QJsonDocument::Compact);
+    QJsonObject output;
+    if (!sessionId.isEmpty()) {
+        // Exact, single JSONL frame for the managed GD-31J.8 tab IPC pump.
+        // It is emitted only AFTER the lab editor window has closed.
+        QJsonObject ipc;
+        ipc["protocol"] = "getdoc-eurodesktop-ipc/1";
+        ipc["kind"] = "snapshot";
+        ipc["sessionId"] = sessionId;
+        ipc["sequence"] = 1;
+        ipc["receipt"] = receipt;
+        output = ipc;
+    } else {
+        // Legacy lab CLI retains its earlier marker + raw receipt behavior.
+        std::puts(viewCallback
+            ? "GD31J6_CEF_VIEW_CALLBACK_OBSERVED_DOCUMENT_UNVERIFIED"
+            : "GD31J6_OPEN_REQUEST_DISPATCHED_NOT_VERIFIED");
+        output = receipt;
+    }
+    const QByteArray serialized = QJsonDocument(output).toJson(QJsonDocument::Compact);
     std::fwrite(serialized.constData(), 1, static_cast<size_t>(serialized.size()), stdout);
     std::fputc('\n', stdout);
+    std::fflush(stdout);
     return exitCode;
 }
