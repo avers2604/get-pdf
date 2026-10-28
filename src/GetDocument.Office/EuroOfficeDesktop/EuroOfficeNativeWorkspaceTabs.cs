@@ -98,6 +98,12 @@ public sealed class EuroOfficeNativeWorkspaceTabs
         lock (_sync)
         {
             RequireTab(tabId);
+            var current = _registry.Get(tabId);
+            if (current.SessionId != previousSessionId)
+                throw new InvalidDataException("Попытка перезапуска устаревшего сеанса.");
+            if (current.ModifiedObserved)
+                throw new InvalidOperationException(
+                    "Есть неподтверждённые изменения: автоматический перезапуск запрещён.");
             _registry.Restart(tabId, previousSessionId, nextSessionId);
         }
     }
