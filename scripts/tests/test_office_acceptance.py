@@ -33,6 +33,16 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_qt_display_evidence_validator_is_checked_before_dotnet(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("qt-display-evidence-tests", names)
+        self.assertLess(names.index("qt-display-evidence-tests"),
+                        names.index("solution-restore"))
+        evidence = next(item for item in steps if item.name == "qt-display-evidence-tests")
+        self.assertNotIn("--display-live", evidence.command)
+        self.assertIn("test_qt_display_evidence.py", evidence.command)
+
     def test_empty_view_source_contract_is_checked_offline_and_never_runs_cef(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
