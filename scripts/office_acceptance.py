@@ -39,6 +39,8 @@ MANUAL_GATES = (
     "linux-astra-desktop-and-dpi",
     "real-libreoffice-uno-writeback-and-xlsx-roundtrip",
     "eurooffice-desktop-embedding-api",
+    "eurooffice-cef-authenticated-caret-ime-candidates",
+    "eurooffice-windows-x11-osr-or-uno-fallback",
     "eurooffice-server-2-5-10-user-coediting",
     "corporate-sso-acl-and-worm-cas",
     "smb-conflicts-and-emergency-recovery",
