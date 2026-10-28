@@ -54,7 +54,6 @@ class CefWaylandStreamContractTests(unittest.TestCase):
         self.assertIn("host.VerifyBinary()", self.process)
         self.assertIn('RedirectStandardOutput = true', self.process)
         self.assertIn('ValidateFixtureName(fixtureName)', self.process)
-        self.assertIn('Process.Kill', self.process) if False else None
         self.assertIn('process.Kill(entireProcessTree: true)', self.process)
 
     def test_avalonia_lab_frame_never_becomes_production_editor(self):
