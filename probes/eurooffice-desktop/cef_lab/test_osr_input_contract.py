@@ -18,17 +18,17 @@ class OsrPointerInputContract(unittest.TestCase):
         self.assertIn('QT_QPA_PLATFORM',s)
 
     def test_input_sequence_and_bounded_nonblocking_stdin(self):
-        s=NATIVE.read_text("utf-8")
-        for text in ("O_NONBLOCK", "STDIN_FILENO", "EAGAIN", "lastSequence",
-                     "frameNumber", "getdoc-cef-osr-input/1",
-                     "sessionId", "tabId", "x10000", "y10000",
+        s=PARSER.read_text("utf-8")
+        for text in ("O_NONBLOCK", "STDIN_FILENO", "EAGAIN", "m_lastSequence",
+                     "getdoc-cef-osr-input/1",
+                     "m_sessionId", "m_tabId", "x10000", "y10000",
                      "QJsonDocument(request).toJson(QJsonDocument::Compact)",
                      "SendMouseMoveEvent", "SendMouseWheelEvent",
                      "focus(", "devicePixelRatio"):
             self.assertIn(text,s)
 
     def test_no_key_click_ime_or_clipboard_dispatch(self):
-        s=NATIVE.read_text("utf-8")
+        s=PARSER.read_text("utf-8")
         self.assertNotIn("editor->SendKeyEvent(",s)
         self.assertNotIn("editor->SendMouseClickEvent(",s)
         self.assertNotIn("QClipboard",s)
