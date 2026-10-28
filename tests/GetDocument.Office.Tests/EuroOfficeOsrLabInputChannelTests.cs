@@ -16,9 +16,9 @@ public sealed class EuroOfficeOsrLabInputChannelTests
         using var output = new StringWriter();
         await using var input = new EuroOfficeOsrLabInputChannel(
             output, Session, Tab, laboratoryApproved: true);
+        await input.SendFocusAsync(true, CancellationToken.None);
         await input.SendPointerMoveAsync(0.25, 0.75, CancellationToken.None);
         await input.SendWheelAsync(0.5, 0.5, 0, -120, CancellationToken.None);
-        await input.SendFocusAsync(true, CancellationToken.None);
         await input.SendFocusAsync(false, CancellationToken.None);
         var lines = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.AreEqual(4, lines.Length);
@@ -32,14 +32,14 @@ public sealed class EuroOfficeOsrLabInputChannelTests
             Assert.AreEqual(i + 1, root.GetProperty("sequence").GetInt32());
             Assert.IsTrue(lines[i].Length < 4096);
         }
-        using var move = JsonDocument.Parse(lines[0]);
+        using var move = JsonDocument.Parse(lines[1]);
         Assert.AreEqual("move", move.RootElement.GetProperty("command").GetString());
         Assert.AreEqual(2500, move.RootElement.GetProperty("x10000").GetInt32());
         Assert.AreEqual(7500, move.RootElement.GetProperty("y10000").GetInt32());
-        using var wheel = JsonDocument.Parse(lines[1]);
+        using var wheel = JsonDocument.Parse(lines[2]);
         Assert.AreEqual("wheel", wheel.RootElement.GetProperty("command").GetString());
         Assert.AreEqual(-120, wheel.RootElement.GetProperty("deltaY").GetInt32());
-        using var focus = JsonDocument.Parse(lines[2]);
+        using var focus = JsonDocument.Parse(lines[0]);
         Assert.AreEqual("focus", focus.RootElement.GetProperty("command").GetString());
         Assert.IsTrue(focus.RootElement.GetProperty("focused").GetBoolean());
     }
