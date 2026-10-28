@@ -49,6 +49,15 @@ public sealed class EuroOfficeNativeDiagnosticFrameTests
     }
 
     [TestMethod]
+    public void ValidatedFrameBytesCannotBeModifiedByCaller()
+    {
+        var frame = EuroOfficeNativeDiagnosticFrame.Parse(Reply(), Session, Tab, 2);
+        byte[] editable = frame.PngBytes;
+        editable[0] = 0;
+        CollectionAssert.AreEqual(Png, frame.PngBytes);
+    }
+
+    [TestMethod]
     public void RejectsForgedCefSourceAndChangedFrameBytes()
     {
         Assert.ThrowsExactly<InvalidDataException>(() =>
