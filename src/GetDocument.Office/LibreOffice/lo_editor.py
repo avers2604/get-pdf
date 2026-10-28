@@ -55,6 +55,8 @@ FEATURES = {
     "calc-validate-whole-nonnegative": ("calc", True),
     "calc-validate-decimal-nonnegative": ("calc", True),
     "calc-validate-clear": ("calc", True),
+    "calc-validate-choice-list": ("calc", True),
+    "calc-pivot-sum": ("calc", True),
     "impress-duplicate-slide": ("impress", True),
 }
 
@@ -432,6 +434,33 @@ class Bridge:
             entry.frame.getComponentWindow().setFocus()
         return {}
 
+    @staticmethod
+    def validated_choices(options):
+        """Server-side validation, independent of the GET UI / C# contract."""
+        if not isinstance(options, list) or not 2 <= len(options) <= 20:
+            raise RuntimeError("список должен содержать от 2 до 20 вариантов")
+        import unicodedata
+        result = []
+        seen = set()
+        formula_size = 0
+        for raw in options:
+            if not isinstance(raw, str):
+                raise RuntimeError("пункты списка должны быть текстом")
+            value = raw.strip()
+            if (not 1 <= len(value) <= 40 or value[0] in "=+-@" or
+                any(ch in ';"' or unicodedata.category(ch) in ('Cc', 'Cf', 'Cs')
+                    for ch in value)):
+                raise RuntimeError("недопустимый вариант списка")
+            normalized = value.casefold()
+            if normalized in seen:
+                raise RuntimeError("пункты списка повторяются")
+            seen.add(normalized)
+            result.append(value)
+            formula_size += len(value) + 3
+        if formula_size > 200:
+            raise RuntimeError("список превышает лимит совместимости XLSX")
+        return result
+
     def selected_calc_range(self, doc, max_cells, min_rows=1, min_cols=1):
         """Require one bounded contiguous selection in the active Calc worksheet."""
         controller = doc.getCurrentController()
@@ -575,6 +604,70 @@ class Bridge:
             cells.setPropertyValue("Validation", validation)
             return {"cells": (area.EndColumn - area.StartColumn + 1) *
                     (area.EndRow - area.StartRow + 1)}
+
+        if feature == "calc-validate-choice-list":
+            # Build the literal list ourselves: neither a formula nor a path is accepted.
+            options = self.validated_choices(request.get("options"))
+            sheet, area = self.selected_calc_range(doc, max_cells=50000)
+            cells = sheet.getCellRangeByPosition(area.StartColumn, area.StartRow,
+                                                  area.EndColumn, area.EndRow)
+            validation = cells.getPropertyValue("Validation")
+            validation.Type = uno.Enum("com.sun.star.sheet.ValidationType", "LIST")
+            validation.Formula1 = ";".join('"' + option + '"' for option in options)
+            validation.ShowList = 1
+            validation.IgnoreBlankCells = True
+            validation.ShowErrorMessage = True
+            validation.ErrorTitle = "ГЭТ Документ — выбор из списка"
+            validation.ErrorMessage = "Выберите один из предложенных вариантов."
+            validation.ErrorAlertStyle = uno.Enum("com.sun.star.sheet.ValidationAlertStyle", "STOP")
+            cells.setPropertyValue("Validation", validation)
+            return {"choices": len(options)}
+
+        if feature == "calc-pivot-sum":
+            # Deliberately bounded MVP: two columns, first = category, second = numeric SUM.
+            # Output is always on a NEW worksheet. No data/source cell is overwritten.
+            sheet, area = self.selected_calc_range(doc, max_cells=10000, min_rows=3, min_cols=2)
+            if area.EndColumn - area.StartColumn != 1:
+                raise RuntimeError("для сводной выделите ровно два столбца")
+            data = sheet.getCellRangeByPosition(area.StartColumn, area.StartRow,
+                                                 area.EndColumn, area.EndRow).getDataArray()
+            if (not isinstance(data[0][0], str) or not data[0][0].strip() or
+                not isinstance(data[0][1], str) or not data[0][1].strip()):
+                raise RuntimeError("первая строка должна содержать заголовки категории и суммы")
+            if not any(isinstance(row[1], (int, float)) and not isinstance(row[1], bool)
+                       for row in data[1:]):
+                raise RuntimeError("второй столбец должен содержать числовые значения")
+            if any(not isinstance(row[0], str) or not row[0].strip() for row in data[1:]):
+                raise RuntimeError("первый столбец должен содержать категории без пустых строк")
+            sheets = doc.getSheets()
+            if sheets.getCount() >= 80:
+                raise RuntimeError("слишком много листов для создания сводной")
+            index = 1
+            while sheets.hasByName("ГЭТ Сводная %d" % index):
+                index += 1
+            name = "ГЭТ Сводная %d" % index
+            sheets.insertNewByName(name, sheets.getCount())
+            try:
+                output = sheets.getByName(name)
+                tables = output.getDataPilotTables()
+                descriptor = tables.createDataPilotDescriptor()
+                descriptor.setSourceRange(area)
+                fields = descriptor.getDataPilotFields()
+                field_label = fields.getByIndex(0)
+                field_value = fields.getByIndex(1)
+                field_label.setPropertyValue("Orientation",
+                                             uno.Enum("com.sun.star.sheet.DataPilotFieldOrientation", "ROW"))
+                field_value.setPropertyValue("Function",
+                                             uno.Enum("com.sun.star.sheet.GeneralFunction", "SUM"))
+                field_value.setPropertyValue("Orientation",
+                                             uno.Enum("com.sun.star.sheet.DataPilotFieldOrientation", "DATA"))
+                destination = output.getCellByPosition(1, 1).getCellAddress()
+                tables.insertNewByName("ГЭТ Сводная", destination, descriptor)
+                doc.getCurrentController().setActiveSheet(output)
+            except Exception:
+                sheets.removeByName(name)
+                raise
+            return {"sheet": name}
 
         if feature == "impress-duplicate-slide":
             controller = doc.getCurrentController()

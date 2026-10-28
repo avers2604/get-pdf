@@ -17,7 +17,8 @@ public sealed class OfficeFeatureCatalogTests
                 "calc-print-used-area", "calc-clear-print-area",
                 "calc-repeat-first-row", "calc-stop-repeat-rows",
                 "calc-chart-column", "calc-chart-line",
-                "calc-validate-whole-nonnegative", "calc-validate-decimal-nonnegative", "calc-validate-clear" },
+                "calc-validate-whole-nonnegative", "calc-validate-decimal-nonnegative", "calc-validate-clear",
+                "calc-pivot-sum", "calc-validate-choice-list" },
             OfficeFeatureCatalog.ForKind("calc").Select(x => x.Id).ToArray());
         CollectionAssert.AreEquivalent(
             new[] { "impress-duplicate-slide" },

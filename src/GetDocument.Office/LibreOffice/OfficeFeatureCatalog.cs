@@ -26,6 +26,8 @@ public static class OfficeFeatureCatalog
         new("calc-validate-whole-nonnegative", "Разрешить только целые неотрицательные числа", "calc", true),
         new("calc-validate-decimal-nonnegative", "Разрешить только неотрицательные числа", "calc", true),
         new("calc-validate-clear", "Снять проверку данных с выделения", "calc", true),
+        new("calc-validate-choice-list", "Выпадающий список по заданным вариантам", "calc", true),
+        new("calc-pivot-sum", "Сводная: группировка по первой колонке, сумма второй", "calc", true),
         new("impress-duplicate-slide", "Дублировать слайд", "impress", true)
     ];
 
@@ -45,5 +47,22 @@ public static class OfficeFeatureCatalog
         if (readOnly && feature.RequiresEdit)
             throw new InvalidOperationException("Документ открыт только для чтения.");
         return feature;
+    }
+
+    /// <summary>
+    /// Only the choice-list action accepts user parameters. No caller can smuggle
+    /// arbitrary script arguments into other UNO capabilities.
+    /// </summary>
+    public static string[]? ValidateOptions(string featureId, IReadOnlyList<string>? options)
+    {
+        if (featureId == "calc-validate-choice-list")
+        {
+            if (options is null)
+                throw new ArgumentException("Укажите варианты выпадающего списка.", nameof(options));
+            return OfficeChoiceList.Validate(options);
+        }
+        if (options is not null)
+            throw new ArgumentException("Эта операция не принимает варианты списка.", nameof(options));
+        return null;
     }
 }
