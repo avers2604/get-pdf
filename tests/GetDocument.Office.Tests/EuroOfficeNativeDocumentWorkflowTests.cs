@@ -55,6 +55,28 @@ public sealed class EuroOfficeNativeDocumentWorkflowTests
     }
 
     [TestMethod]
+    public void UntrustedNativeReceiptCanUpdateDiagnosticsButNeverGrantFileWrite()
+    {
+        var flow = NewWorkflow();
+        var receipt = new EuroOfficeNativeReceipt(
+            ViewLoaded: true,
+            ModifiedNotificationObserved: true,
+            SaveNotificationObserved: true,
+            SaveCancelled: true,
+            PrintNotificationObserved: true);
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            flow.ApplyNativeReceipt(receipt, "foreign-session"));
+        flow.ApplyNativeReceipt(receipt, "gd31j7-session");
+        Assert.AreEqual(EuroOfficeNativeDocumentStatus.ViewLoadedUnverified, flow.Status);
+        Assert.IsTrue(flow.ModifiedNotificationObserved);
+        Assert.IsTrue(flow.SaveNotificationObserved);
+        Assert.IsTrue(flow.PrintNotificationObserved);
+        Assert.IsFalse(flow.SaveCompleted);
+        Assert.IsFalse(flow.PrintApproved);
+        Assert.IsFalse(flow.PdfReady);
+    }
+
+    [TestMethod]
     public void FailureIsTerminalAndCannotBeReinterpretedAsSuccessfulSave()
     {
         var flow = NewWorkflow();
