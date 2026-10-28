@@ -78,6 +78,20 @@ public sealed class EuroOfficeNativeTabRegistryTests
     }
 
     [TestMethod]
+    public void RemovingFailedOrClosedRegistryEntryRejectsStaleSession()
+    {
+        var registry = new EuroOfficeNativeTabRegistry();
+        Guid id = Guid.NewGuid(), session = Guid.NewGuid();
+        registry.Register(id, session, "synthetic");
+        registry.HostCrashed(id, session);
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            registry.Remove(id, Guid.NewGuid()));
+        registry.Remove(id, session);
+        Assert.ThrowsExactly<KeyNotFoundException>(() => registry.Get(id));
+        Assert.ThrowsExactly<KeyNotFoundException>(() => registry.Remove(id, session));
+    }
+
+    [TestMethod]
     public void IntegrationBoundariesStayDisabledWithoutApprovedServices()
     {
         var integrations = new EuroOfficeNativeExternalGates();
