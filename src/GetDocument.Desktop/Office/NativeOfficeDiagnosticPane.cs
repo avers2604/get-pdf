@@ -26,6 +26,12 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         Opacity = 0.8
     };
 
+    private readonly TextBlock _connection = new()
+    {
+        Text = "Qt IPC: соединение не подтверждено; CEF не подключён",
+        TextWrapping = TextWrapping.Wrap
+    };
+
     public NativeOfficeDiagnosticPane(EuroOfficeNativeWorkspaceTabState initial)
     {
         Padding = new Thickness(28);
@@ -42,6 +48,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             TextWrapping = TextWrapping.Wrap
         });
         layout.Children.Add(_state);
+        layout.Children.Add(_connection);
         layout.Children.Add(_details);
         layout.Children.Add(new TextBlock
         {
@@ -53,6 +60,13 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         Child = new ScrollViewer { Content = layout };
         Update(initial);
     }
+
+    /// <summary>Qt transport ACK is NOT a document-loaded event.</summary>
+    public void SetTransportConnected() =>
+        _connection.Text = "Qt IPC подключён. Редактор CEF и документ не подтверждены.";
+
+    public void SetTransportLost() =>
+        _connection.Text = "Связь с Qt-хостом потеряна; правки не восстановлены.";
 
     public void Update(EuroOfficeNativeWorkspaceTabState state)
     {

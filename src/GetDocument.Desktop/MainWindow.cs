@@ -40,6 +40,9 @@ public sealed class MainWindow : Window
     // the verified LibreOffice/PDF rendering and print paths.
     private readonly EuroOfficeNativeWorkspaceTabs _nativeWorkspaceTabs = new();
     private readonly Dictionary<Guid, TabItem> _nativeTabViews = [];
+    // Never initialized by the normal user launcher. Only the explicitly
+    // approved diagnostic entry point may create this Qt-only coordinator.
+    private EuroOfficeNativeSessionCoordinator? _nativeSessionCoordinator;
     private readonly TabControl _tabs = new();
     private readonly TextBlock _status = new();
     private TabItem? _gameTab;
@@ -134,6 +137,14 @@ public sealed class MainWindow : Window
                 if (history.Content is IDisposable pane) pane.Dispose();
             foreach (var editTab in _collaborationTabs.Values)
                 if (editTab.Content is IDisposable editor) editor.Dispose();
+        };
+        Closed += async (_, _) =>
+        {
+            if (_nativeSessionCoordinator is { } nativeCoordinator)
+            {
+                try { await nativeCoordinator.DisposeAsync(); }
+                catch (Exception) { /* Application exits; no success claim. */ }
+            }
         };
         Closing += async (_, args) =>
         {
@@ -551,8 +562,69 @@ public sealed class MainWindow : Window
         Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
         _nativeWorkspaceTabs.HostCrashed(tabId, sessionId);
         RefreshNativeDiagnosticTab(tabId);
+        if (_nativeTabViews.TryGetValue(tabId, out var tab) &&
+            tab.Content is NativeOfficeDiagnosticPane pane)
+            pane.SetTransportLost();
         _status.Text = "EuroOffice-хост завершился с ошибкой. " +
             "Автоматическое восстановление несохранённых правок запрещено.";
+    }
+
+    /// <summary>
+    /// Connect/attach ACK proves only Qt IPC transport, not CEF or document.
+    /// </summary>
+    internal void ReportNativeDiagnosticConnected(Guid tabId, Guid sessionId)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        var state = _nativeWorkspaceTabs.Get(tabId);
+        if (state.SessionId != sessionId)
+            throw new InvalidDataException("Устаревшее подтверждение Qt IPC.");
+        if (_nativeTabViews.TryGetValue(tabId, out var tab) &&
+            tab.Content is NativeOfficeDiagnosticPane pane)
+            pane.SetTransportConnected();
+        _status.Text = "Qt IPC подключён; документ EuroOffice не проверен.";
+    }
+
+    internal bool NativeDiagnosticHasUnverifiedChanges(Guid tabId, Guid sessionId)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        var state = _nativeWorkspaceTabs.Get(tabId);
+        if (state.SessionId != sessionId)
+            throw new InvalidDataException("Чужой Qt-сеанс.");
+        return state.ModifiedObserved;
+    }
+
+    /// <summary>
+    /// Called by the coordinator ONLY after native process stop/dispose.
+    /// </summary>
+    internal void CompleteNativeDiagnosticClose(Guid tabId, Guid sessionId)
+        => CloseNativeDiagnosticTab(tabId, sessionId);
+
+    /// <summary>
+    /// Experimental entry point, never invoked by the normal launcher.
+    /// The caller must explicitly approve the pinned local Qt-only binary.
+    /// </summary>
+    internal async Task StartNativeLabSessionAsync(
+        EuroOfficeNativeLabHostPolicy policy, Guid tabId, Guid sessionId,
+        string documentId, string title, bool labApproved,
+        CancellationToken cancellationToken)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        if (!labApproved)
+            throw new NotSupportedException("Нет разрешения на экспериментальный Qt-хост.");
+        _nativeSessionCoordinator ??=
+            new EuroOfficeNativeSessionCoordinator(new AvaloniaNativeSessionView(this));
+        var process = await EuroOfficeNativeIpcProcessSession.StartAsync(
+            policy, sessionId, tabId, labApproved, cancellationToken);
+        try
+        {
+            await _nativeSessionCoordinator.StartAsync(tabId, sessionId,
+                documentId, title, process, labApproved, cancellationToken);
+        }
+        catch
+        {
+            await process.DisposeAsync();
+            throw;
+        }
     }
 
     /// <summary>
@@ -587,6 +659,21 @@ public sealed class MainWindow : Window
                 "Рабочий WORM-оригинал не менялся этим модулем.",
                 "Закрыть без подтверждения", "Вернуться"))
             return;
+        if (_nativeSessionCoordinator is { } coordinator)
+        {
+            try
+            {
+                await coordinator.CloseAsync(tabId, snapshot.SessionId,
+                    confirmedDiscard: snapshot.ModifiedObserved, CancellationToken.None);
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or
+                                       InvalidOperationException or OperationCanceledException)
+            {
+                _status.Text = "Не удалось корректно закрыть нативный сеанс: " +
+                    ex.GetType().Name + ". Статус оставлен для восстановления.";
+            }
+            return;
+        }
         CloseNativeDiagnosticTab(tabId, snapshot.SessionId);
     }
 
