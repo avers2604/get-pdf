@@ -14,6 +14,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QBuffer>
+#include <QImage>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QJsonObject>
 #include <QLabel>
 #include <QPointer>
@@ -42,6 +46,50 @@ public:
         cefViewLoaded.store(true, std::memory_order_release);
         QCefView::OnLoaded();
     }
+
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
+    void EnableSyntheticOsrCapture() {
+        m_captureEnabled.store(true, std::memory_order_release);
+    }
+
+    // This callback is already present in the pinned EuroOffice SDK. The
+    // upstream implementation calls QCefView::OnPaint for Wayland only; it
+    // needs its own paint staging/GL swap. Never replace or re-enter it.
+    void OnPaint(const void* buffer, int width, int height) override {
+        QCefView::OnPaint(buffer, width, height);
+        if (!m_captureEnabled.load(std::memory_order_acquire) ||
+            m_paintObserved.load(std::memory_order_acquire) ||
+            !IsWayland() || !buffer ||
+            width < 1 || height < 1 || width > 4096 || height > 4096 ||
+            static_cast<long long>(width) * height > 4'194'304)
+            return;
+
+        // CEF hands us temporary BGRA pixels, never an owned QImage. Create
+        // a tiny independent deep copy *inside* the callback, without
+        // Qt repaint/events/process IO or touching customer document paths.
+        const auto* bytes = static_cast<const uchar*>(buffer);
+        QImage view(bytes, width, height, QImage::Format_ARGB32_Premultiplied);
+        QImage preview = view.scaled(256, 144, Qt::KeepAspectRatio,
+                                     Qt::FastTransformation).copy();
+        if (preview.isNull() || preview.width() < 1 || preview.height() < 1)
+            return;
+        QMutexLocker lock(&m_captureMutex);
+        if (m_paintObserved.load(std::memory_order_relaxed))
+            return;
+        m_capture = preview;
+        m_paintObserved.store(true, std::memory_order_release);
+    }
+
+    QImage SnapshotOsrLab() {
+        QMutexLocker lock(&m_captureMutex);
+        return m_capture.copy();
+    }
+private:
+    std::atomic<bool> m_captureEnabled{false};
+    std::atomic<bool> m_paintObserved{false};
+    QMutex m_captureMutex;
+    QImage m_capture;
+#endif
 };
 
 // Only aggregate allowlisted notifications from the EXACT synthetic editor.
@@ -213,8 +261,19 @@ bool PrepareTemporaryProfile(QAscApplicationManager& manager, const QString& roo
 int main(int argc, char** argv) {
     // Only one named synthetic fixture from an existing approved staging dir.
     // No URL, arbitrary filename, output path, save or print commands.
-    if (argc != 4 || std::strcmp(argv[1], "--open-staged-lab") != 0)
-        return 2;
+    const bool osrLab = argc == 4 &&
+        std::strcmp(argv[1], "--open-staged-wayland-osr-lab") == 0;
+    const bool ordinaryLab = argc == 4 &&
+        std::strcmp(argv[1], "--open-staged-lab") == 0;
+    if (!ordinaryLab && !osrLab) return 2;
+#ifndef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
+    if (osrLab) return 2;
+#else
+    // The current pinned SDK enables CEF windowless rendering ONLY on
+    // QT_QPA_PLATFORM=wayland. Windows and X11 use SetAsChild native windows.
+    // Do not change QT_QPA_PLATFORM here; require an approved OS lab setup.
+    if (osrLab && qgetenv("QT_QPA_PLATFORM") != "wayland") return 9;
+#endif
     const QString staging = QString::fromLocal8Bit(argv[2]);
     const QString fixtureName = QString::fromLocal8Bit(argv[3]);
     QString path;
@@ -225,6 +284,9 @@ int main(int argc, char** argv) {
     }
 
     QApplication app(argc, argv);
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
+    if (osrLab && app.platformName() != "wayland") return 9;
+#endif
     QTemporaryDir profile(QDir::tempPath() + "/get-document-gd31j6-XXXXXX");
     if (!profile.isValid()) return 4;
     QAscApplicationManager manager;
@@ -251,6 +313,9 @@ int main(int argc, char** argv) {
     banner->setWordWrap(true);
     layout->addWidget(banner);
     QPointer<SyntheticEditorView> view = new SyntheticEditorView(&window, QSize(980, 620));
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
+    if (osrLab) view->EnableSyntheticOsrCapture();
+#endif
     layout->addWidget(view);
     view->Create(&manager, cvwtEditor);
     if (!view || !view->GetCefView()) {
@@ -278,6 +343,11 @@ int main(int argc, char** argv) {
     // Snapshot BEFORE any CEF/Qt destroy callback can invalidate the widget.
     // A browser callback does not prove OOXML was parsed/rendered correctly.
     const bool viewCallback = view && view->cefViewLoaded.load(std::memory_order_acquire);
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
+    // Copy image before manager destroys CEF's widget. This sample is only
+    // the first received OnPaint frame, not proof of complete OOXML import.
+    const QImage osrSnapshot = (osrLab && view) ? view->SnapshotOsrLab() : QImage();
+#endif
     if (view && viewId > 0)
         manager.DestroyCefView(viewId, false);
     manager.SetEventListener(nullptr);
@@ -305,5 +375,37 @@ int main(int argc, char** argv) {
     const QByteArray serialized = QJsonDocument(receipt).toJson(QJsonDocument::Compact);
     std::fwrite(serialized.constData(), 1, static_cast<size_t>(serialized.size()), stdout);
     std::fputc('\n', stdout);
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
+    if (osrLab) {
+        QByteArray imageBytes;
+        if (!osrSnapshot.isNull()) {
+            QBuffer output(&imageBytes);
+            if (!output.open(QIODevice::WriteOnly) ||
+                !osrSnapshot.save(&output, "PNG") ||
+                imageBytes.size() > 48 * 1024)
+                imageBytes.clear();
+        }
+        QJsonObject receipt;
+        receipt["schema"] = "getdoc-cef-osr-lab/1";
+        receipt["source"] = "cef-osr-wayland-synthetic-only";
+        receipt["paintCallbackObserved"] = !osrSnapshot.isNull();
+        receipt["frameAvailable"] = !imageBytes.isEmpty();
+        receipt["pixelWidth"] = imageBytes.isEmpty() ? 0 : osrSnapshot.width();
+        receipt["pixelHeight"] = imageBytes.isEmpty() ? 0 : osrSnapshot.height();
+        receipt["payloadBase64"] = QString::fromLatin1(imageBytes.toBase64());
+        receipt["sha256"] = imageBytes.isEmpty() ? QString() : QString::fromLatin1(
+            QCryptographicHash::hash(imageBytes, QCryptographicHash::Sha256).toHex());
+        // CEF OnPaint is not a successful, verified document import.
+        receipt["documentVerified"] = false;
+        receipt["saveVerified"] = false;
+        receipt["pdfVerified"] = false;
+        receipt["printApproved"] = false;
+        receipt["laboratoryOnly"] = true;
+        std::puts("GD31J12_OSR_CAPTURE_UNVERIFIED");
+        const QByteArray json = QJsonDocument(receipt).toJson(QJsonDocument::Compact);
+        std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()), stdout);
+        std::fputc('\n', stdout);
+    }
+#endif
     return exitCode;
 }
