@@ -119,7 +119,8 @@ public sealed class OfficeRecoveryStore
             if (!string.Equals(sha, manifest.Sha256, StringComparison.OrdinalIgnoreCase)) return null;
             return new OfficeRecoveryCopy(copy, manifest.CapturedUtc);
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or
+                                   NotSupportedException)
         {
             return null;
         }
