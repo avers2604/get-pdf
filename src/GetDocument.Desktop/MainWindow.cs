@@ -17,6 +17,8 @@ using GetDocument.Desktop.Templates;
 using GetDocument.Desktop.Revisions;
 using GetDocument.Desktop.Collaboration;
 using GetDocument.Office;
+using GetDocument.Office.EuroOfficeDesktop;
+using GetDocument.Desktop.Office;
 using GetDocument.Core.Integration;
 using GetDocument.Desktop.Integration;
 using GetDocument.Desktop.Printing;
@@ -34,6 +36,10 @@ public sealed class MainWindow : Window
     private readonly HiddenGameGesture _hiddenGame = new();
     private readonly ObservableCollection<TabItem> _items = [];
     private readonly Dictionary<Guid, TabItem> _views = [];
+    // Native lab tabs share this SAME TabControl, not DocumentWorkspace or
+    // the verified LibreOffice/PDF rendering and print paths.
+    private readonly EuroOfficeNativeWorkspaceTabs _nativeWorkspaceTabs = new();
+    private readonly Dictionary<Guid, TabItem> _nativeTabViews = [];
     private readonly TabControl _tabs = new();
     private readonly TextBlock _status = new();
     private TabItem? _gameTab;
@@ -95,7 +101,19 @@ public sealed class MainWindow : Window
         _tabs.SelectionChanged += (_, _) =>
         {
             if (_tabs.SelectedItem is TabItem tab && tab.Tag is Guid id)
-                _workspace.Select(id);
+            {
+                if (_views.ContainsKey(id))
+                {
+                    _nativeWorkspaceTabs.Deselect();
+                    _workspace.Select(id);
+                }
+                else if (_nativeTabViews.ContainsKey(id))
+                    _nativeWorkspaceTabs.Select(id);
+                else
+                    _nativeWorkspaceTabs.Deselect();
+            }
+            else
+                _nativeWorkspaceTabs.Deselect();
             if (_tabs.SelectedIndex == 0) RefreshHome();
         };
         try { _history.ImportFromGetPdfOnce(); }
@@ -121,11 +139,18 @@ public sealed class MainWindow : Window
         {
             if (_closeConfirmed) return;
             var unsaved = _views.Values.Where(t => HasUnsaved(t.Content)).ToList();
-            if (unsaved.Count == 0) return;
+            var nativeUnverified = _nativeTabViews.Keys
+                .Select(id => _nativeWorkspaceTabs.Get(id))
+                .Where(state => state.ModifiedObserved).ToArray();
+            if (unsaved.Count == 0 && nativeUnverified.Length == 0) return;
             args.Cancel = true;
-            string names = string.Join(", ", unsaved.Select(t => (t.Header as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault()?.Text ?? "документ").Take(4));
+            string names = string.Join(", ", unsaved.Select(t =>
+                    (t.Header as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault()?.Text
+                    ?? "документ")
+                .Concat(nativeUnverified.Select(state => state.Title)).Take(4));
             if (await GetDialogs.ConfirmAsync(this, "Закрыть без сохранения?",
-                    $"Есть несохранённые изменения: {names}. Если закрыть программу, они пропадут. Исходные файлы не изменены.",
+                    $"Есть несохранённые или неподтверждённые изменения: {names}. " +
+                    "При закрытии они могут быть потеряны. Исходные WORM-файлы не изменялись этим модулем.",
                     "Закрыть без сохранения", "Вернуться"))
             {
                 _closeConfirmed = true;
@@ -486,6 +511,106 @@ public sealed class MainWindow : Window
         else OpenPlaceholder("ГЭТ Сканирование", message);
     }
 
+    /// <summary>
+    /// A diagnostic status tab shares the real GET tab strip. The caller must
+    /// be a separately approved lab adapter; no user command invokes this
+    /// method and no native Qt/CEF editor is embedded or launched here.
+    /// </summary>
+    internal void AddNativeDiagnosticTab(Guid tabId, Guid sessionId,
+        string documentId, string title)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        _nativeWorkspaceTabs.Register(tabId, sessionId, documentId, title);
+        var snapshot = _nativeWorkspaceTabs.Get(tabId);
+        var content = new NativeOfficeDiagnosticPane(snapshot);
+        var tab = new TabItem
+        {
+            Tag = tabId,
+            Header = TabHeader(title + " · эксперимент", () =>
+                _ = CloseNativeDiagnosticTabAsync(tabId)),
+            Content = content
+        };
+        _nativeTabViews.Add(tabId, tab);
+        _items.Add(tab);
+        _tabs.SelectedItem = tab;
+        _status.Text = "Создана диагностическая вкладка EuroOffice; " +
+            "открытие документа, запись редакции и печать не подтверждены.";
+    }
+
+    /// <summary>Receipts only update the passive label of the matching tab.</summary>
+    internal void ApplyNativeDiagnosticReceipt(Guid tabId, Guid sessionId,
+        EuroOfficeNativeReceipt receipt)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        _nativeWorkspaceTabs.ApplyReceipt(tabId, sessionId, receipt);
+        RefreshNativeDiagnosticTab(tabId);
+    }
+
+    internal void ReportNativeDiagnosticCrash(Guid tabId, Guid sessionId)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        _nativeWorkspaceTabs.HostCrashed(tabId, sessionId);
+        RefreshNativeDiagnosticTab(tabId);
+        _status.Text = "EuroOffice-хост завершился с ошибкой. " +
+            "Автоматическое восстановление несохранённых правок запрещено.";
+    }
+
+    /// <summary>
+    /// UI-state bookkeeping ONLY. An external approved supervisor must kill
+    /// and reap the previous host before it starts a new distinct session.
+    /// </summary>
+    internal void RecordNativeDiagnosticRestart(Guid tabId,
+        Guid previousSessionId, Guid newSessionId)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        _nativeWorkspaceTabs.Restart(tabId, previousSessionId, newSessionId);
+        RefreshNativeDiagnosticTab(tabId);
+        _status.Text = "Зарегистрирован новый диагностический сеанс EuroOffice. " +
+            "Открытие документа не подтверждено.";
+    }
+
+    private void RefreshNativeDiagnosticTab(Guid tabId)
+    {
+        if (_nativeTabViews.TryGetValue(tabId, out var tab) &&
+            tab.Content is NativeOfficeDiagnosticPane pane)
+            pane.Update(_nativeWorkspaceTabs.Get(tabId));
+    }
+
+    private async Task CloseNativeDiagnosticTabAsync(Guid tabId)
+    {
+        if (!_nativeTabViews.ContainsKey(tabId)) return;
+        var snapshot = _nativeWorkspaceTabs.Get(tabId);
+        if (snapshot.ModifiedObserved &&
+            !await GetDialogs.ConfirmAsync(this, "Закрыть неподтверждённый сеанс?",
+                "От нативного редактора поступало уведомление об изменении, " +
+                "но сохранённая редакция не подтверждена. Закрытие может привести к потере правок. " +
+                "Рабочий WORM-оригинал не менялся этим модулем.",
+                "Закрыть без подтверждения", "Вернуться"))
+            return;
+        CloseNativeDiagnosticTab(tabId, snapshot.SessionId);
+    }
+
+    private void CloseNativeDiagnosticTab(Guid tabId, Guid sessionId)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        if (!_nativeTabViews.TryGetValue(tabId, out var view)) return;
+        // This is a passive status tab. When a real process is connected,
+        // its process supervisor must stop/reap it BEFORE this UI cleanup.
+        _nativeWorkspaceTabs.Close(tabId, sessionId);
+        _nativeTabViews.Remove(tabId);
+        _items.Remove(view);
+        if (_tabs.SelectedItem is null || ReferenceEquals(_tabs.SelectedItem, view))
+        {
+            if (_workspace.ActiveId is { } active &&
+                _views.TryGetValue(active, out var selected))
+                _tabs.SelectedItem = selected;
+            else
+                _tabs.SelectedIndex = 0;
+        }
+        _status.Text = "Диагностическая вкладка EuroOffice закрыта; " +
+            "никаких офисных файлов не сохранялось.";
+    }
+
     private void AddDocument(WorkspaceDocumentTab item)
     {
         if (!_views.TryGetValue(item.Id, out var view))
@@ -823,6 +948,13 @@ public sealed class MainWindow : Window
 
     private async void ShowPrintWizard()
     {
+        if (_tabs.SelectedItem is TabItem { Tag: Guid nativeId } &&
+            _nativeTabViews.ContainsKey(nativeId))
+        {
+            _status.Text = "Печать из диагностического EuroOffice запрещена: " +
+                "нет проверенного PDF для собственного мастера ГЭТ.";
+            return;
+        }
         if (_tabs.SelectedItem is TabItem { Tag: Guid id })
         {
             var document = _workspace.Tabs.FirstOrDefault(x => x.Id == id);
@@ -1141,6 +1273,9 @@ public sealed class MainWindow : Window
             e.Handled = true;
             AddDocument(_workspace.CreateDraft(WorkspaceDocumentKind.Text));
         }
+        else if (e.Key == Key.W && _tabs.SelectedItem is TabItem { Tag: Guid nativeId } &&
+                 _nativeTabViews.ContainsKey(nativeId))
+        { e.Handled = true; await CloseNativeDiagnosticTabAsync(nativeId); }
         else if (e.Key == Key.W && _tabs.SelectedItem is TabItem { Tag: Guid id })
         { e.Handled = true; await CloseDocumentAsync(id); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _filesTab))

@@ -87,6 +87,20 @@ public sealed class EuroOfficeNativeTabRegistry
         }
     }
 
+    /// <summary>
+    /// Drop a closed/failed or explicitly discarded tab from the local
+    /// registry. This does NOT stop the native process; the owning supervisor
+    /// must dispose/reap it separately before user-facing tab removal.
+    /// </summary>
+    public void Remove(Guid tabId, Guid sessionId)
+    {
+        lock (_sync)
+        {
+            GetEntry(tabId, sessionId);
+            _tabs.Remove(tabId);
+        }
+    }
+
     public void Restart(Guid tabId, Guid previousSessionId, Guid nextSessionId)
     {
         ValidateIdentity(tabId, previousSessionId);
