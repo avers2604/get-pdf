@@ -26,7 +26,8 @@ class NativeSessionDispatchContractTests(unittest.TestCase):
         self.assertIn("window.CompleteNativeDiagnosticClose", self.dispatch)
 
     def test_close_process_precedes_removal_of_tab(self):
-        code = self.core
+        code = self.core.split("public async Task CloseAsync(", 1)[1].split(
+            "public async Task ObserveHostExitAsync", 1)[0]
         self.assertLess(code.index("await entry.Transport.CloseAsync(cancellationToken)"),
                         code.index("await _view.RemoveAsync(tabId, sessionId, CancellationToken.None)"))
         self.assertIn("await DisposeTransportAsync(entry)", code)
