@@ -137,6 +137,33 @@ public sealed class ImageEditServiceTests
             ".get-document-image-*").Length);
     }
 
+    [TestMethod]
+    public void SelectedSourceInsideAnOldOwnedScratchIsNeverAutoDeleted()
+    {
+        using var sandbox = TempDirectory.Create();
+        string orphan = Path.Combine(sandbox.Path,
+            ".get-document-image-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(orphan);
+        string marker = Path.Combine(orphan, ImageExportScratch.LeaseFileName);
+        File.WriteAllText(marker, ImageExportScratch.LeaseMarker,
+            System.Text.Encoding.ASCII);
+        string source = Path.Combine(orphan, "stage.png");
+        byte[] original = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAGElEQVR4nGNkYJAzYmCAIBaGKAY4QOEAACQwAXJRPwcJAAAAAElFTkSuQmCC");
+        File.WriteAllBytes(source, original);
+        DateTime stale = DateTime.UtcNow.AddDays(-3);
+        File.SetLastWriteTimeUtc(source, stale);
+        File.SetLastWriteTimeUtc(marker, stale);
+
+        string output = Path.Combine(sandbox.Path, "protected-source.png");
+        ImageEditService.SaveNewRevision(source, output,
+            new ImageEditPlan(FlipHorizontal: true));
+
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(source));
+        Assert.IsTrue(File.Exists(output));
+        Assert.IsTrue(Directory.Exists(orphan));
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public string Path { get; }
