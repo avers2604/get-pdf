@@ -3,6 +3,10 @@ project(GetDocumentCefInitializationLab LANGUAGES CXX)
 
 # A strictly opt-in LAB program. Does not fetch/build upstream SDK libraries.
 option(GETDOC_GD31J3_ENABLE_CEF_LAB "Build the isolated CEF initialization probe" OFF)
+option(GETDOC_GD31J4_ENABLE_EMPTY_VIEW_LAB "Build one empty QCefView experiment; never open documents" OFF)
+if(GETDOC_GD31J4_ENABLE_EMPTY_VIEW_LAB AND NOT GETDOC_GD31J3_ENABLE_CEF_LAB)
+  message(FATAL_ERROR "GD-31J.4 requires explicitly enabling the isolated GD-31J.3 CEF lab.")
+endif()
 if(NOT GETDOC_GD31J3_ENABLE_CEF_LAB)
   message(STATUS "GD-31J.3 CEF lab is DISABLED. No binaries or SDK dependencies.")
   return()
@@ -71,3 +75,19 @@ target_link_libraries(getdoc-eurooffice-cef-init-lab PRIVATE
 )
 # Do NOT add this target to GET's desktop project/installer.
 message(WARNING "CEF init smoke ONLY: no files/editor/save/print, no security attestation.")
+
+# GD-31J.4 is a SECOND, even higher-risk, opt-in executable. The vendor
+# CEF runtime may be unsandboxed. This is not added to the GET installer.
+if(GETDOC_GD31J4_ENABLE_EMPTY_VIEW_LAB)
+  add_executable(getdoc-eurooffice-cef-empty-view-lab cef_empty_view.cpp)
+  target_compile_features(getdoc-eurooffice-cef-empty-view-lab PRIVATE cxx_std_17)
+  target_include_directories(getdoc-eurooffice-cef-empty-view-lab PRIVATE
+      "${_sdk}/include"
+      "${_qt_include}"
+  )
+  target_link_libraries(getdoc-eurooffice-cef-empty-view-lab PRIVATE
+      Qt6::Core Qt6::Gui Qt6::Widgets Qt6::OpenGLWidgets
+      "${GETDOC_ASC_DOC_SCORE}" "${GETDOC_ASC_QT_SCORE}"
+  )
+  message(WARNING "GD-31J.4 EMPTY VIEW ONLY: do NOT open files, print, network or integrate into GET.")
+endif()
