@@ -11,6 +11,11 @@ option(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB "Build the synthetic-only Office fil
 option(GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB "Enable real Wayland CEF OnPaint lab snapshot (never production)" OFF)
 # Streaming is a second opt-in: no change to the earlier one-frame lab mode.
 option(GETDOC_GD31J13_ENABLE_OSR_STREAM_LAB "Enable session-bound CEF OSR preview streaming on isolated Wayland VM" OFF)
+# Separate opt-in for input on the bounded synthetic-only stream.
+option(GETDOC_GD31J14_ENABLE_INPUT_LAB "Enable Wayland pointer/wheel/focus-only input experiment" OFF)
+if(GETDOC_GD31J14_ENABLE_INPUT_LAB AND NOT GETDOC_GD31J13_ENABLE_OSR_STREAM_LAB)
+  message(FATAL_ERROR "GD-31J.14 requires explicitly enabled synthetic CEF OSR streaming.")
+endif()
 if(GETDOC_GD31J13_ENABLE_OSR_STREAM_LAB AND NOT GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB)
   message(FATAL_ERROR "GD-31J.13 requires explicit GD-31J.12 Wayland CEF OSR lab.")
 endif()
@@ -132,6 +137,12 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
       target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
           GETDOC_GD31J13_OSR_STREAM_LAB=1)
       message(WARNING "GD-31J.13: 8-frame CEF preview stream, synthetic files only. Requires offline VM/sandbox approval.")
+      if(GETDOC_GD31J14_ENABLE_INPUT_LAB)
+        target_sources(getdoc-eurooffice-cef-staged-open-lab PRIVATE osr_input.cpp)
+        target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+            GETDOC_GD31J14_POINTER_INPUT=1)
+        message(WARNING "GD-31J.14: only pointer/wheel/focus; no clicks/keys/IME/clipboard; isolated synthetic Wayland lab.")
+      endif()
     endif()
   endif()
   message(WARNING "GD-31J.6 synthetic test documents only, sandbox isolation required.")

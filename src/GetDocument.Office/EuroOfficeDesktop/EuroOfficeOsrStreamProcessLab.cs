@@ -74,6 +74,41 @@ public static class EuroOfficeOsrStreamProcessLab
         return info;
     }
 
+    /// <summary>
+    /// Input has a SEPARATE native CLI and must be explicitly enabled by a
+    /// separately approved Wayland CEF lab build. No production API exists.
+    /// </summary>
+    public static ProcessStartInfo CreateInputStartInfo(EuroOfficeNativeLabHostPolicy host,
+        string stagingDirectory, string fixtureName,
+        Guid sessionId, Guid tabId, bool labApproved)
+    {
+        var info = CreateStartInfo(host, stagingDirectory, fixtureName,
+            sessionId, tabId, labApproved);
+        info.ArgumentList[0] = "--open-staged-wayland-input-lab";
+        info.RedirectStandardInput = true;
+        return info;
+    }
+
+    /// <summary>
+    /// Start the approved interactive CEF lab. The synchronous callback
+    /// registers the bounded input channel with the LAB UI only. It must not
+    /// retain the channel after onInputClosed. Writer has no command ACK.
+    /// </summary>
+    public static Task<int> RunInputLabAsync(EuroOfficeNativeLabHostPolicy host,
+        string stagingDirectory, string fixtureName,
+        Guid sessionId, Guid tabId,
+        Func<EuroOfficeOsrStreamFrame, Task> onFrame,
+        Action<EuroOfficeOsrLabInputChannel> onInputReady,
+        Action onInputClosed, bool labApproved, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(onInputReady);
+        ArgumentNullException.ThrowIfNull(onInputClosed);
+        var info = CreateInputStartInfo(host, stagingDirectory, fixtureName,
+            sessionId, tabId, labApproved);
+        return RunCoreAsync(info, sessionId, tabId,
+            onFrame, onInputReady, onInputClosed, cancellationToken);
+    }
+
     public static async Task<int> RunAsync(EuroOfficeNativeLabHostPolicy host,
         string stagingDirectory, string fixtureName,
         Guid sessionId, Guid tabId,
@@ -83,8 +118,18 @@ public static class EuroOfficeOsrStreamProcessLab
         ArgumentNullException.ThrowIfNull(onFrame);
         var info = CreateStartInfo(host, stagingDirectory, fixtureName,
             sessionId, tabId, labApproved);
+        return await RunCoreAsync(info, sessionId, tabId, onFrame, null, null, cancellationToken);
+    }
+
+    private static async Task<int> RunCoreAsync(ProcessStartInfo info,
+        Guid sessionId, Guid tabId,
+        Func<EuroOfficeOsrStreamFrame, Task> onFrame,
+        Action<EuroOfficeOsrLabInputChannel>? onInputReady,
+        Action? onInputClosed, CancellationToken cancellationToken)
+    {
         using var process = new Process { StartInfo = info };
         bool started = false;
+        EuroOfficeOsrLabInputChannel? input = null;
         try
         {
             using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -92,18 +137,31 @@ public static class EuroOfficeOsrStreamProcessLab
             started = process.Start();
             if (!started)
                 throw new InvalidOperationException("CEF OSR лабораторный процесс не запустился.");
+            if (onInputReady is not null)
+            {
+                if (!info.RedirectStandardInput)
+                    throw new InvalidOperationException("Input lab must use private stdin.");
+                input = new EuroOfficeOsrLabInputChannel(
+                    process.StandardInput, sessionId, tabId, laboratoryApproved: true);
+                onInputReady(input);
+            }
             var receiver = new EuroOfficeOsrStreamReader(sessionId, tabId);
             int received = await receiver.ReadAsync(
                 process.StandardOutput, onFrame, lifetime.Token);
             await process.WaitForExitAsync(lifetime.Token);
             if (process.ExitCode != 0)
                 throw new InvalidDataException("CEF OSR хост завершился с ошибкой.");
-            return received; // Count of LAB previews, never document approval
+            return received; // Number of LAB previews, not document approval
         }
         finally
         {
-            if (started)
-                await StopProcessAsync(process);
+            // Revoke ability to send input BEFORE the native process exits.
+            try { onInputClosed?.Invoke(); }
+            finally
+            {
+                if (input is not null) await input.DisposeAsync();
+                if (started) await StopProcessAsync(process);
+            }
         }
     }
 

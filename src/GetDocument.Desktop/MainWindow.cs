@@ -105,6 +105,14 @@ public sealed class MainWindow : Window
         _tabs.SelectedIndex = 0;
         _tabs.SelectionChanged += (_, _) =>
         {
+            // A hidden native tab must not keep keyboard/browser focus when
+            // the operator switches to LibreOffice, PDF or another tab.
+            foreach (var native in _nativeTabViews)
+            {
+                if (!ReferenceEquals(_tabs.SelectedItem, native.Value) &&
+                    native.Value.Content is NativeOfficeDiagnosticPane pane)
+                    _ = pane.SuspendLabInputAsync();
+            }
             if (_tabs.SelectedItem is TabItem tab && tab.Tag is Guid id)
             {
                 if (_views.ContainsKey(id))
@@ -628,6 +636,31 @@ public sealed class MainWindow : Window
         _status.Text = "Wayland CEF OnPaint — тестовый кадр, документ не подтверждён.";
     }
 
+    internal void AttachNativeOsrLabInput(Guid tabId, Guid sessionId,
+        EuroOfficeOsrLabInputChannel input)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        var current = _nativeWorkspaceTabs.Get(tabId);
+        if (!_nativeOsrLabTabs.Contains(tabId) || current.SessionId != sessionId ||
+            current.Status is EuroOfficeNativeDocumentStatus.Closed or
+                EuroOfficeNativeDocumentStatus.Failed ||
+            !_nativeOsrLabStreams.ContainsKey(tabId))
+            throw new InvalidDataException("Чужой или закрытый CEF input-seance.");
+        if (_nativeTabViews.TryGetValue(tabId, out var tab) &&
+            tab.Content is NativeOfficeDiagnosticPane pane)
+            pane.AttachOsrLabInput(input);
+    }
+
+    internal void DetachNativeOsrLabInput(Guid tabId, Guid sessionId,
+        EuroOfficeOsrLabInputChannel input)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        if (_nativeTabViews.TryGetValue(tabId, out var tab) &&
+            tab.Content is NativeOfficeDiagnosticPane pane &&
+            _nativeWorkspaceTabs.Get(tabId).SessionId == sessionId)
+            pane.DetachOsrLabInput(input);
+    }
+
     internal void ReportNativeOsrLabCompleted(Guid tabId, Guid sessionId, int count)
     {
         Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
@@ -649,7 +682,7 @@ public sealed class MainWindow : Window
         EuroOfficeNativeLabHostPolicy approvedHost,
         string stagingRoot, string syntheticFixture,
         Guid tabId, Guid sessionId, bool labApproved,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool pointerInputLabApproved = false)
     {
         Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
         if (!labApproved)
@@ -658,8 +691,11 @@ public sealed class MainWindow : Window
             _nativeOsrLabTabs.Contains(tabId))
             throw new InvalidOperationException("Идентификатор CEF лабораторной вкладки уже занят.");
         // Preflight all file and process gates BEFORE exposing a tab.
-        _ = EuroOfficeOsrStreamProcessLab.CreateStartInfo(approvedHost,
-            stagingRoot, syntheticFixture, sessionId, tabId, labApproved);
+        _ = pointerInputLabApproved
+            ? EuroOfficeOsrStreamProcessLab.CreateInputStartInfo(approvedHost,
+                stagingRoot, syntheticFixture, sessionId, tabId, labApproved)
+            : EuroOfficeOsrStreamProcessLab.CreateStartInfo(approvedHost,
+                stagingRoot, syntheticFixture, sessionId, tabId, labApproved);
         var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _nativeOsrLabStreams.Add(tabId, lifetime);
         _nativeOsrLabTabs.Add(tabId);
@@ -667,14 +703,39 @@ public sealed class MainWindow : Window
         try
         {
             AddNativeDiagnosticTab(tabId, sessionId, syntheticFixture,
-
                 "EuroOffice CEF — синтетический документ");
             registered = true;
             var sink = new AvaloniaNativeOsrLabFrameSink(this);
-            int received = await EuroOfficeOsrStreamProcessLab.RunAsync(
-                approvedHost, stagingRoot, syntheticFixture, sessionId, tabId,
-                frame => sink.PreviewAsync(tabId, sessionId, frame, lifetime.Token),
-                labApproved, lifetime.Token);
+            EuroOfficeOsrLabInputChannel? attachedChannel = null;
+            int received = pointerInputLabApproved
+                ? await EuroOfficeOsrStreamProcessLab.RunInputLabAsync(
+                    approvedHost, stagingRoot, syntheticFixture, sessionId, tabId,
+                    frame => sink.PreviewAsync(tabId, sessionId, frame, lifetime.Token),
+                    channel =>
+                    {
+                        attachedChannel = channel;
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            if (!_nativeOsrLabStreams.ContainsKey(tabId)) return;
+                            try { AttachNativeOsrLabInput(tabId, sessionId, channel); }
+                            catch (InvalidDataException) { /* stale tab, ignore */ }
+                        });
+                    },
+                    () =>
+                    {
+                        var old = attachedChannel;
+                        if (old is not null)
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                if (_nativeTabViews.ContainsKey(tabId))
+                                    DetachNativeOsrLabInput(tabId, sessionId, old);
+                            });
+                    },
+                    labApproved, lifetime.Token)
+                : await EuroOfficeOsrStreamProcessLab.RunAsync(
+                    approvedHost, stagingRoot, syntheticFixture, sessionId, tabId,
+                    frame => sink.PreviewAsync(tabId, sessionId, frame, lifetime.Token),
+                    labApproved, lifetime.Token);
             await sink.CompletedAsync(tabId, sessionId, received, lifetime.Token);
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)

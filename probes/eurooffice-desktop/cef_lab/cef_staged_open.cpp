@@ -42,6 +42,9 @@
 #include "applicationmanager_events.h"
 #include "qascapplicationmanager.h"
 #include "qcefview.h"
+#ifdef GETDOC_GD31J14_POINTER_INPUT
+#include "osr_input.h"
+#endif
 
 namespace {
 // OnLoaded is a CEF-view event, NOT an Office file loaded/saved acknowledgement.
@@ -378,8 +381,13 @@ int main(int argc, char** argv) {
     // No URL, arbitrary filename, output path, save or print commands.
     const bool osrLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-wayland-osr-lab") == 0;
+    const bool inputLab = argc == 6 &&
+        std::strcmp(argv[1], "--open-staged-wayland-input-lab") == 0;
     const bool streamLab = argc == 6 &&
-        std::strcmp(argv[1], "--open-staged-wayland-stream-lab") == 0;
+        (std::strcmp(argv[1], "--open-staged-wayland-stream-lab") == 0 || inputLab);
+#ifndef GETDOC_GD31J14_POINTER_INPUT
+    if (inputLab) return 2;
+#endif
     const bool ordinaryLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-lab") == 0;
     if (!ordinaryLab && !osrLab && !streamLab) return 2;
@@ -398,6 +406,10 @@ int main(int argc, char** argv) {
     if (streamLab && (!Guid32(streamSession) || !Guid32(streamTab))) return 2;
     BoundedStreamOutput streamOutput;
     if (streamLab && !streamOutput.Enable()) return 10;
+#ifdef GETDOC_GD31J14_POINTER_INPUT
+    OsrInputPump inputPump(streamSession, streamTab);
+    if (inputLab && !inputPump.Enable()) return 10;
+#endif
 #else
     if (streamLab) return 2;
 #endif
@@ -480,6 +492,21 @@ int main(int argc, char** argv) {
     bool pipeHealthy = true;
     QTimer pipeDrainTimer;
     QTimer frameSampleTimer;
+#ifdef GETDOC_GD31J14_POINTER_INPUT
+    QTimer inputPollTimer;
+    bool inputHealthy = true;
+    if (inputLab) {
+        // Poll stdin on the same Qt owner thread, NOT inside CEF OnPaint.
+        // This mode never opens keyboard/IME/clipboard or direct print.
+        QObject::connect(&inputPollTimer, &QTimer::timeout, &app, [&]() {
+            if (!inputPump.Poll(view, editor)) {
+                inputHealthy = false;
+                app.quit();
+            }
+        });
+        inputPollTimer.start(10);
+    }
+#endif
     if (streamLab) {
         QObject::connect(&pipeDrainTimer, &QTimer::timeout, &app, [&]() {
             if (!streamOutput.Drain()) {
@@ -520,6 +547,9 @@ int main(int argc, char** argv) {
         frameSampleTimer.stop();
         pipeDrainTimer.stop();
     }
+#ifdef GETDOC_GD31J14_POINTER_INPUT
+    if (inputLab) inputPollTimer.stop();
+#endif
 #endif
 #endif
     // Snapshot BEFORE any CEF/Qt destroy callback can invalidate the widget.
@@ -540,6 +570,9 @@ int main(int argc, char** argv) {
         // No legacy stdout diagnostic markers in this IPC mode. The reader
         // expects exactly bounded frame JSONL messages followed by one end.
         if (!pipeHealthy || !streamOutput.FlushFor(1500)) return 11;
+#ifdef GETDOC_GD31J14_POINTER_INPUT
+        if (inputLab && !inputHealthy) return 13;
+#endif
         const QJsonObject ending{
             {"command", "end"},
             {"framesProduced", framesProduced},
