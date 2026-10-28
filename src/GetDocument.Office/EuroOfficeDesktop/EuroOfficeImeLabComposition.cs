@@ -68,10 +68,10 @@ public sealed class EuroOfficeImeLabComposition : IDisposable
         ArgumentNullException.ThrowIfNull(channel);
         if (!_composing || _preedit.Length == 0)
             throw new InvalidOperationException("Нет подтверждённого IME preedit для отправки.");
-        if (channel.SessionId != _sessionId || channel.TabId != _tabId)
-            throw new InvalidDataException("IME preedit относится к другому CEF сеансу.");
         try
         {
+            if (channel.SessionId != _sessionId || channel.TabId != _tabId)
+                throw new InvalidDataException("IME preedit относится к другому CEF сеансу.");
             await channel.SendImeCommittedTextAsync(new string(_preedit), cancellationToken);
         }
         finally
