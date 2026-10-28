@@ -135,8 +135,13 @@ public static class EuroOfficeDesktopProbeProtocol
         return JsonSerializer.Serialize(new { command = "open-local", source = file });
     }
 
-    public static string CreateSaveRequest(string stagedRoot, string source, string destination)
+    public static string CreateSaveRequest(string stagedRoot, string source, string destination,
+        bool wormOriginal = true)
     {
+        // Fail closed: the host cannot prove WORM provenance from a file path.
+        // The trusted caller must explicitly attest this is an editable work copy.
+        if (wormOriginal)
+            throw new InvalidOperationException("Нельзя создавать новую редакцию WORM-оригинала.");
         string original = CheckStagedDocument(stagedRoot, source, mustExist: true);
         string revision = CheckStagedDocument(stagedRoot, destination, mustExist: false);
         if (string.Equals(original, revision,
@@ -196,6 +201,12 @@ public static class EuroOfficeDesktopProbeProtocol
 
         string basePath = Path.GetFullPath(root);
         string path = Path.GetFullPath(candidate);
+        // This PoC must not handle UNC/network shares or SMB paths. Trusted
+        // GUP-2/GET-system keeps the WORM original and supplies a local copy.
+        if (OperatingSystem.IsWindows() &&
+            (basePath.StartsWith(@"\\", StringComparison.Ordinal) ||
+             path.StartsWith(@"\\", StringComparison.Ordinal)))
+            throw new ArgumentException("Сетевые пути не допускаются в пробном редакторе.");
         string relative = Path.GetRelativePath(basePath, path);
         if (relative == "." || Path.IsPathRooted(relative) ||
             relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar,
@@ -211,9 +222,16 @@ public static class EuroOfficeDesktopProbeProtocol
             throw new DirectoryNotFoundException("Каталог тестового документа отсутствует.");
         // Path canonicalization does not resolve filesystem links. Conservatively
         // reject reparse-point components to prevent escape outside the lab root.
-        string next = basePath;
-        if ((File.GetAttributes(next) & FileAttributes.ReparsePoint) != 0)
-            throw new ArgumentException("Символические ссылки для тестового каталога запрещены.");
+        // Check all ancestor directories, not just the final staging root:
+        // otherwise a symlink in /mnt/alias/stage could escape the sandbox.
+        string next = Path.GetPathRoot(basePath)!;
+        foreach (string component in basePath[next.Length..]
+                     .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            next = Path.Combine(next, component);
+            if ((File.GetAttributes(next) & FileAttributes.ReparsePoint) != 0)
+                throw new ArgumentException("Символические ссылки для тестового каталога запрещены.");
+        }
         foreach (string part in relative.Split(Path.DirectorySeparatorChar)[..^1])
         {
             next = Path.Combine(next, part);
