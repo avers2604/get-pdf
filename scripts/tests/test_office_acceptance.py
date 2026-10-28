@@ -33,6 +33,16 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_native_ipc_contract_is_checked_without_starting_cef(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("native-ipc-contract-tests", names)
+        self.assertLess(names.index("native-ipc-contract-tests"),
+                        names.index("solution-restore"))
+        check = next(step for step in steps if step.name == "native-ipc-contract-tests")
+        self.assertIn("test_native_ipc_contract.py", check.command)
+        self.assertNotIn("--open-staged-lab", check.command)
+
     def test_native_sdk_event_contract_will_be_checked_in_local_acceptance(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [item.name for item in steps]
