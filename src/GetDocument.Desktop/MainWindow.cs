@@ -606,7 +606,23 @@ public sealed class MainWindow : Window
                 _status.Text = "Восстановление не должно перезаписывать исходный файл. Выберите другое имя.";
                 return;
             }
-            await Task.Run(() => File.Copy(recoveredPath, target, overwrite: true));
+            if (!string.Equals(Path.GetExtension(target), extension, StringComparison.OrdinalIgnoreCase))
+            {
+                _status.Text = "Для восстановленной копии необходимо сохранить исходное расширение " + extension;
+                return;
+            }
+            // Stage in the destination directory, so a failed copy never truncates an existing file.
+            string staging = Path.Combine(Path.GetDirectoryName(target)!,
+                ".getdoc-restore-" + Guid.NewGuid().ToString("N") + extension);
+            try
+            {
+                await Task.Run(() => File.Copy(recoveredPath, staging));
+                File.Move(staging, target, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(staging)) File.Delete(staging);
+            }
             await OpenSavedCopyAsync(target);
             _status.Text = "Восстановленная копия открыта в отдельной вкладке. Исходный файл сохранён без изменений.";
         }
