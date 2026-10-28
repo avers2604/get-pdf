@@ -149,9 +149,10 @@ public static class CorporateTemplateService
                     if (line.Length > 0)
                     {
                         var runStyle = new RunProperties(
-                            new RunFonts { Ascii = "Arial", HighAnsi = "Arial", ComplexScript = "Arial" },
-                            new FontSize { Val = title ? "26" : "22" });
+                            new RunFonts { Ascii = "Arial", HighAnsi = "Arial", ComplexScript = "Arial" });
                         if (title) runStyle.Append(new Bold());
+                        // WordprocessingML requires w:b before w:sz in run properties.
+                        runStyle.Append(new FontSize { Val = title ? "26" : "22" });
                         paragraph.Append(new Run(
                             runStyle,
                             new Text(line) { Space = SpaceProcessingModeValues.Preserve }));
