@@ -57,7 +57,7 @@ class ImeFinalCommitContractTests(unittest.TestCase):
             self.assertIn(must, self.composition)
         for must in ('_imeComposition?.Dispose()', '_imeComposition?.Cancel()',
                      'internal void BeginImeLabComposition()',
-                     'internal Task CommitImeLabCompositionAsync(',
+                     'internal async Task CommitImeLabCompositionAsync(',
                      'e.Text is not { Length: 1 }'):
             self.assertIn(must, self.pane)
 
