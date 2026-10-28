@@ -110,7 +110,7 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
             TextWrapping = TextWrapping.Wrap
         });
 
-        _stage.Children.Add(Labeled("Локальный принтер", _printer, 620));
+        _stage.Children.Add(Labeled("Локальный принтер", _printer, 450));
         var refresh = new Button { Content = "Обновить список принтеров" };
         StyleButton(refresh);
         refresh.Click += async (_, _) => await LoadPrintersAsync();
@@ -216,9 +216,9 @@ internal sealed class PrintWizardPane : UserControl, IDisposable
         return result;
     }
 
-    private static StackPanel FieldRow(params Control[] fields)
+    private static WrapPanel FieldRow(params Control[] fields)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        var row = new WrapPanel { Orientation = Orientation.Horizontal };
         foreach (Control field in fields) row.Children.Add(field);
         return row;
     }
