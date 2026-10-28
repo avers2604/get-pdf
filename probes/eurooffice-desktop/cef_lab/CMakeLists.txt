@@ -138,6 +138,7 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
           GETDOC_GD31J13_OSR_STREAM_LAB=1)
       message(WARNING "GD-31J.13: 8-frame CEF preview stream, synthetic files only. Requires offline VM/sandbox approval.")
       if(GETDOC_GD31J14_ENABLE_INPUT_LAB)
+        target_sources(getdoc-eurooffice-cef-staged-open-lab PRIVATE osr_input.cpp)
         target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
             GETDOC_GD31J14_POINTER_INPUT=1)
         message(WARNING "GD-31J.14: only pointer/wheel/focus; no clicks/keys/IME/clipboard; isolated synthetic Wayland lab.")
