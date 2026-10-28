@@ -119,6 +119,29 @@ public sealed class ImageExportScratchTests
     }
 
     [TestMethod]
+    public void SymlinkStageCannotRemoveAnExternalUserImage()
+    {
+        using var fixture = new Fixture();
+        string orphan = fixture.MakeAbandonedScratch(".jpg");
+        string outside = Path.Combine(fixture.Path, "important.jpg");
+        File.WriteAllText(outside, "customer-owned");
+        string staged = Path.Combine(orphan, "stage.jpg");
+        File.Delete(staged);
+        try { File.CreateSymbolicLink(staged, outside); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                                   PlatformNotSupportedException)
+        {
+            Assert.Inconclusive("Symbolic links are unavailable on this workstation.");
+            return;
+        }
+
+        ImageExportScratch.CleanupAbandoned(fixture.Path, TimeSpan.FromHours(24));
+
+        Assert.AreEqual("customer-owned", File.ReadAllText(outside));
+        Assert.IsTrue(Directory.Exists(orphan));
+    }
+
+    [TestMethod]
     public void ForeignFilesInsideOwnedScratchBlockCleanup()
     {
         using var fixture = new Fixture();
