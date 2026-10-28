@@ -91,22 +91,24 @@ public sealed class EuroOfficeDesktopProbeTests
             string source = Path.Combine(directory, "Акт.docx");
             File.WriteAllText(source, "test-fixture-only");
             string destination = Path.Combine(directory, "Акт-редакция.docx");
-            var accepted = EuroOfficeDesktopProbeProtocol.CreateSaveRequest(directory, source, destination);
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+                EuroOfficeDesktopProbeProtocol.CreateSaveRequest(directory, source, destination));
+            var accepted = EuroOfficeDesktopProbeProtocol.CreateSaveRequest(directory, source, destination, wormOriginal: false);
             using var message = JsonDocument.Parse(accepted);
             Assert.AreEqual("save-as-new-revision", message.RootElement.GetProperty("command").GetString());
             Assert.AreEqual(Path.GetFullPath(destination),
                 message.RootElement.GetProperty("destination").GetString());
             File.WriteAllText(destination, "do not overwrite");
             Assert.ThrowsExactly<IOException>(() =>
-                EuroOfficeDesktopProbeProtocol.CreateSaveRequest(directory, source, destination));
+                EuroOfficeDesktopProbeProtocol.CreateSaveRequest(directory, source, destination, wormOriginal: false));
             Assert.AreEqual("do not overwrite", File.ReadAllText(destination));
 
             Assert.ThrowsExactly<ArgumentException>(() =>
                 EuroOfficeDesktopProbeProtocol.CreateSaveRequest(
-                    directory, source, Path.Combine(directory, "..", "escape.docx")));
+                    directory, source, Path.Combine(directory, "..", "escape.docx"), wormOriginal: false));
             Assert.ThrowsExactly<ArgumentException>(() =>
                 EuroOfficeDesktopProbeProtocol.CreateSaveRequest(directory, source,
-                    Path.Combine(directory, "Акт-редакция.xlsm")));
+                    Path.Combine(directory, "Акт-редакция.xlsm"), wormOriginal: false));
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
