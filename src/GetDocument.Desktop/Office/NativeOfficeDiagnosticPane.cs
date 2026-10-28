@@ -157,11 +157,25 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             "Клики, клавиатура, IME и буфер обмена заблокированы.";
     }
 
-    public void DetachOsrLabInput()
+    public void DetachOsrLabInput(EuroOfficeOsrLabInputChannel? expectedChannel = null)
     {
+        if (expectedChannel is not null && !ReferenceEquals(_labInput, expectedChannel))
+            return; // late callback from an older laboratory generation
         _labFocused = false;
         _labInput = null;
         _lastMoveTimestamp = 0;
+    }
+
+    /// <summary>
+    /// On tab-switch, revoke browser focus even if PointerExited was not
+    /// delivered by Avalonia's layout/visibility transition.
+    /// </summary>
+    public async Task SuspendLabInputAsync()
+    {
+        if (!_labFocused || _labInput is not { } input) return;
+        _labFocused = false;
+        try { await input.SendFocusAsync(false, CancellationToken.None); }
+        catch (Exception ex) { FailLabInput(ex); }
     }
 
     private async void OnLabPointerPressed(object? sender, PointerPressedEventArgs e)
