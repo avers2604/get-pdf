@@ -150,6 +150,16 @@ public sealed class OfficeFeatureCatalogTests
         string python = reader.ReadToEnd();
         foreach (var item in OfficeFeatureCatalog.All)
             StringAssert.Contains(python, "\"" + item.Id + "\":");
+
+        // Fail in BOTH directions: an unnoticed Python-only feature would be callable
+        // by a direct bridge request despite not being registered in the GET catalog.
+        var bridgeIds = System.Text.RegularExpressions.Regex.Matches(
+                python, @"(?m)^[ ]{4}""([^""]+)"": \(""[^""]+"", (?:True|False)\),?$")
+            .Cast<System.Text.RegularExpressions.Match>()
+            .Select(match => match.Groups[1].Value)
+            .ToArray();
+        CollectionAssert.AreEquivalent(OfficeFeatureCatalog.All.Select(x => x.Id).ToArray(),
+            bridgeIds, "C# and Python capability whitelists must match exactly.");
     }
 
     [TestMethod]
