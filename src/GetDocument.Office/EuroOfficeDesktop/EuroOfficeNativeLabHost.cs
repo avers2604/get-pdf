@@ -114,9 +114,11 @@ public sealed class EuroOfficeNativeLabHostSession : IAsyncDisposable
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
         var process = new Process { StartInfo = policy.CreateStartInfo(headless) };
+        bool started = false;
         try
         {
-            if (!process.Start())
+            started = process.Start();
+            if (!started)
                 throw new InvalidOperationException("Нативный Qt стенд не запустился.");
 
             EuroOfficeDesktopProbeCapabilities capabilities =
@@ -138,7 +140,7 @@ public sealed class EuroOfficeNativeLabHostSession : IAsyncDisposable
         }
         catch
         {
-            if (!process.HasExited)
+            if (started && !process.HasExited)
             {
                 try { process.Kill(entireProcessTree: true); }
                 catch (InvalidOperationException) { }
