@@ -245,6 +245,13 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
                     ("Только целые числа ≥ 0", "feature:calc-validate-whole-nonnegative"),
                     ("Только числа ≥ 0", "feature:calc-validate-decimal-nonnegative"),
                     ("Снять ограничения", "feature:calc-validate-clear"))));
+            Add(Separator());
+            Add(EditFeature(TextButton("Сводная", Icons.Table,
+                    "Сводная на отдельном листе: выделите два столбца (категория и сумма), включая заголовки",
+                    () => RunFeature("calc-pivot-sum"))),
+                EditFeature(TextButton("Список…", Icons.ListBullets,
+                    "Создать выпадающий список для выделенных ячеек",
+                    () => _ = EditChoiceListAsync())));
             return;
         }
 
@@ -506,6 +513,78 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             await document.ExecuteFeatureAsync(featureId);
             _status("Готово: " + feature.Title);
         });
+    }
+
+    private async Task EditChoiceListAsync()
+    {
+        if (_document is not { Kind: "calc", ReadOnly: false } document) return;
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
+
+        var input = new TextBox
+        {
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinHeight = 155,
+            MaxLength = 1000,
+            Watermark = "Например: В работе / Завершено / На проверке",
+            Text = "В работе\nЗавершено\nНа проверке"
+        };
+        var error = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Brushes.Firebrick
+        };
+        var confirm = new Button { Content = "Применить", MinHeight = 38, MinWidth = 110 };
+        confirm.Classes.Add("primary");
+        var cancel = new Button { Content = "Отмена", MinHeight = 38, MinWidth = 90 };
+        cancel.Classes.Add("ghost");
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+        actions.Children.Add(confirm);
+        actions.Children.Add(cancel);
+        var layout = new StackPanel { Margin = new Thickness(22), Spacing = 12 };
+        layout.Children.Add(new TextBlock { Text = "Список значений", Classes = { "title" } });
+        layout.Children.Add(new TextBlock
+        {
+            Text = "Каждый вариант — с новой строки. От 2 до 20 значений, максимум 40 символов в пункте. " +
+                   "Список будет применён к выделенным ячейкам вместо их прежнего правила проверки.",
+            TextWrapping = TextWrapping.Wrap
+        });
+        layout.Children.Add(input);
+        layout.Children.Add(error);
+        layout.Children.Add(actions);
+        var dialog = new Window
+        {
+            Title = "ГЭТ Документ — выпадающий список",
+            Width = 530,
+            Height = 390,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brushes.White,
+            Content = layout
+        };
+        confirm.Click += (_, _) =>
+        {
+            try
+            {
+                string[] items = OfficeChoiceList.ParseLines(input.Text ?? "");
+                dialog.Close(items);
+            }
+            catch (ArgumentException ex) { error.Text = ex.Message; }
+        };
+        cancel.Click += (_, _) => dialog.Close(null);
+        string[]? choices = await dialog.ShowDialog<string[]?>(owner);
+        if (choices is null || _disposed || _document != document) return;
+
+        try
+        {
+            await document.ExecuteFeatureAsync("calc-validate-choice-list", choices);
+            _status("Выпадающий список добавлен к выделению. Исходные значения ячеек не изменены.");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or
+                                   UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            _status("Не удалось создать выпадающий список: " + ex.Message);
+        }
     }
 
     private void Dispatch(string command, Dictionary<string, object>? arguments = null)
