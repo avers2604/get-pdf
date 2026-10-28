@@ -155,6 +155,26 @@ public static class EuroOfficeDesktopProbeProtocol
         });
     }
 
+    /// <summary>
+    /// Produces a request to render a temporary PDF. Actual PDF bytes and
+    /// printing remain with a separately attested host and the GET print wizard.
+    /// No direct printer API or automatic print dispatch is exposed.
+    /// </summary>
+    public static string CreateExportPdfRequest(string stagedRoot, string source, string destination)
+    {
+        string original = CheckStagedDocument(stagedRoot, source, mustExist: true);
+        string target = CheckStagedDocument(stagedRoot, destination,
+            mustExist: false, acceptPdfDestination: true);
+        if (!Path.GetExtension(target).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Результат пробного экспорта должен иметь формат PDF.");
+        return JsonSerializer.Serialize(new
+        {
+            command = "export-pdf",
+            source = original,
+            destination = target
+        });
+    }
+
     public static string CreateResizeRequest(int width, int height, double scale)
     {
         if (width is < 1 or > 16384 || height is < 1 or > 16384 ||
@@ -164,7 +184,8 @@ public static class EuroOfficeDesktopProbeProtocol
         return JsonSerializer.Serialize(new { command = "resize", width, height, scale });
     }
 
-    private static string CheckStagedDocument(string root, string candidate, bool mustExist)
+    private static string CheckStagedDocument(string root, string candidate,
+        bool mustExist, bool acceptPdfDestination = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
         ArgumentException.ThrowIfNullOrWhiteSpace(candidate);
@@ -182,8 +203,9 @@ public static class EuroOfficeDesktopProbeProtocol
             throw new ArgumentException("Файл должен располагаться внутри изолированного каталога.");
 
         string extension = Path.GetExtension(path).ToLowerInvariant();
-        if (extension is not (".docx" or ".xlsx" or ".pptx"))
-            throw new NotSupportedException("Пробный хост принимает только DOCX/XLSX/PPTX без макросов.");
+        if (extension is not (".docx" or ".xlsx" or ".pptx") &&
+            !(acceptPdfDestination && !mustExist && extension == ".pdf"))
+            throw new NotSupportedException("Пробный хост принимает только DOCX/XLSX/PPTX, а для экспорта — PDF.");
 
         if (!Directory.Exists(basePath) || !Directory.Exists(Path.GetDirectoryName(path)))
             throw new DirectoryNotFoundException("Каталог тестового документа отсутствует.");
