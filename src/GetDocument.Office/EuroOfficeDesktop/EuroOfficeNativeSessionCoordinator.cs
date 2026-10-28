@@ -67,7 +67,12 @@ public sealed class EuroOfficeNativeSessionCoordinator : IAsyncDisposable
         if (tabId == Guid.Empty || sessionId == Guid.Empty ||
             string.IsNullOrWhiteSpace(documentId) || string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Некорректные ID и заголовок диагностического сеанса.");
-        await _gate.WaitAsync(cancellationToken);
+        try { await _gate.WaitAsync(cancellationToken); }
+        catch
+        {
+            await transport.DisposeAsync();
+            throw;
+        }
         bool opened = false;
         try
         {
@@ -200,7 +205,8 @@ public sealed class EuroOfficeNativeSessionCoordinator : IAsyncDisposable
         if (entry.Faulted) return;
         entry.Faulted = true;
         entry.StopMonitoring.Cancel();
-        await DisposeTransportAsync(entry);
+        try { await DisposeTransportAsync(entry); }
+        catch { /* a failed OS cleanup must not suppress the visible host-loss state */ }
         try { await _view.HostLostAsync(tabId, entry.SessionId, CancellationToken.None); }
         catch { /* retain Failed, never interpret failed notification as recovery */ }
     }
