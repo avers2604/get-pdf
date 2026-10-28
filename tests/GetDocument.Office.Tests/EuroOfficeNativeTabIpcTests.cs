@@ -148,6 +148,46 @@ public sealed class EuroOfficeNativeTabIpcTests
     }
 
     [TestMethod]
+    public void PinnedLocalHostCanOnlyLaunchIpcProbeWithNoShell()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "gd31j8-host-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string executable = Path.Combine(root, OperatingSystem.IsWindows() ? "qt-probe.exe" : "qt-probe");
+            File.WriteAllBytes(executable, [0x47, 0x45, 0x54, 0x38]);
+            string hash = Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(executable)));
+            var policy = new EuroOfficeNativeLabHostPolicy(root, executable, hash);
+            var info = policy.CreateIpcStartInfo();
+            Assert.IsFalse(info.UseShellExecute);
+            Assert.IsTrue(info.RedirectStandardInput);
+            Assert.IsTrue(info.RedirectStandardOutput);
+            CollectionAssert.AreEqual(new[] { "--ipc-probe" }, info.ArgumentList.ToArray());
+            Assert.AreEqual(Path.GetFullPath(executable), info.FileName);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
+    [Timeout(45_000, CooperativeCancellation = true)]
+    public async Task OptionalPinnedNativeProcessIpcRoundtrip()
+    {
+        string? binary = Environment.GetEnvironmentVariable("GD31J8_QT_IPC_BINARY");
+        string? sha = Environment.GetEnvironmentVariable("GD31J8_QT_IPC_SHA256");
+        if (string.IsNullOrWhiteSpace(binary) || string.IsNullOrWhiteSpace(sha))
+            Assert.Inconclusive("Требуется локально собранный и заранее разрешённый Qt IPC host.");
+        var policy = new EuroOfficeNativeLabHostPolicy(
+            Path.GetDirectoryName(Path.GetFullPath(binary!))!, binary!, sha!);
+        await using var host = await EuroOfficeNativeIpcProcessSession.StartAsync(
+            policy, Session, Tab, labApproved: true, CancellationToken.None);
+        await host.AttachAsync(CancellationToken.None);
+        await host.ResizeAsync(1100, 700, 1.0, CancellationToken.None);
+        await host.CloseAsync(CancellationToken.None);
+        Assert.AreEqual(EuroOfficeNativeTabIpcState.Closed, host.State);
+    }
+
+    [TestMethod]
     public void RejectsMissingSessionOrTab()
     {
         using var input = new StringReader("");
