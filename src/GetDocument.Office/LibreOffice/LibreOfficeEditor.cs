@@ -322,6 +322,13 @@ public sealed class EditorDocument
     public Task DispatchAsync(string command, IReadOnlyDictionary<string, object>? arguments = null, bool focus = true) =>
         _editor.CallAsync(new { op = "dispatch", id = Id, cmd = command, args = arguments, focus }, CancellationToken.None);
 
+    /// <summary>Runs one of the explicit GET Office capabilities, never an arbitrary UNO operation.</summary>
+    public Task ExecuteFeatureAsync(string featureId)
+    {
+        OfficeFeatureCatalog.Require(Kind, featureId, ReadOnly);
+        return _editor.CallAsync(new { op = "feature", id = Id, feature = featureId }, CancellationToken.None);
+    }
+
     public async Task SaveAsync()
     {
         var reply = await _editor.CallAsync(new { op = "save", id = Id }, CancellationToken.None);

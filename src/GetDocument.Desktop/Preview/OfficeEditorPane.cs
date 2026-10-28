@@ -34,6 +34,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     private readonly WrapPanel _tools = new() { ItemSpacing = 4, LineSpacing = 6, VerticalAlignment = VerticalAlignment.Center };
     private readonly Dictionary<string, Button> _toggles = new(StringComparer.Ordinal);
     private readonly List<Control> _documentControls = [];
+    private readonly List<Control> _editFeatureControls = [];
     private readonly Button _save;
     private readonly Button _undo;
     private readonly Button _redo;
@@ -222,6 +223,13 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
                 IconButton(Icons.Trash, "Удалить строки выделения", () => Dispatch(".uno:DeleteRows")),
                 IconButton(Icons.SortAsc, "Сортировать по возрастанию", () => Dispatch(".uno:SortAscending")),
                 Toggle(".uno:DataFilterAutoFilter", Icons.Filter, "Фильтр"));
+            Add(Separator());
+            Add(MenuButton("Закрепление", Icons.Table, "Закрепление строк и столбцов",
+                    ("Верхняя строка", "feature:calc-freeze-top-row"),
+                    ("Первый столбец", "feature:calc-freeze-first-column"),
+                    ("Снять закрепление", "feature:calc-unfreeze")),
+                EditFeature(TextButton("Пересчитать", Icons.Refresh, "Пересчитать все формулы",
+                    () => RunFeature("calc-recalculate"))));
             return;
         }
 
@@ -241,10 +249,15 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
                     ("Другой размер…", ".uno:InsertTable")),
                 IconButton(Icons.Image, "Вставить изображение", () => _ = InsertImageAsync()),
                 IconButton(Icons.PageBreak, "Разрыв страницы (Ctrl+Enter)", () => Dispatch(".uno:InsertPagebreak")));
+            Add(EditFeature(MenuButton("Оглавление", Icons.ListNumbers, "Оглавление по стилям заголовков",
+                ("Вставить оглавление", "feature:writer-toc-insert"),
+                ("Обновить оглавления", "feature:writer-toc-update"))));
             return;
         }
         Add(Separator());
         Add(TextButton("Слайд", Icons.SlideAdd, "Новый слайд", () => Dispatch(".uno:InsertPage")),
+            EditFeature(TextButton("Копия слайда", Icons.Files, "Дублировать текущий слайд",
+                () => RunFeature("impress-duplicate-slide"))),
             IconButton(Icons.Trash, "Удалить слайд", () => Dispatch(".uno:DeletePage")),
             IconButton(Icons.Image, "Вставить изображение", () => _ = InsertImageAsync()),
             TextButton("Показ", Icons.Play, "Показ слайдов (F5)", () => Dispatch(".uno:Presentation")));
@@ -257,6 +270,12 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             _tools.Children.Add(control);
             if (control is not Border) _documentControls.Add(control);
         }
+    }
+
+    private T EditFeature<T>(T control) where T : Control
+    {
+        _editFeatureControls.Add(control);
+        return control;
     }
 
     private T Track<T>(T control) where T : Control
@@ -334,6 +353,11 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
 
     private void RunMenuCommand(string command)
     {
+        if (command.StartsWith("feature:", StringComparison.Ordinal))
+        {
+            RunFeature(command["feature:".Length..]);
+            return;
+        }
         if (command.StartsWith("table:", StringComparison.Ordinal))
         {
             var size = command.Split(':');
@@ -354,6 +378,8 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     private void SetEnabled(bool enabled)
     {
         foreach (var control in _documentControls.Append(_save).Append(_undo).Append(_redo)) control.IsEnabled = enabled;
+        foreach (var control in _editFeatureControls)
+            control.IsEnabled = enabled && _document?.ReadOnly != true;
     }
 
     // --- LibreOffice state ------------------------------------------------------------------------
@@ -450,6 +476,23 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
 
     // --- commands ---------------------------------------------------------------------------------
 
+    private void RunFeature(string featureId)
+    {
+        if (_document is not { } document) return;
+        OfficeFeatureDefinition feature;
+        try { feature = OfficeFeatureCatalog.Require(document.Kind, featureId, document.ReadOnly); }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
+        {
+            _status(ex.Message);
+            return;
+        }
+        _ = Run(async () =>
+        {
+            await document.ExecuteFeatureAsync(featureId);
+            _status("Готово: " + feature.Title);
+        });
+    }
+
     private void Dispatch(string command, Dictionary<string, object>? arguments = null)
     {
         if (_document is not { } document) return;
@@ -459,7 +502,8 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     private async Task Run(Func<Task> action)
     {
         try { await action(); }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or
+                                   UnauthorizedAccessException or NotSupportedException)
         {
             _status(ex.Message);
         }

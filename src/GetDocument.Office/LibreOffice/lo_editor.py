@@ -37,6 +37,18 @@ STATE = {
     "impress": COMMON_STATE + [".uno:LeftPara", ".uno:CenterPara", ".uno:RightPara",
                                ".uno:DefaultBullet", ".uno:DefaultNumbering"],
 }
+# Features are intentionally closed over this whitelist: a GET toolbar action cannot execute
+# arbitrary UNO URLs, access files, or open hidden LibreOffice dialogs.
+FEATURES = {
+    "writer-toc-insert": ("writer", True),
+    "writer-toc-update": ("writer", True),
+    "calc-freeze-top-row": ("calc", False),
+    "calc-freeze-first-column": ("calc", False),
+    "calc-unfreeze": ("calc", False),
+    "calc-recalculate": ("calc", True),
+    "impress-duplicate-slide": ("impress", True),
+}
+
 # Keyboard shortcuts that would open LibreOffice's own dialogs are handed to GET Document instead.
 INTERCEPTED = {".uno:Save", ".uno:SaveAs", ".uno:SaveAll", ".uno:Print", ".uno:PrintDefault",
                ".uno:PrintPreview", ".uno:ExportToPDF", ".uno:ExportDirectToPDF", ".uno:CloseDoc",
@@ -410,6 +422,60 @@ class Bridge:
         if request.get("focus", True):
             entry.frame.getComponentWindow().setFocus()
         return {}
+
+    def op_feature(self, request):
+        entry = self.document(request)
+        feature = request.get("feature")
+        permission = FEATURES.get(feature)
+        if permission is None or permission[0] != entry.kind:
+            raise RuntimeError("команда недоступна для этого редактора")
+        if permission[1] and entry.doc.isReadonly():
+            raise RuntimeError("документ открыт только для чтения")
+
+        doc = entry.doc
+        if feature == "writer-toc-insert":
+            cursor = doc.getCurrentController().getViewCursor()
+            toc = doc.createInstance("com.sun.star.text.ContentIndex")
+            if toc is None:
+                raise RuntimeError("движок не поддерживает оглавление")
+            toc.CreateFromOutline = True
+            toc.Level = 10
+            cursor.getText().insertTextContent(cursor, toc, False)
+            toc.update()
+            return {"count": doc.getDocumentIndexes().getCount()}
+
+        if feature == "writer-toc-update":
+            indexes = doc.getDocumentIndexes()
+            for position in range(indexes.getCount()):
+                indexes.getByIndex(position).update()
+            return {"count": indexes.getCount()}
+
+        if feature in ("calc-freeze-top-row", "calc-freeze-first-column", "calc-unfreeze"):
+            positions = {
+                "calc-freeze-top-row": (0, 1),
+                "calc-freeze-first-column": (1, 0),
+                "calc-unfreeze": (0, 0),
+            }
+            controller = doc.getCurrentController()
+            if not hasattr(controller, "freezeAtPosition"):
+                raise RuntimeError("движок не поддерживает закрепление строк и столбцов")
+            controller.freezeAtPosition(*positions[feature])
+            return {"frozen": bool(controller.hasFrozenPanes())}
+
+        if feature == "calc-recalculate":
+            doc.calculateAll()
+            return {}
+
+        if feature == "impress-duplicate-slide":
+            controller = doc.getCurrentController()
+            source = controller.getCurrentPage()
+            if source is None or not hasattr(doc, "duplicate"):
+                raise RuntimeError("движок не поддерживает дублирование слайда")
+            duplicate = doc.duplicate(source)
+            controller.setCurrentPage(duplicate)
+            return {"count": doc.getDrawPages().getCount()}
+
+        raise RuntimeError("неизвестная команда")
 
     def op_save(self, request):
         entry = self.document(request)
