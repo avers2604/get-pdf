@@ -167,6 +167,10 @@ int main(int argc, char** argv) {
         return RunDisplayProbe(argc, argv, false);
     if (mode == "--display-live")
         return RunDisplayProbe(argc, argv, true);
+    if (mode == "--ipc-probe") {
+        QCoreApplication application(argc, argv);
+        return RunIpcProbe();
+    }
     if (mode != "--gui-probe") return 2;
 
     // GUI is an OS-level Qt window only; intentionally DOES NOT initialize
