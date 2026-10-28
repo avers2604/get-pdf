@@ -87,6 +87,15 @@ class SourceChecksTests(unittest.TestCase):
                 '{"test":{"runner":"Microsoft.Testing.Platform"}}', encoding="utf-8")
             acceptance.check_test_runner(root)
 
+    def test_report_evidence_is_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "existing-report.json"
+            path.write_text('{"original":"approved-evidence"}', encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                acceptance.write_report(path, acceptance.new_report("abc", "Windows", "GD-31I"))
+            self.assertEqual('{"original":"approved-evidence"}',
+                             path.read_text(encoding="utf-8"))
+
     def test_json_report_is_atomic_and_has_no_release_approval(self):
         with tempfile.TemporaryDirectory() as temp:
             report = acceptance.new_report("012345", "Linux", "GD-31I")
