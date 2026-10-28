@@ -653,7 +653,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             finally { _persistence.Release(); }
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or
-                                   UnauthorizedAccessException or InvalidDataException)
+                                   UnauthorizedAccessException or InvalidDataException or NotSupportedException)
         {
             if (!_disposed) _status("Не удалось создать аварийную копию: " + ex.Message);
         }
