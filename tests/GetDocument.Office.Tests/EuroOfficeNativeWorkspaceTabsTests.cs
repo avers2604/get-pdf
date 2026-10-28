@@ -81,6 +81,23 @@ public sealed class EuroOfficeNativeWorkspaceTabsTests
     }
 
     [TestMethod]
+    public void ModifiedNativeSessionMustNotBeSilentlyRestartedAfterCrash()
+    {
+        var tabs = new EuroOfficeNativeWorkspaceTabs();
+        Guid id = Guid.NewGuid(), oldSession = Guid.NewGuid();
+        tabs.Register(id, oldSession, "synthetic", "Тест");
+        tabs.ApplyReceipt(id, oldSession, new EuroOfficeNativeReceipt(
+            ViewLoaded: true, ModifiedNotificationObserved: true,
+            SaveNotificationObserved: false, SaveCancelled: false,
+            PrintNotificationObserved: false));
+        tabs.HostCrashed(id, oldSession);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            tabs.Restart(id, oldSession, Guid.NewGuid()));
+        Assert.AreEqual(EuroOfficeNativeDocumentStatus.Failed, tabs.Get(id).Status);
+        Assert.IsTrue(tabs.Get(id).ModifiedObserved);
+    }
+
+    [TestMethod]
     public void ClosingFailedTabIsAllowedButCannotAffectOtherTabs()
     {
         var tabs = new EuroOfficeNativeWorkspaceTabs();
