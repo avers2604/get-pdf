@@ -98,6 +98,12 @@ int RunDisplayProbe(int argc, char** argv, bool manual) {
     window.show();
 
     int screenChanges = 0;
+    int dpiChanges = 0;
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (!screen) continue;
+        QObject::connect(screen, &QScreen::logicalDotsPerInchChanged,
+                         &application, [&dpiChanges](qreal) { ++dpiChanges; });
+    }
     if (QWindow* handle = window.windowHandle()) {
         QObject::connect(handle, &QWindow::screenChanged, &application,
                          [&screenChanges](QScreen*) { ++screenChanges; });
@@ -125,6 +131,7 @@ int RunDisplayProbe(int argc, char** argv, bool manual) {
         events["move"] = counters.move;
         events["focus"] = counters.focus;
         events["screenChanged"] = screenChanges;
+        events["dpiChanged"] = dpiChanges;
 
         QJsonObject report;
         report["protocol"] = "getdoc-qt-display-diagnostics/1";
