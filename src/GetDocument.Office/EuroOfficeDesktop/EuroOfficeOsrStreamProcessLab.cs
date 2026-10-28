@@ -118,6 +118,20 @@ public static class EuroOfficeOsrStreamProcessLab
     }
 
     /// <summary>
+    /// A dedicated final-IME-commit process mode. Preedit and OS clipboard
+    /// never cross the CEF boundary; no production launcher calls this.
+    /// </summary>
+    public static ProcessStartInfo CreateImeCommitStartInfo(EuroOfficeNativeLabHostPolicy host,
+        string stagingDirectory, string fixtureName,
+        Guid sessionId, Guid tabId, bool labApproved)
+    {
+        var info = CreateKeyboardStartInfo(host, stagingDirectory, fixtureName,
+            sessionId, tabId, labApproved);
+        info.ArgumentList[0] = "--open-staged-wayland-ime-commit-lab";
+        return info;
+    }
+
+    /// <summary>
     /// Start the approved interactive CEF lab. The synchronous callback
     /// registers the bounded input channel with the LAB UI only. It must not
     /// retain the channel after onInputClosed. Writer has no command ACK.
@@ -128,13 +142,19 @@ public static class EuroOfficeOsrStreamProcessLab
         Func<EuroOfficeOsrStreamFrame, Task> onFrame,
         Action<EuroOfficeOsrLabInputChannel> onInputReady,
         Action onInputClosed, bool labApproved, CancellationToken cancellationToken,
-        bool clickLabApproved = false, bool keyboardLabApproved = false)
+        bool clickLabApproved = false, bool keyboardLabApproved = false,
+        bool imeCommitLabApproved = false)
     {
         ArgumentNullException.ThrowIfNull(onInputReady);
         ArgumentNullException.ThrowIfNull(onInputClosed);
         if (keyboardLabApproved && !clickLabApproved)
             throw new NotSupportedException("Keyboard Lab требует разрешения Click Lab.");
-        var info = keyboardLabApproved
+        if (imeCommitLabApproved && !keyboardLabApproved)
+            throw new NotSupportedException("IME Commit Lab требует разрешения Keyboard Lab.");
+        var info = imeCommitLabApproved
+            ? CreateImeCommitStartInfo(host, stagingDirectory, fixtureName,
+                sessionId, tabId, labApproved)
+            : keyboardLabApproved
             ? CreateKeyboardStartInfo(host, stagingDirectory, fixtureName,
                 sessionId, tabId, labApproved)
             : clickLabApproved
@@ -144,7 +164,7 @@ public static class EuroOfficeOsrStreamProcessLab
                     sessionId, tabId, labApproved);
         return RunCoreAsync(info, sessionId, tabId,
             onFrame, onInputReady, onInputClosed, cancellationToken,
-            clickLabApproved, keyboardLabApproved);
+            clickLabApproved, keyboardLabApproved, imeCommitLabApproved);
     }
 
     public static async Task<int> RunAsync(EuroOfficeNativeLabHostPolicy host,
@@ -164,7 +184,8 @@ public static class EuroOfficeOsrStreamProcessLab
         Func<EuroOfficeOsrStreamFrame, Task> onFrame,
         Action<EuroOfficeOsrLabInputChannel>? onInputReady,
         Action? onInputClosed, CancellationToken cancellationToken,
-        bool clickLabApproved = false, bool keyboardLabApproved = false)
+        bool clickLabApproved = false, bool keyboardLabApproved = false,
+        bool imeCommitLabApproved = false)
     {
         using var process = new Process { StartInfo = info };
         bool started = false;
@@ -183,7 +204,8 @@ public static class EuroOfficeOsrStreamProcessLab
                 input = new EuroOfficeOsrLabInputChannel(
                     process.StandardInput, sessionId, tabId,
                     laboratoryApproved: true, clickLabApproved: clickLabApproved,
-                    keyboardLabApproved: keyboardLabApproved);
+                    keyboardLabApproved: keyboardLabApproved,
+                    imeCommitLabApproved: imeCommitLabApproved);
                 onInputReady(input);
             }
             var receiver = new EuroOfficeOsrStreamReader(sessionId, tabId);
