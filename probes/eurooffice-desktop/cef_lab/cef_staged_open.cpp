@@ -227,11 +227,11 @@ int main(int argc, char** argv) {
     // trial and does NOT claim the document loaded or saved successfully.
     QTimer::singleShot(15000, &app, &QCoreApplication::quit);
     const int exitCode = app.exec();
-    if (view && viewId > 0)
-        manager.DestroyCefView(viewId, false);
-    // Capture callback state before manager tears down the native editor.
+    // Snapshot BEFORE any CEF/Qt destroy callback can invalidate the widget.
     // A browser callback does not prove OOXML was parsed/rendered correctly.
     const bool viewCallback = view && view->cefViewLoaded.load(std::memory_order_acquire);
+    if (view && viewId > 0)
+        manager.DestroyCefView(viewId, false);
     manager.CloseApplication();
     std::puts(viewCallback
         ? "GD31J6_CEF_VIEW_CALLBACK_OBSERVED_DOCUMENT_UNVERIFIED"
