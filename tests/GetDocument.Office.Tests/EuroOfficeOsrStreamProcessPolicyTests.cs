@@ -41,6 +41,36 @@ public sealed class EuroOfficeOsrStreamProcessPolicyTests
     }
 
     [TestMethod]
+    public void ExplicitInputLabUsesNewCliAndPipedStdinWithoutWeakeningRegularStream()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        string root = Path.Combine(Path.GetTempPath(), "gd31j14-input-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string executable = Path.Combine(root, "approved-eurooffice-lab");
+            File.WriteAllBytes(executable, [0x47, 0x45, 0x54, 0x31, 0x34]);
+            string digest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(executable)));
+            File.WriteAllBytes(Path.Combine(root, "gd31j6_writer.docx"), [0x50, 0x4B, 0x03, 0x04]);
+            File.WriteAllText(Path.Combine(root, "gd31j6-fixture-manifest.json"), "{\"testOnly\":true}");
+            var policy = new EuroOfficeNativeLabHostPolicy(root, executable, digest);
+            var session = Guid.NewGuid();
+            var tab = Guid.NewGuid();
+            var regular = EuroOfficeOsrStreamProcessLab.CreateStartInfo(
+                policy, root, "gd31j6_writer.docx", session, tab, true);
+            var interactive = EuroOfficeOsrStreamProcessLab.CreateInputStartInfo(
+                policy, root, "gd31j6_writer.docx", session, tab, true);
+            Assert.AreEqual("--open-staged-wayland-stream-lab", regular.ArgumentList[0]);
+            Assert.IsFalse(regular.RedirectStandardInput);
+            Assert.AreEqual("--open-staged-wayland-input-lab", interactive.ArgumentList[0]);
+            Assert.IsTrue(interactive.RedirectStandardInput);
+            Assert.IsTrue(interactive.RedirectStandardOutput);
+            Assert.IsFalse(interactive.UseShellExecute);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
     public void WithoutApprovalProcessCannotBeStarted()
     {
         Assert.ThrowsExactly<NotSupportedException>(() =>
