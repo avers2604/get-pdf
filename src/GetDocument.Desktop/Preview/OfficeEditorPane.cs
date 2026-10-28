@@ -509,7 +509,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             try
             {
                 if (_disposed || !document.IsModified) return;
-                await _recovery.CaptureAsync(_path, document.ExportRecoveryCopyAsync);
+                await Task.Run(() => _recovery.CaptureAsync(_path, document.ExportRecoveryCopyAsync));
             }
             finally { _persistence.Release(); }
         }
@@ -531,7 +531,17 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
         });
         var open = new Button { Content = "Открыть копию", MinHeight = 32 };
         open.Classes.Add("primary");
-        open.Click += (_, _) => { _recoveryBanner.IsVisible = false; RecoveryCopyRequested?.Invoke(copy.FilePath); };
+        open.Click += (_, _) =>
+        {
+            OfficeRecoveryCopy? verified = _recovery.FindLatest(_path);
+            if (verified is null)
+            {
+                _status("Аварийная копия больше недоступна или повреждена.");
+                _recoveryBanner.IsVisible = false;
+                return;
+            }
+            RecoveryCopyRequested?.Invoke(verified.FilePath);
+        };
         bar.Children.Add(open);
         var dismiss = new Button { Content = "Скрыть", MinHeight = 32 };
         dismiss.Classes.Add("ghost");
