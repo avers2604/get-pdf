@@ -108,6 +108,35 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         _connection.Text = "Доставлен тестовый кадр Qt (без CEF и офисного документа).";
     }
 
+    /// <summary>
+    /// A genuine upstream CEF OnPaint frame from a synthetic-only isolated
+    /// Wayland laboratory. STILL NOT a verified office document or editor.
+    /// </summary>
+    public void SetCefOsrLabFrame(EuroOfficeOsrStreamFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        if (frame.OfficeDocumentVerified || frame.SaveCompleted ||
+            frame.PdfReady || frame.PrintApproved || frame.ApprovedForProduction)
+            throw new InvalidDataException("Лабораторный CEF кадр не даёт офисных полномочий.");
+        using var input = new MemoryStream(frame.PngBytes, writable: false);
+        var image = new Bitmap(input);
+        if (image.PixelSize.Width != frame.Width ||
+            image.PixelSize.Height != frame.Height)
+        {
+            image.Dispose();
+            throw new InvalidDataException("PNG кадр CEF не соответствует заявленным размерам.");
+        }
+        if (_preview.Source is IDisposable previous) previous.Dispose();
+        _preview.Source = image;
+        _preview.IsVisible = true;
+        _connection.Text = $"Реальный CEF OnPaint: кадр {frame.FrameNumber}. " +
+                           "Только Wayland-лаборатория, документ и сохранение не подтверждены.";
+    }
+
+    public void SetCefOsrLabCompleted(int frames) =>
+        _connection.Text = $"Лабораторный CEF поток завершён ({frames} кадров). " +
+                           "Содержимое документа и сохранение не проверены.";
+
     public void Update(EuroOfficeNativeWorkspaceTabState state)
     {
         _state.Text = state.Status switch
