@@ -647,8 +647,15 @@ public sealed class MainWindow : Window
             !_nativeOsrLabStreams.ContainsKey(tabId))
             throw new InvalidDataException("Чужой или закрытый CEF input-seance.");
         if (_nativeTabViews.TryGetValue(tabId, out var tab) &&
-            tab.Content is NativeOfficeDiagnosticPane pane)
-            pane.AttachOsrLabInput(input);
+            tab.Content is NativeOfficeDiagnosticPane pane &&
+            _nativeOsrLabStreams.TryGetValue(tabId, out var lifetime))
+            pane.AttachOsrLabInput(input, () =>
+            {
+                // Revoke only THIS native generation, never another tab's host.
+                if (_nativeOsrLabStreams.TryGetValue(tabId, out var active) &&
+                    ReferenceEquals(active, lifetime))
+                    active.Cancel();
+            });
     }
 
     internal void DetachNativeOsrLabInput(Guid tabId, Guid sessionId,
