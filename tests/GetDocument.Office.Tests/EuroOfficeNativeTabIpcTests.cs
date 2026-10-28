@@ -68,6 +68,32 @@ public sealed class EuroOfficeNativeTabIpcTests
     }
 
     [TestMethod]
+    public async Task QtPainterFrameRoundtripsWithinSameIpcSession()
+    {
+        string replies = string.Join("\n", new[]
+        {
+            HelloReply(), Reply("ack", 1, "attached"),
+            EuroOfficeNativeDiagnosticFrameTests.Reply(sequence: 2),
+            Reply("ack", 3, "closed")
+        }) + "\n";
+        using var input = new StringReader(replies);
+        using var output = new StringWriter();
+        await using var channel = new EuroOfficeNativeTabIpc(input, output, Session, Tab);
+        await channel.ConnectAsync(CancellationToken.None);
+        await channel.AttachTabAsync(CancellationToken.None);
+        var frame = await channel.RequestPreviewFrameAsync(CancellationToken.None);
+        Assert.AreEqual(Session, frame.SessionId);
+        Assert.AreEqual(Tab, frame.TabId);
+        Assert.IsFalse(frame.CefRendered);
+        Assert.IsFalse(frame.OfficeDocumentVerified);
+        await channel.CloseAsync(CancellationToken.None);
+        var requests = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        using var req = JsonDocument.Parse(requests[2]);
+        Assert.AreEqual("request-frame", req.RootElement.GetProperty("command").GetString());
+        Assert.AreEqual(2, req.RootElement.GetProperty("sequence").GetInt32());
+    }
+
+    [TestMethod]
     public async Task RejectsForgedSessionOrTabOrOutOfOrderSequence()
     {
         foreach (string forged in new[]
