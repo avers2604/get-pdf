@@ -22,7 +22,7 @@ EXPECTED_KEYS = {
     "realMonitorVerified", "manualMode", "screenCount", "screens",
     "windowEvents",
 }
-EVENT_KEYS = {"show", "resize", "move", "focus", "screenChanged"}
+EVENT_KEYS = {"show", "resize", "move", "focus", "screenChanged", "dpiChanged"}
 SCREEN_KEYS = {"width", "height", "devicePixelRatio", "logicalDpi"}
 
 
