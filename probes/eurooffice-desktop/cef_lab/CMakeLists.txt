@@ -6,6 +6,15 @@ option(GETDOC_GD31J3_ENABLE_CEF_LAB "Build the isolated CEF initialization probe
 option(GETDOC_GD31J4_ENABLE_EMPTY_VIEW_LAB "Build one empty QCefView experiment; never open documents" OFF)
 # Synthetic fixtures ONLY. Requires GD-31J.4 plus an isolated offline lab.
 option(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB "Build the synthetic-only Office file opening experiment" OFF)
+# Capture actual CEF OnPaint for an approved synthetic-only Wayland lab.
+# Windows/X11 CEF uses native child windows in this upstream SDK; no OSR there.
+option(GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB "Enable real Wayland CEF OnPaint lab snapshot (never production)" OFF)
+if(GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB AND NOT GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
+  message(FATAL_ERROR "GD-31J.12 needs the explicit synthetic-only GD-31J.6 lab.")
+endif()
+if(GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB AND NOT (UNIX AND NOT APPLE))
+  message(FATAL_ERROR "This pinned EuroOffice CEF OSR implementation is Wayland/Linux-only.")
+endif()
 if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB AND NOT GETDOC_GD31J4_ENABLE_EMPTY_VIEW_LAB)
   message(FATAL_ERROR "GD-31J.6 requires opt-in GD-31J.4 empty editor view and its isolation gates.")
 endif()
@@ -110,5 +119,10 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
       Qt6::Core Qt6::Gui Qt6::Widgets Qt6::OpenGLWidgets
       "${GETDOC_ASC_DOC_SCORE}" "${GETDOC_ASC_QT_SCORE}"
   )
+  if(GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB)
+    target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+        GETDOC_GD31J12_WAYLAND_OSR_CAPTURE=1)
+    message(WARNING "GD-31J.12: Wayland CEF OnPaint capture only on synthetic fixtures. NO sandbox guarantee; NOT for real documents.")
+  endif()
   message(WARNING "GD-31J.6 synthetic test documents only, sandbox isolation required.")
 endif()
