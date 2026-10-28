@@ -83,6 +83,64 @@ public sealed class OfficeRecoveryStoreTests
     }
 
     [TestMethod]
+    public async Task RejectsDuplicateAndTraversalZipEntriesBeforePublishingRecovery()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("Проверка.docx");
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        using (var zip = new ZipArchive(File.Open(source, FileMode.Open, FileAccess.ReadWrite), ZipArchiveMode.Update))
+        {
+            using var duplicate = new StreamWriter(zip.CreateEntry("word/document.xml").Open());
+            duplicate.Write("<other/>");
+        }
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+            store.CaptureAsync(source, target =>
+            {
+                File.Copy(source, target);
+                return Task.CompletedTask;
+            }));
+        Assert.IsNull(store.FindLatest(source));
+
+        // An otherwise valid office archive must also reject unsafe internal paths.
+        using (var zip = new ZipArchive(File.Open(source, FileMode.Open, FileAccess.ReadWrite), ZipArchiveMode.Update))
+        {
+            foreach (var duplicate in zip.Entries.Where(x => x.FullName == "word/document.xml").Skip(1).ToArray())
+                duplicate.Delete();
+            using var unsafePart = new StreamWriter(zip.CreateEntry("../payload.txt").Open());
+            unsafePart.Write("payload");
+        }
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+            store.CaptureAsync(source, target =>
+            {
+                File.Copy(source, target);
+                return Task.CompletedTask;
+            }));
+        Assert.IsNull(store.FindLatest(source));
+    }
+
+    [TestMethod]
+    public async Task RejectsSuspiciousHighlyCompressedRecoveryEntries()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("Копия.xlsx");
+        using (var zip = new ZipArchive(File.Open(source, FileMode.Open, FileAccess.ReadWrite), ZipArchiveMode.Update))
+        {
+            using var uncompressed = zip.CreateEntry("xl/large.bin", CompressionLevel.Optimal).Open();
+            byte[] block = new byte[1024 * 1024];
+            uncompressed.Write(block);
+        }
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+            store.CaptureAsync(source, target =>
+            {
+                File.Copy(source, target);
+                return Task.CompletedTask;
+            }));
+        Assert.IsNull(store.FindLatest(source));
+        Assert.IsTrue(File.Exists(source));
+    }
+
+    [TestMethod]
     public async Task DiscardAfterConfirmedSaveRemovesRecoveryButNotSource()
     {
         using var fixture = new RecoveryFixture();

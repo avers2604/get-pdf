@@ -502,7 +502,8 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     {
         if (_document is not { } document) return;
         OfficeFeatureDefinition feature;
-        try { feature = OfficeFeatureCatalog.Require(document.Kind, featureId, document.ReadOnly); }
+        try { feature = OfficeFeatureCatalog.Require(document.Kind, featureId, document.ReadOnly,
+                OfficeFeatureProvider.LibreOfficeUno); }
         catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
         {
             _status(ex.Message);
@@ -652,7 +653,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             finally { _persistence.Release(); }
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or
-                                   UnauthorizedAccessException or InvalidDataException)
+                                   UnauthorizedAccessException or InvalidDataException or NotSupportedException)
         {
             if (!_disposed) _status("Не удалось создать аварийную копию: " + ex.Message);
         }

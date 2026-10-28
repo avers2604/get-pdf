@@ -13,6 +13,10 @@ namespace GetDocument.Office.LibreOffice;
 public sealed class OfficeRecoveryStore
 {
     private const long MaxCopyBytes = 128L * 1024 * 1024;
+    private const long MaxEntryBytes = 128L * 1024 * 1024;
+    private const long MaxExpandedBytes = 512L * 1024 * 1024;
+    private const int MaxEntryCount = 4096;
+    private const int MaxCompressionRatio = 500;
     private const int RetainedCopies = 3;
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -115,7 +119,8 @@ public sealed class OfficeRecoveryStore
             if (!string.Equals(sha, manifest.Sha256, StringComparison.OrdinalIgnoreCase)) return null;
             return new OfficeRecoveryCopy(copy, manifest.CapturedUtc);
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or
+                                   NotSupportedException)
         {
             return null;
         }
@@ -156,15 +161,57 @@ public sealed class OfficeRecoveryStore
         var info = new FileInfo(path);
         if (!info.Exists || info.Length == 0 || info.Length > MaxCopyBytes)
             throw new InvalidDataException("Резервная копия отсутствует или превышает лимит 128 МиБ.");
+
+        // This is a bounded ZIP envelope check, NOT a complete OOXML semantic check or AV scan.
+        // Reuse the same ZIP safety limits as the server's OfficePackageGuard where practical,
+        // without pulling a server project into the offline desktop/editor dependency graph.
         using var archive = ZipFile.OpenRead(path);
+        if (archive.Entries.Count is < 2 or > MaxEntryCount)
+            throw new InvalidDataException("Недопустимое количество ZIP-частей в аварийной копии.");
+
         string mainPart = extension switch
         {
             ".docx" => "word/document.xml",
             ".xlsx" => "xl/workbook.xml",
             _ => "ppt/presentation.xml"
         };
-        if (archive.GetEntry("[Content_Types].xml") is null || archive.GetEntry(mainPart) is null)
-            throw new InvalidDataException("Резервная копия не является полноценным OOXML-документом.");
+        var parts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        long expandedTotal = 0;
+        foreach (var entry in archive.Entries)
+        {
+            string name = entry.FullName;
+            string[] segments = name.TrimEnd('/').Split('/');
+            if (string.IsNullOrEmpty(name) || name.StartsWith("/", StringComparison.Ordinal) ||
+                name.Contains('\\') || name.Contains(':') || name.Any(char.IsControl) ||
+                segments.Any(segment => segment.Length == 0 || segment is "." or ".."))
+                throw new InvalidDataException("Недопустимый путь ZIP-части аварийной копии.");
+            if (!parts.Add(name.TrimEnd('/')))
+                throw new InvalidDataException("Повторяющееся имя ZIP-части аварийной копии.");
+
+            // Reject Unix symlink entries, as well as macro/ActiveX content in non-macro OOXML.
+            if (((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000 ||
+                name.EndsWith("/vbaProject.bin", StringComparison.OrdinalIgnoreCase) ||
+                name.StartsWith("activeX/", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("/activeX/", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Запрещённая ZIP-часть аварийной копии.");
+
+            if (name.EndsWith("/", StringComparison.Ordinal))
+            {
+                if (entry.Length != 0)
+                    throw new InvalidDataException("ZIP-каталог не должен содержать данные.");
+                continue;
+            }
+            if (entry.Length < 0 || entry.Length > MaxEntryBytes ||
+                expandedTotal > MaxExpandedBytes - entry.Length)
+                throw new InvalidDataException("Распакованные части аварийной копии слишком велики.");
+            expandedTotal += entry.Length;
+            if (entry.Length > 4096 &&
+                (entry.CompressedLength == 0 ||
+                 entry.Length > entry.CompressedLength * (long)MaxCompressionRatio))
+                throw new InvalidDataException("Подозрительная степень сжатия аварийной копии.");
+        }
+        if (!parts.Contains("[Content_Types].xml") || !parts.Contains(mainPart))
+            throw new InvalidDataException("В аварийной копии отсутствуют основные OOXML-части.");
     }
 
     private static string CanonicalSource(string path)

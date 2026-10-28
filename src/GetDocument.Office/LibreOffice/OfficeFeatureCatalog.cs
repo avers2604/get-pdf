@@ -5,6 +5,19 @@ namespace GetDocument.Office.LibreOffice;
 /// UNO dispatch URLs from UI to the LibreOffice bridge. Content-changing operations
 /// are unavailable on read-only documents.
 /// </summary>
+/// <summary>
+/// GET toolbar command transport. Server providers require their OWN capability
+/// adapter and compatibility tests before any local UNO action can be exposed.
+/// These values are not a declaration that those editors are currently connected.
+/// </summary>
+public enum OfficeFeatureProvider
+{
+    LibreOfficeUno,
+    EuroOfficeDocumentServer,
+    OnlyOfficeLegacy,
+    CollaboraWopi
+}
+
 public sealed record OfficeFeatureDefinition(string Id, string Title, string Kind, bool RequiresEdit);
 
 public static class OfficeFeatureCatalog
@@ -33,12 +46,27 @@ public static class OfficeFeatureCatalog
 
     public static IReadOnlyList<OfficeFeatureDefinition> All { get; } = Array.AsReadOnly(Entries);
 
+    /// <summary>Legacy local-only entry point; remote integrations must use ForProvider.</summary>
     public static IReadOnlyList<OfficeFeatureDefinition> ForKind(string kind) =>
-        Array.AsReadOnly(Entries.Where(feature =>
-            string.Equals(feature.Kind, kind, StringComparison.Ordinal)).ToArray());
+        ForProvider(kind, OfficeFeatureProvider.LibreOfficeUno);
 
-    public static OfficeFeatureDefinition Require(string kind, string featureId, bool readOnly)
+    /// <summary>
+    /// Fail closed: every currently implemented feature is a LibreOffice/UNO-only
+    /// command. A signed EuroOffice session does NOT make UNO calls compatible.
+    /// </summary>
+    public static IReadOnlyList<OfficeFeatureDefinition> ForProvider(
+        string kind, OfficeFeatureProvider provider) =>
+        provider == OfficeFeatureProvider.LibreOfficeUno
+            ? Array.AsReadOnly(Entries.Where(feature =>
+                string.Equals(feature.Kind, kind, StringComparison.Ordinal)).ToArray())
+            : Array.Empty<OfficeFeatureDefinition>();
+
+    public static OfficeFeatureDefinition Require(string kind, string featureId, bool readOnly,
+        OfficeFeatureProvider provider = OfficeFeatureProvider.LibreOfficeUno)
     {
+        if (provider != OfficeFeatureProvider.LibreOfficeUno)
+            throw new NotSupportedException("Эта команда ГЭТ пока не подтверждена для выбранного серверного редактора.");
+
         OfficeFeatureDefinition? feature = Entries.FirstOrDefault(feature =>
             string.Equals(feature.Kind, kind, StringComparison.Ordinal) &&
             string.Equals(feature.Id, featureId, StringComparison.Ordinal));
