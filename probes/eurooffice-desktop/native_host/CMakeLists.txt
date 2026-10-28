@@ -4,7 +4,7 @@ project(GetDocumentEuroOfficeQtHostProbe VERSION 0.1 LANGUAGES CXX)
 # A small real Qt 6 process for transport/window-lifetime validation only.
 # No FetchContent, external download, or production SDK linkage.
 find_package(Qt6 6.2 REQUIRED COMPONENTS Core Gui Widgets)
-add_executable(getdoc-eurooffice-qt-probe main.cpp)
+add_executable(getdoc-eurooffice-qt-probe main.cpp ipc_probe.cpp)
 target_compile_features(getdoc-eurooffice-qt-probe PRIVATE cxx_std_17)
 target_link_libraries(getdoc-eurooffice-qt-probe PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
 
