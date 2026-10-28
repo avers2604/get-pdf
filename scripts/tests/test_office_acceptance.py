@@ -33,6 +33,13 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_native_probe_test_double_runs_before_dotnet_restore(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Windows")
+        names = [step.name for step in steps]
+        self.assertIn("native-probe-mock-tests", names)
+        self.assertLess(names.index("native-probe-mock-tests"),
+                        names.index("solution-restore"))
+
     def test_linux_plan_does_not_assume_windows_only_build_tools(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         self.assertFalse(any(step.name.startswith("windows-") for step in steps))
