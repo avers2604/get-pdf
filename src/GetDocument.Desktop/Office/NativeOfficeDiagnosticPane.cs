@@ -24,6 +24,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     private double _latestPointerX, _latestPointerY;
     private bool _labButtonHeld;
     private IPointer? _capturedLabPointer;
+    private readonly SemaphoreSlim _labGestureGate = new(1, 1);
     private readonly TextBlock _state = new()
     {
         FontSize = 16,
@@ -185,9 +186,10 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     /// </summary>
     public async Task SuspendLabInputAsync()
     {
-        if (_labInput is not { } input) return;
+        await _labGestureGate.WaitAsync();
         try
         {
+            if (_labInput is not { } input) return;
             await ReleaseLabButtonAsync(input);
             if (_labFocused)
             {
@@ -196,8 +198,11 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             }
         }
         catch (Exception ex) { FailLabInput(ex); }
+        finally { _labGestureGate.Release(); }
     }
 
+    // Only call while the gesture lock is owned. Clearing the local flag
+    // before releasing pointer capture prevents duplicate up on capture-lost.
     private async Task ReleaseLabButtonAsync(EuroOfficeOsrLabInputChannel input)
     {
         if (!_labButtonHeld) return;
@@ -216,6 +221,18 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             !TryNormalizedPosition(e.GetPosition(_preview), out double x, out double y))
             return;
         e.Handled = true;
+        if (input.ClickLabApproved)
+        {
+            if (_labButtonHeld) return;
+            _latestPointerX = x;
+            _latestPointerY = y;
+            // Capture and mark BEFORE the first async await. A fast release
+            // queues behind this press, so CEF always sees down before up.
+            _labButtonHeld = true;
+            _capturedLabPointer = e.Pointer;
+            e.Pointer.Capture(_preview);
+        }
+        await _labGestureGate.WaitAsync();
         try
         {
             if (!_labFocused)
@@ -223,8 +240,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
                 await input.SendFocusAsync(true, CancellationToken.None);
                 _labFocused = true;
             }
-            if (!input.ClickLabApproved) return; // previous GD-31J.14 behavior
-            if (_labButtonHeld) return;
+            if (!input.ClickLabApproved) return; // GD-31J.14 mode: focus only
             long now = System.Diagnostics.Stopwatch.GetTimestamp();
             bool nearby = Math.Abs(x - _previousPressX) <= .015 &&
                           Math.Abs(y - _previousPressY) <= .015;
@@ -236,17 +252,11 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             _previousPressX = x;
             _previousPressY = y;
             _lastPressTimestamp = now;
-            _latestPointerX = x;
-            _latestPointerY = y;
-            // Capture and mark held BEFORE async write, so quick press/release
-            // events cannot leave a CEF button down without a queued release.
-            _labButtonHeld = true;
-            _capturedLabPointer = e.Pointer;
-            e.Pointer.Capture(_preview);
             await input.SendLeftButtonDownAsync(x, y, clickCount,
                 CancellationToken.None);
         }
         catch (Exception ex) { FailLabInput(ex); }
+        finally { _labGestureGate.Release(); }
     }
 
     private async void OnLabPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -261,16 +271,16 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             _latestPointerX = x;
             _latestPointerY = y;
         }
+        await _labGestureGate.WaitAsync();
         try { await ReleaseLabButtonAsync(input); }
         catch (Exception ex) { FailLabInput(ex); }
+        finally { _labGestureGate.Release(); }
     }
 
     private async void OnLabPointerCaptureLost(object? sender,
         PointerCaptureLostEventArgs e)
     {
-        if (!_labButtonHeld || _labInput is not { } input) return;
-        try { await ReleaseLabButtonAsync(input); }
-        catch (Exception ex) { FailLabInput(ex); }
+        if (_labButtonHeld) await SuspendLabInputAsync();
     }
 
     private async void OnLabPointerExited(object? sender, PointerEventArgs e)
@@ -291,8 +301,10 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         _latestPointerX = x;
         _latestPointerY = y;
         _lastMoveTimestamp = now;
+        await _labGestureGate.WaitAsync();
         try { await input.SendPointerMoveAsync(x, y, CancellationToken.None); }
         catch (Exception ex) { FailLabInput(ex); }
+        finally { _labGestureGate.Release(); }
     }
 
     private async void OnLabPointerWheel(object? sender, PointerWheelEventArgs e)
@@ -302,13 +314,15 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             return;
         int deltaX = Math.Clamp((int)Math.Round(e.Delta.X * 120), -120, 120);
         int deltaY = Math.Clamp((int)Math.Round(e.Delta.Y * 120), -120, 120);
-        if (deltaX == 0 && deltaY == 0) return;
+        if (deltaX == 0 && deltaY == 0 || _labButtonHeld) return;
+        await _labGestureGate.WaitAsync();
         try
         {
             await input.SendWheelAsync(x, y, deltaX, deltaY, CancellationToken.None);
             e.Handled = true;
         }
         catch (Exception ex) { FailLabInput(ex); }
+        finally { _labGestureGate.Release(); }
     }
 
     private bool TryNormalizedPosition(Point position, out double x, out double y)
