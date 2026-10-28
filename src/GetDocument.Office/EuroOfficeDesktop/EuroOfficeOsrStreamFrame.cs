@@ -172,6 +172,14 @@ public sealed class EuroOfficeOsrStreamReader(Guid sessionId, Guid tabId)
                         root.GetProperty("laboratoryOnly").ValueKind != JsonValueKind.True ||
                         root.GetProperty("framesProduced").GetInt32() != count)
                         throw new InvalidDataException("Неподтверждённое завершение OSR потока.");
+                    // A valid end receipt must also be the last stdout byte.
+                    // Await bounded EOF; refuse foreign stdout after "end".
+                    using var eofTimeout =
+                        CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    eofTimeout.CancelAfter(TimeSpan.FromSeconds(5));
+                    var remainder = new char[1];
+                    if (await input.ReadAsync(remainder.AsMemory(), eofTimeout.Token) != 0)
+                        throw new InvalidDataException("Данные после завершающей OSR квитанции.");
                     return count;
                 }
                 if (command != "frame" || count >= EuroOfficeOsrStreamFrame.MaximumFrames)
