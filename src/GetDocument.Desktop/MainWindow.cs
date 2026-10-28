@@ -690,7 +690,8 @@ public sealed class MainWindow : Window
         string stagingRoot, string syntheticFixture,
         Guid tabId, Guid sessionId, bool labApproved,
         CancellationToken cancellationToken, bool pointerInputLabApproved = false,
-        bool pointerClickLabApproved = false, bool keyboardLabApproved = false)
+        bool pointerClickLabApproved = false, bool keyboardLabApproved = false,
+        bool imeCommitLabApproved = false)
     {
         Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
         if (!labApproved)
@@ -701,12 +702,17 @@ public sealed class MainWindow : Window
         if (keyboardLabApproved && !pointerClickLabApproved)
             throw new NotSupportedException(
                 "GD-31J.16 требует отдельного разрешения на клики и тестовый ввод.");
+        if (imeCommitLabApproved && !keyboardLabApproved)
+            throw new NotSupportedException("GD-31J.17 требует Keyboard Lab для итогового IME commit.");
         if (_nativeTabViews.ContainsKey(tabId) || _nativeOsrLabStreams.ContainsKey(tabId) ||
             _nativeOsrLabTabs.Contains(tabId))
             throw new InvalidOperationException("Идентификатор CEF лабораторной вкладки уже занят.");
         // Preflight all file and process gates BEFORE exposing a tab.
-        _ = keyboardLabApproved
-            ? EuroOfficeOsrStreamProcessLab.CreateKeyboardStartInfo(approvedHost,
+        _ = imeCommitLabApproved
+            ? EuroOfficeOsrStreamProcessLab.CreateImeCommitStartInfo(approvedHost,
+                stagingRoot, syntheticFixture, sessionId, tabId, labApproved)
+            : keyboardLabApproved
+                ? EuroOfficeOsrStreamProcessLab.CreateKeyboardStartInfo(approvedHost,
                 stagingRoot, syntheticFixture, sessionId, tabId, labApproved)
             : pointerClickLabApproved
                 ? EuroOfficeOsrStreamProcessLab.CreateClickStartInfo(approvedHost,
@@ -752,7 +758,7 @@ public sealed class MainWindow : Window
                             });
                     },
                     labApproved, lifetime.Token, pointerClickLabApproved,
-                    keyboardLabApproved)
+                    keyboardLabApproved, imeCommitLabApproved)
                 : await EuroOfficeOsrStreamProcessLab.RunAsync(
                     approvedHost, stagingRoot, syntheticFixture, sessionId, tabId,
                     frame => sink.PreviewAsync(tabId, sessionId, frame, lifetime.Token),
