@@ -194,9 +194,12 @@ public sealed class ImageExportScratchTests
             Directory.CreateDirectory(directory);
             string marker = System.IO.Path.Combine(directory, ImageExportScratch.LeaseFileName);
             File.WriteAllText(marker, ImageExportScratch.LeaseMarker, Encoding.ASCII);
-            File.WriteAllBytes(System.IO.Path.Combine(directory,
-                extension == ".png" ? "stage.png" : "stage.jpg"), [4, 5, 6]);
-            File.SetLastWriteTimeUtc(marker, DateTime.UtcNow.AddDays(-3));
+            string staged = System.IO.Path.Combine(directory,
+                extension == ".png" ? "stage.png" : "stage.jpg");
+            File.WriteAllBytes(staged, [4, 5, 6]);
+            DateTime abandoned = DateTime.UtcNow.AddDays(-3);
+            File.SetLastWriteTimeUtc(staged, abandoned);
+            File.SetLastWriteTimeUtc(marker, abandoned);
             return directory;
         }
 
