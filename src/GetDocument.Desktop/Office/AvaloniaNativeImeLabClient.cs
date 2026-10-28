@@ -44,7 +44,7 @@ internal sealed class AvaloniaNativeImeLabClient : TextInputMethodClient, IDispo
     public override bool SupportsPreedit => true;
     public override bool SupportsSurroundingText => false;
     public override string SurroundingText => string.Empty;
-    public override Rect CursorRectangle => _hasCaret ? _cursor : Rect.Empty;
+    public override Rect CursorRectangle => _hasCaret ? _cursor : default;
 
     public override TextSelection Selection
     {
@@ -115,7 +115,7 @@ internal sealed class AvaloniaNativeImeLabClient : TextInputMethodClient, IDispo
         if (_disposed) return;
         _hasCaret = false;
         _frame = 0;
-        _cursor = Rect.Empty;
+        _cursor = default;
         _preeditChanged(null);
         RequestReset();
     }
