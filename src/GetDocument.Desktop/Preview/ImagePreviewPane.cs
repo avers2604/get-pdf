@@ -25,7 +25,7 @@ internal sealed class ImagePreviewPane : DockPanel, IDisposable
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
     private readonly Button _save = new()
     {
-        Content = "Сохранить новую редакцию PNG…",
+        Content = "Сохранить новую редакцию PNG/JPEG…",
         IsEnabled = false
     };
     private readonly Button _discard = new() { Content = "Сбросить", IsEnabled = false };
@@ -187,7 +187,11 @@ internal sealed class ImagePreviewPane : DockPanel, IDisposable
                 SuggestedFileName = Path.GetFileNameWithoutExtension(_path) + "-редакция.png",
                 DefaultExtension = "png",
                 ShowOverwritePrompt = false,
-                FileTypeChoices = [new FilePickerFileType("PNG") { Patterns = ["*.png"] }]
+                FileTypeChoices =
+                [
+                    new FilePickerFileType("PNG — без потерь") { Patterns = ["*.png"] },
+                    new FilePickerFileType("JPEG — сжатие с потерями") { Patterns = ["*.jpg", "*.jpeg"] }
+                ]
             });
         }
         catch (Exception ex) { _status.Text = "Ошибка выбора пути: " + ex.Message; return; }
@@ -204,7 +208,9 @@ internal sealed class ImagePreviewPane : DockPanel, IDisposable
                 ImageEditService.SaveNewRevision(_path, destination, plan, expected));
             if (_disposed) return;
             ResetEdits();
-            _status.Text = "Новая редакция PNG создана; оригинал не изменён.";
+            string format = Path.GetExtension(destination).Equals(".png",
+                StringComparison.OrdinalIgnoreCase) ? "PNG" : "JPEG";
+            _status.Text = $"Новая редакция {format} создана; оригинал не изменён.";
             await _openSavedCopy(destination);
         }
         catch (Exception ex)

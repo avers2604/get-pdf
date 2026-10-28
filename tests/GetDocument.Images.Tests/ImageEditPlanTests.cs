@@ -69,11 +69,13 @@ public sealed class ImageEditPlanTests
     }
 
     [TestMethod]
-    public void SaveAsRequiresNewPngDestination()
+    public void SaveAsAllowsPngAndJpegButRejectsOtherDestinationTypes()
     {
         Assert.ThrowsExactly<ArgumentException>(() =>
-            ImageEditPlan.ValidateDestinationExtension("revised.jpg"));
+            ImageEditPlan.ValidateDestinationExtension("revised.pdf"));
         ImageEditPlan.ValidateDestinationExtension("revised.png");
+        ImageEditPlan.ValidateDestinationExtension("revised.jpg");
+        ImageEditPlan.ValidateDestinationExtension("revised.JPEG");
     }
 
     [TestMethod]
