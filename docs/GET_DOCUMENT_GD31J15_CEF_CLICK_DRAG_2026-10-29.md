@@ -43,7 +43,7 @@ GD-31J.15 добавляет **отдельно разрешаемое** наж�
 
 ### .NET
 
-- `EuroOfficeOsrLabInputChannel` получает отдельный `clickLabApproved=false`; появились `SendLeftButtonDownAsync`, `SendLeftButtonUpAsync`, `ReleaseHeldButtonAsync`. Состояния `focused`/кнопка отслеживаются при подтверждённой записи в stdout? **Нет:** только после успешной локальной записи в stdin, без ACK нативного CEF. Команда в канале не гарантирует выполнения CEF.
+- `EuroOfficeOsrLabInputChannel` получает отдельный `clickLabApproved=false`; появились `SendLeftButtonDownAsync` и `SendLeftButtonUpAsync`. Состояния `focused` и удержания кнопки обновляются только после успешной локальной записи в stdin, без подтверждения от CEF. Команда в канале не гарантирует выполнения CEF.
 - Поля новых сообщений `command=left-down|left-up`, `sessionId`, `tabId`, `sequence`, `protocol=getdoc-cef-osr-input/1`, `x10000/y10000`; `left-down` дополнительно содержит `clickCount=1|2`. Никаких документных данных и текстовых параметров.
 - Канал `fail-closed`: ошибка или частичная запись блокирует дальнейшую отправку во избежание повторения небезопасного состояния.
 - `EuroOfficeOsrStreamProcessLab.CreateClickStartInfo` выбирает **отдельный** CLI и прежнюю проверку локального SHA бинарника/каталога, синтетического fixture+manifest. `RunInputLabAsync(..., clickLabApproved=false)` создаёт input channel с новым разрешением только для этого режима.
