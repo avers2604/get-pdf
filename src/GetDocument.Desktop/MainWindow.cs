@@ -649,6 +649,7 @@ public sealed class MainWindow : Window
             ShowPrintWizard();
         };
         editor.CloseRequested += () => _ = CloseDocumentAsync(item.Id);
+        editor.RecoveryCopyRequested += recoveredPath => _ = OpenSavedCopyAsync(recoveredPath);
     }
 
     private async Task CloseDocumentAsync(Guid id)
