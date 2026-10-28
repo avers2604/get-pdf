@@ -198,6 +198,14 @@ def git_revision(root: Path) -> str:
     revision = result.stdout.strip()
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("No valid Git revision for this acceptance run.")
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"], cwd=root,
+        text=True, capture_output=True, check=True, timeout=15)
+    if dirty.stdout.strip():
+        # A Git SHA cannot attest to modified, uncommitted code. Reports and
+        # build outputs live in .gitignored artifacts/ and do not trip this gate.
+        raise RuntimeError("The Git worktree contains uncommitted changes; "
+                           "acceptance requires an exact committed revision.")
     return revision
 
 
@@ -207,7 +215,7 @@ def ensure_dotnet10() -> str:
     result = subprocess.run(["dotnet", "--version"], text=True,
                             capture_output=True, check=True, timeout=20)
     version = result.stdout.strip()
-    if not re.fullmatch(r"10\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?", version):
+    if not re.fullmatch(r"10\.\d+\.\d+", version):
         raise RuntimeError("Expected .NET 10 SDK, found " + version)
     return version
 
