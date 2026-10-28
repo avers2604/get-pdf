@@ -99,6 +99,27 @@ public sealed class EuroOfficeNativeDocumentWorkflow
         }
     }
 
+    /// <summary>
+    /// Import a diagnostic receipt from a host process that the caller has
+    /// already associated with this session. The native JSON itself is not
+    /// authenticated and cannot authorize any document or print operation.
+    /// </summary>
+    public void ApplyNativeReceipt(EuroOfficeNativeReceipt receipt, string sessionId)
+    {
+        ArgumentNullException.ThrowIfNull(receipt);
+        lock (_sync)
+        {
+            if (sessionId != _sessionId)
+                throw new InvalidDataException("Отчёт принадлежит другому сеансу.");
+            EnsureOpen();
+            if (receipt.ViewLoaded)
+                _status = EuroOfficeNativeDocumentStatus.ViewLoadedUnverified;
+            _modified |= receipt.ModifiedNotificationObserved;
+            _saveNotification |= receipt.SaveNotificationObserved;
+            _printNotification |= receipt.PrintNotificationObserved;
+        }
+    }
+
     public string CreateRevisionIntent(string stagedRoot, string source, string destination,
         bool editableWorkingCopy)
     {
