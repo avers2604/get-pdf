@@ -140,6 +140,57 @@ public sealed class OfficeRecoveryStoreTests
         Assert.IsTrue(File.Exists(source));
     }
 
+    [DataTestMethod]
+    [DataRow("<root><unclosed>", "Некорректный XML")]
+    [DataRow("<!DOCTYPE root [<!ENTITY unsafe 'text'>]><root>&unsafe;</root>",
+        "Документы с DTD")]
+    public async Task RecoverySnapshotRejectsMalformedXmlAndDtd(string xml, string reason)
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("Акт.docx");
+        // An OOXML ZIP envelope with a damaged XML part must not be offered
+        // as a valid crash-recovery copy, even if the ZIP directory looks valid.
+        using (var zip = new ZipArchive(
+            File.Open(source, FileMode.Open, FileAccess.ReadWrite), ZipArchiveMode.Update))
+        {
+            zip.GetEntry("word/document.xml")!.Delete();
+            using var replacement = new StreamWriter(zip.CreateEntry("word/document.xml").Open());
+            replacement.Write(xml);
+        }
+
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+            store.CaptureAsync(source, target =>
+            {
+                File.Copy(source, target);
+                return Task.CompletedTask;
+            }), reason);
+        Assert.IsNull(store.FindLatest(source));
+        Assert.IsTrue(File.Exists(source));
+    }
+
+    [TestMethod]
+    public async Task ValidRecoverySnapshotWithXmlMetadataRemainsReadable()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("Ведомость.xlsx");
+        using (var zip = new ZipArchive(
+            File.Open(source, FileMode.Open, FileAccess.ReadWrite), ZipArchiveMode.Update))
+        {
+            using var settings = new StreamWriter(zip.CreateEntry("xl/styles.xml").Open());
+            settings.Write("<?xml version=\"1.0\"?><styles xmlns=\"urn:test\"/>");
+        }
+
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        var copy = await store.CaptureAsync(source, target =>
+        {
+            File.Copy(source, target);
+            return Task.CompletedTask;
+        });
+        Assert.AreEqual(copy.FilePath, store.FindLatest(source)?.FilePath);
+        Assert.IsTrue(File.Exists(copy.FilePath));
+    }
+
     [TestMethod]
     public async Task DiscardAfterConfirmedSaveRemovesRecoveryButNotSource()
     {
