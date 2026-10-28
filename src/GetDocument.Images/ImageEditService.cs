@@ -49,7 +49,8 @@ public static class ImageEditService
 
         // Cleanup is limited to old, verified GET Document scratch in this
         // exact output folder. The new operation holds an exclusive lease.
-        using var scratch = ImageExportScratch.Create(folder, Path.GetExtension(target));
+        using var scratch = ImageExportScratch.Create(folder, Path.GetExtension(target),
+            protectedSource: input);
 
         // Random access is intentional: a 90° rotation/flip requires it.
         using var image = NetVips.Image.NewFromFile(input,
