@@ -90,6 +90,35 @@ public sealed class ImageExportScratchTests
     }
 
     [TestMethod]
+    public void RecentlyModifiedStageSurvivesEvenWithAnOldOwnerMarker()
+    {
+        using var fixture = new Fixture();
+        string orphan = fixture.MakeAbandonedScratch(".png");
+        string staged = Path.Combine(orphan, "stage.png");
+        File.SetLastWriteTimeUtc(staged, DateTime.UtcNow);
+
+        ImageExportScratch.CleanupAbandoned(fixture.Path, TimeSpan.FromHours(24));
+
+        Assert.IsTrue(File.Exists(staged));
+        Assert.IsTrue(Directory.Exists(orphan));
+    }
+
+    [TestMethod]
+    public void TwoStagingImagesBlockDeletion()
+    {
+        using var fixture = new Fixture();
+        string orphan = fixture.MakeAbandonedScratch(".jpg");
+        string other = Path.Combine(orphan, "stage.png");
+        File.WriteAllText(other, "unrelated");
+        File.SetLastWriteTimeUtc(other, DateTime.UtcNow.AddDays(-3));
+
+        ImageExportScratch.CleanupAbandoned(fixture.Path, TimeSpan.FromHours(24));
+
+        Assert.IsTrue(File.Exists(Path.Combine(orphan, "stage.jpg")));
+        Assert.AreEqual("unrelated", File.ReadAllText(other));
+    }
+
+    [TestMethod]
     public void ForeignFilesInsideOwnedScratchBlockCleanup()
     {
         using var fixture = new Fixture();
@@ -108,7 +137,9 @@ public sealed class ImageExportScratchTests
     {
         using var fixture = new Fixture();
         string invalid = fixture.MakeAbandonedScratch(".png");
-        File.WriteAllText(Path.Combine(invalid, ImageExportScratch.LeaseFileName), "not owner");
+        string invalidMarker = Path.Combine(invalid, ImageExportScratch.LeaseFileName);
+        File.WriteAllText(invalidMarker, "not owner");
+        File.SetLastWriteTimeUtc(invalidMarker, DateTime.UtcNow.AddDays(-3));
         string lookalike = Path.Combine(fixture.Path, ".get-document-image-important");
         Directory.CreateDirectory(lookalike);
         File.WriteAllText(Path.Combine(lookalike, ImageExportScratch.LeaseFileName),
