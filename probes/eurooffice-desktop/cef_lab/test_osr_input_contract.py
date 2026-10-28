@@ -11,7 +11,7 @@ class OsrPointerInputContract(unittest.TestCase):
         c=CMAKE.read_text("utf-8")
         s=NATIVE.read_text("utf-8")
         self.assertIn("GETDOC_GD31J14_ENABLE_INPUT_LAB",c)
-        self.assertIn('pointer input experiment" OFF)',c)
+        self.assertIn('focus-only input experiment" OFF)',c)
         self.assertIn("GETDOC_GD31J14_POINTER_INPUT=1",c)
         self.assertIn("GETDOC_GD31J14_POINTER_INPUT",s)
         self.assertIn('QT_QPA_PLATFORM',s)
