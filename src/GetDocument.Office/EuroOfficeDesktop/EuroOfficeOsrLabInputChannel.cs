@@ -21,9 +21,6 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
     private bool _disposed;
     private bool _focused;
     private bool _leftDown;
-    private int _heldClickCount;
-    private double _lastPointerX;
-    private double _lastPointerY;
     private readonly bool _clickLabApproved;
 
     public EuroOfficeOsrLabInputChannel(TextWriter output,
@@ -51,9 +48,7 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
         {
             ["x10000"] = Normalize(normalizedX),
             ["y10000"] = Normalize(normalizedY)
-        }, cancellationToken,
-           checkState: () => RequireFocus(),
-           commitState: () => { _lastPointerX = normalizedX; _lastPointerY = normalizedY; });
+        }, cancellationToken, checkState: () => RequireFocus());
 
     public Task SendWheelAsync(double normalizedX, double normalizedY,
         int deltaX, int deltaY, CancellationToken cancellationToken)
@@ -113,9 +108,6 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
         commitState: () =>
         {
             _leftDown = true;
-            _heldClickCount = clickCount;
-            _lastPointerX = normalizedX;
-            _lastPointerY = normalizedY;
         });
     }
 
@@ -139,19 +131,7 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
         commitState: () =>
         {
             _leftDown = false;
-            _heldClickCount = 0;
-            _lastPointerX = normalizedX;
-            _lastPointerY = normalizedY;
         });
-    }
-
-    /// <summary>Release a drag before tab switching or pointer leave.</summary>
-    public Task ReleaseHeldButtonAsync(CancellationToken cancellationToken)
-    {
-        // Capturing the last point is safe because only a trusted lab UI
-        // can request release and SendLeftButtonUpAsync verifies the pair.
-        return !_leftDown ? Task.CompletedTask :
-            SendLeftButtonUpAsync(_lastPointerX, _lastPointerY, cancellationToken);
     }
 
     private void RequireFocus()
