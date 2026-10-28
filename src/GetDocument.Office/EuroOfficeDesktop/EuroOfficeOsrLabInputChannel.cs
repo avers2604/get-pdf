@@ -24,6 +24,7 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
     private readonly bool _clickLabApproved;
     private readonly bool _keyboardLabApproved;
     private readonly bool _imeCommitLabApproved;
+    private int _imeCommittedUnits;
     public Guid SessionId { get; }
     public Guid TabId { get; }
     public bool ImeCommitLabApproved => _imeCommitLabApproved;
@@ -120,7 +121,14 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
         return SendAsync("ime-commit", new SortedDictionary<string, object>(StringComparer.Ordinal)
         {
             ["codePoints"] = codes
-        }, cancellationToken, checkState: RequireKeyboardReady);
+        }, cancellationToken,
+        checkState: () =>
+        {
+            RequireKeyboardReady();
+            if (_imeCommittedUnits + codes.Length > 64)
+                throw new InvalidOperationException("Лимит IME символов за один лабораторный сеанс: 64.");
+        },
+        commitState: () => _imeCommittedUnits += codes.Length);
     }
 
     private void RequireKeyboardReady()
