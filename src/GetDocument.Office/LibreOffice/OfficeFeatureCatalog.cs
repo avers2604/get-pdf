@@ -21,6 +21,11 @@ public static class OfficeFeatureCatalog
         new("calc-clear-print-area", "Сбросить область печати", "calc", true),
         new("calc-repeat-first-row", "Повторять первую строку при печати", "calc", true),
         new("calc-stop-repeat-rows", "Не повторять строки при печати", "calc", true),
+        new("calc-chart-column", "Создать столбчатую диаграмму по выделению", "calc", true),
+        new("calc-chart-line", "Создать линейную диаграмму по выделению", "calc", true),
+        new("calc-validate-whole-nonnegative", "Разрешить только целые неотрицательные числа", "calc", true),
+        new("calc-validate-decimal-nonnegative", "Разрешить только неотрицательные числа", "calc", true),
+        new("calc-validate-clear", "Снять проверку данных с выделения", "calc", true),
         new("impress-duplicate-slide", "Дублировать слайд", "impress", true)
     ];
 
