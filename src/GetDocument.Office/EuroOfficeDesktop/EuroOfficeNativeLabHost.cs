@@ -70,6 +70,19 @@ public sealed class EuroOfficeNativeLabHostPolicy
         return ExecutablePath;
     }
 
+    /// <summary>
+    /// Explicitly select the Qt CORE diagnostic session IPC. The existing
+    /// policy pins the executable and forbids the shell; no arbitrary arguments.
+    /// This command does not start a Qt/CEF editor or authorize documents.
+    /// </summary>
+    public ProcessStartInfo CreateIpcStartInfo()
+    {
+        var start = CreateStartInfo(headless: true);
+        start.ArgumentList.Clear();
+        start.ArgumentList.Add("--ipc-probe");
+        return start;
+    }
+
     public ProcessStartInfo CreateStartInfo(bool headless)
     {
         var start = new ProcessStartInfo(VerifyBinary())
