@@ -27,6 +27,7 @@
 #include <string>
 #include "cefapplication.h"
 #include "cefview.h"
+#include "applicationmanager_events.h"
 #include "qascapplicationmanager.h"
 #include "qcefview.h"
 
@@ -40,6 +41,49 @@ public:
     void OnLoaded() override {
         cefViewLoaded.store(true, std::memory_order_release);
         QCefView::OnLoaded();
+    }
+};
+
+// Only aggregate allowlisted notifications from the EXACT synthetic editor.
+// Keep callback data/paths/document text out of the diagnostic channel.
+// SDK OnSave/PrintEnd is NOT proof of a completed revision or PDF export.
+class SyntheticEventObserver final : public NSEditorApi::CAscCefMenuEventListener {
+public:
+    std::atomic<int> expectedViewId{-1};
+    std::atomic<bool> modified{false};
+    std::atomic<bool> onSave{false};
+    std::atomic<bool> saveCancelled{false};
+    std::atomic<bool> printEnd{false};
+
+    bool IsSupportEvent(int type) override {
+        return type == ASC_MENU_EVENT_TYPE_CEF_MODIFY_CHANGED ||
+               type == ASC_MENU_EVENT_TYPE_CEF_ONSAVE ||
+               type == ASC_MENU_EVENT_TYPE_CEF_PRINT_END;
+    }
+
+    void OnEvent(NSEditorApi::CAscCefMenuEvent* event) override {
+        if (event && event->get_SenderId() == expectedViewId.load(std::memory_order_acquire)) {
+            switch (event->m_nType) {
+            case ASC_MENU_EVENT_TYPE_CEF_MODIFY_CHANGED:
+                modified.store(true, std::memory_order_release);
+                break;
+            case ASC_MENU_EVENT_TYPE_CEF_ONSAVE:
+                onSave.store(true, std::memory_order_release);
+                if (event->m_pData) {
+                    auto* data = static_cast<NSEditorApi::CAscDocumentOnSaveData*>(event->m_pData);
+                    if (data->get_IsCancel())
+                        saveCancelled.store(true, std::memory_order_release);
+                }
+                break;
+            case ASC_MENU_EVENT_TYPE_CEF_PRINT_END:
+                printEnd.store(true, std::memory_order_release);
+                break;
+            default:
+                break;
+            }
+        }
+        // The upstream listener takes ownership of the callback event.
+        NSEditorApi::CAscCefMenuEventListener::OnEvent(event);
     }
 };
 
@@ -194,6 +238,9 @@ int main(int argc, char** argv) {
     if (started != 0)
         return 6;
 
+    SyntheticEventObserver eventObserver;
+    manager.SetEventListener(&eventObserver);
+
     QWidget window;
     window.setWindowTitle(QString::fromUtf8("ГЭТ — синтетический документ EuroOffice"));
     window.resize(1024, 720);
@@ -221,6 +268,7 @@ int main(int argc, char** argv) {
     auto* editor = static_cast<CCefViewEditor*>(view->GetCefView());
     editor->OpenLocalFile(path.toStdWString(), format, L"");
     const int viewId = editor->GetId();
+    eventObserver.expectedViewId.store(viewId, std::memory_order_release);
     window.show();
 
     // No success acknowledgement is available yet. Timeout merely limits the
@@ -232,9 +280,30 @@ int main(int argc, char** argv) {
     const bool viewCallback = view && view->cefViewLoaded.load(std::memory_order_acquire);
     if (view && viewId > 0)
         manager.DestroyCefView(viewId, false);
+    manager.SetEventListener(nullptr);
     manager.CloseApplication();
+
+    QJsonObject nativeEvents;
+    nativeEvents["viewLoaded"] = viewCallback;
+    nativeEvents["modifiedNotification"] = eventObserver.modified.load(std::memory_order_acquire);
+    nativeEvents["onSaveNotification"] = eventObserver.onSave.load(std::memory_order_acquire);
+    nativeEvents["onSaveCancelled"] = eventObserver.saveCancelled.load(std::memory_order_acquire);
+    nativeEvents["printEndNotification"] = eventObserver.printEnd.load(std::memory_order_acquire);
+
+    QJsonObject receipt;
+    receipt["schema"] = "GD31J7_EVENTS_ONLY";
+    receipt["nativeEvents"] = nativeEvents;
+    receipt["documentVerified"] = false;
+    receipt["saveVerified"] = false;
+    receipt["pdfVerified"] = false;
+    receipt["printApproved"] = false;
+    receipt["laboratoryOnly"] = true;
+    // Preserve earlier diagnostic markers but never claim OOXML import.
     std::puts(viewCallback
         ? "GD31J6_CEF_VIEW_CALLBACK_OBSERVED_DOCUMENT_UNVERIFIED"
         : "GD31J6_OPEN_REQUEST_DISPATCHED_NOT_VERIFIED");
+    const QByteArray serialized = QJsonDocument(receipt).toJson(QJsonDocument::Compact);
+    std::fwrite(serialized.constData(), 1, static_cast<size_t>(serialized.size()), stdout);
+    std::fputc('\n', stdout);
     return exitCode;
 }
