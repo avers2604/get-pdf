@@ -112,6 +112,49 @@ public sealed class EuroOfficeDesktopProbeTests
     }
 
     [TestMethod]
+    public async Task LineProtocolHandshakeOnlyUsesExplicitHelloAndDoesNotOpenFiles()
+    {
+        using var input = new StringReader(Reply("open-local") + "\n");
+        using var output = new StringWriter();
+        var info = await EuroOfficeDesktopProbeProtocol.ExchangeHelloAsync(
+            input, output, CancellationToken.None);
+        CollectionAssert.Contains(info.Features.ToArray(), "open-local");
+        using var query = JsonDocument.Parse(output.ToString().Trim());
+        Assert.AreEqual("hello", query.RootElement.GetProperty("command").GetString());
+        Assert.AreEqual(EuroOfficeDesktopProbeProtocol.Protocol,
+            query.RootElement.GetProperty("protocol").GetString());
+        Assert.IsFalse(output.ToString().Contains("source", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
+    public async Task HandshakeRejectsEofAndRespectsCancellation()
+    {
+        using var input = new StringReader("");
+        using var output = new StringWriter();
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+            EuroOfficeDesktopProbeProtocol.ExchangeHelloAsync(input, output, CancellationToken.None));
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsExactlyAsync<OperationCanceledException>(() =>
+            EuroOfficeDesktopProbeProtocol.ExchangeHelloAsync(
+                new StringReader(Reply()), new StringWriter(), cts.Token));
+    }
+
+    [TestMethod]
+    public void ResizeRejectsInvalidOrUnboundedGeometry()
+    {
+        using var valid = JsonDocument.Parse(EuroOfficeDesktopProbeProtocol.CreateResizeRequest(
+            1280, 720, 1.5));
+        Assert.AreEqual("resize", valid.RootElement.GetProperty("command").GetString());
+        foreach (double scale in new[] { double.NaN, double.PositiveInfinity, 0.1, 9.0 })
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+                EuroOfficeDesktopProbeProtocol.CreateResizeRequest(1920, 1080, scale));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            EuroOfficeDesktopProbeProtocol.CreateResizeRequest(0, 1080, 1.0));
+    }
+
+    [TestMethod]
     public void OpeningRequiresSafeStagingAndNeverAcceptsUrlOrMacros()
     {
         string directory = Path.Combine(Path.GetTempPath(), "gd31j-open-" + Guid.NewGuid().ToString("N"));
