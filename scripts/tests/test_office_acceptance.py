@@ -40,6 +40,16 @@ class AcceptancePlanTests(unittest.TestCase):
         self.assertLess(names.index("native-probe-mock-tests"),
                         names.index("solution-restore"))
 
+    def test_compiled_qt_host_is_a_distinct_optional_gate(self):
+        qt_binary = Path("/approved/build/getdoc-eurooffice-qt-probe")
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux",
+                                       qt_host_binary=qt_binary)
+        checks = [step for step in steps if step.name == "native-qt-headless-smoke"]
+        self.assertEqual(1, len(checks))
+        self.assertEqual(str(qt_binary), checks[0].command[-1])
+        self.assertLess([step.name for step in steps].index("native-qt-headless-smoke"),
+                        [step.name for step in steps].index("solution-restore"))
+
     def test_linux_plan_does_not_assume_windows_only_build_tools(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         self.assertFalse(any(step.name.startswith("windows-") for step in steps))
