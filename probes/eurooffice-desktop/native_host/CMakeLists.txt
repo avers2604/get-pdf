@@ -9,7 +9,8 @@ target_compile_features(getdoc-eurooffice-qt-probe PRIVATE cxx_std_17)
 target_link_libraries(getdoc-eurooffice-qt-probe PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
 
 enable_testing()
-find_package(Python3 COMPONENTS Interpreter QUIET)
+# Never report a false-green CTest with zero tests if Python is absent.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
   add_test(
     NAME gd31j2_qt_handshake
