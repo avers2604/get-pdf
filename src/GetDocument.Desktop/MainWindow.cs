@@ -635,6 +635,11 @@ public sealed class MainWindow : Window
         {
             await _nativeSessionCoordinator.StartAsync(tabId, sessionId,
                 documentId, title, process, labApproved, cancellationToken);
+            // Preview is a single original Qt-painter frame, NOT a CEF view.
+            // If the IPC or image decoder fails, coordinator reports host
+            // loss and keeps the diagnostic tab visible for inspection.
+            await _nativeSessionCoordinator.RefreshDiagnosticFrameAsync(
+                tabId, sessionId, cancellationToken);
         }
         catch
         {
