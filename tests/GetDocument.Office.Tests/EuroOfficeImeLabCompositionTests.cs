@@ -85,6 +85,29 @@ public sealed class EuroOfficeImeLabCompositionTests
     }
 
     [TestMethod]
+    public async Task CommitsHaveBoundedAggregatePerLabSessionAndRequireSeparateApproval()
+    {
+        using var oldOutput = new StringWriter();
+        await using var oldChannel = new EuroOfficeOsrLabInputChannel(
+            oldOutput, Session, Tab, true, clickLabApproved: true,
+            keyboardLabApproved: true);
+        await oldChannel.SendFocusAsync(true, CancellationToken.None);
+        await Assert.ThrowsExactlyAsync<NotSupportedException>(() =>
+            oldChannel.SendImeCommittedTextAsync("тест", CancellationToken.None));
+
+        using var output = new StringWriter();
+        await using var channel = NewChannel(output);
+        await channel.SendFocusAsync(true, CancellationToken.None);
+        for (int i = 0; i < 4; i++)
+            await channel.SendImeCommittedTextAsync(new string('Я', 16),
+                CancellationToken.None);
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            channel.SendImeCommittedTextAsync("А", CancellationToken.None));
+        Assert.AreEqual(5, output.ToString().Split('\n',
+            StringSplitOptions.RemoveEmptyEntries).Length);
+    }
+
+    [TestMethod]
     public async Task ClipboardAndUntypedPasteRemainForbidden()
     {
         Assert.ThrowsExactly<NotSupportedException>(
