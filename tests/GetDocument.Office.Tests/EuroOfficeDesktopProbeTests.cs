@@ -155,6 +155,38 @@ public sealed class EuroOfficeDesktopProbeTests
     }
 
     [TestMethod]
+    public void PdfExportIsOnlyAStagedRequestForTheGetPrintWizard()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "gd31j-print-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string source = Path.Combine(directory, "План.pptx");
+            string pdf = Path.Combine(directory, "План-печать.pdf");
+            File.WriteAllBytes(source, [0x50, 0x4B, 0x03, 0x04]);
+            string request = EuroOfficeDesktopProbeProtocol.CreateExportPdfRequest(directory, source, pdf);
+            using var message = JsonDocument.Parse(request);
+            Assert.AreEqual("export-pdf", message.RootElement.GetProperty("command").GetString());
+            Assert.AreEqual(Path.GetFullPath(pdf),
+                message.RootElement.GetProperty("destination").GetString());
+            Assert.IsFalse(File.Exists(pdf), "A probe request may never claim export completed.");
+
+            File.WriteAllText(pdf, "existing WORM/print copy");
+            Assert.ThrowsExactly<IOException>(() =>
+                EuroOfficeDesktopProbeProtocol.CreateExportPdfRequest(directory, source, pdf));
+            Assert.AreEqual("existing WORM/print copy", File.ReadAllText(pdf));
+
+            Assert.ThrowsExactly<ArgumentException>(() =>
+                EuroOfficeDesktopProbeProtocol.CreateExportPdfRequest(
+                    directory, source, Path.Combine(directory, "..", "escaped.pdf")));
+            Assert.ThrowsExactly<ArgumentException>(() =>
+                EuroOfficeDesktopProbeProtocol.CreateExportPdfRequest(
+                    directory, source, Path.Combine(directory, "wrong.docx")));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [TestMethod]
     public void OpeningRequiresSafeStagingAndNeverAcceptsUrlOrMacros()
     {
         string directory = Path.Combine(Path.GetTempPath(), "gd31j-open-" + Guid.NewGuid().ToString("N"));
