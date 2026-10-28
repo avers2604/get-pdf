@@ -7,6 +7,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QWidget>
+#include "ipc_probe.h"
 #include <QByteArray>
 #include <QEvent>
 #include <QGuiApplication>
