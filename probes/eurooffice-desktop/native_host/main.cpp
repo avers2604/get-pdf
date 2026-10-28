@@ -74,15 +74,27 @@ protected:
     }
 };
 
-int RunDisplayProbe(int argc, char** argv) {
+int RunDisplayProbe(int argc, char** argv, bool manual) {
     QApplication application(argc, argv);
     application.setQuitOnLastWindowClosed(false);
 
     QWidget window;
-    window.setWindowTitle(QString::fromUtf8("ГЭТ — тест масштабирования Qt (без CEF)"));
+    window.setWindowTitle(QString::fromUtf8(manual
+        ? "ГЭТ — перетащите диагностическое окно на второй монитор"
+        : "ГЭТ — тест масштабирования Qt (без CEF)"));
     WindowEventCounters counters;
     window.installEventFilter(&counters);
     window.resize(800, 500);
+    if (manual) {
+        auto* layout = new QVBoxLayout(&window);
+        auto* notice = new QLabel(QString::fromUtf8(
+            "Только Qt: переместите окно на второй экран и верните обратно.\\n"
+            "Затем проверьте изменение масштаба системы (если разрешено).\\n"
+            "Нет CEF, редактора, печати и доступа к документам.\\n"
+            "Окно закроется автоматически через 30 секунд."));
+        notice->setWordWrap(true);
+        layout->addWidget(notice);
+    }
     window.show();
 
     int screenChanges = 0;
@@ -94,7 +106,7 @@ int RunDisplayProbe(int argc, char** argv) {
     // Exercise a second physical-widget size with a real Qt event loop.
     // This is NOT a user-visible CEF editor, even if running on Windows/Astra.
     QTimer::singleShot(70, &window, [&window]() { window.resize(1024, 640); });
-    QTimer::singleShot(250, &application, [&]() {
+    QTimer::singleShot(manual ? 30000 : 250, &application, [&]() {
         QJsonArray screens;
         for (QScreen* screen : QGuiApplication::screens()) {
             if (!screen) continue;
@@ -118,6 +130,7 @@ int RunDisplayProbe(int argc, char** argv) {
         report["protocol"] = "getdoc-qt-display-diagnostics/1";
         report["runtimeKind"] = "qt-only-no-cef";
         report["cefInitialized"] = false;
+        report["manualMode"] = manual;
         // Never claim physical multi-monitor correctness based on this probe.
         report["realMonitorVerified"] = false;
         report["screenCount"] = screens.size();
@@ -143,7 +156,9 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (mode == "--display-probe")
-        return RunDisplayProbe(argc, argv);
+        return RunDisplayProbe(argc, argv, false);
+    if (mode == "--display-live")
+        return RunDisplayProbe(argc, argv, true);
     if (mode != "--gui-probe") return 2;
 
     // GUI is an OS-level Qt window only; intentionally DOES NOT initialize
