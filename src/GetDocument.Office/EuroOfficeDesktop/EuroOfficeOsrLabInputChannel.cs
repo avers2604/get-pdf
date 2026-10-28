@@ -22,10 +22,18 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
     private bool _focused;
     private bool _leftDown;
     private readonly bool _clickLabApproved;
+    private readonly bool _keyboardLabApproved;
+
+    private static readonly HashSet<string> AllowedNavigationKeys = new(StringComparer.Ordinal)
+    {
+        "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+        "Home", "End", "PageUp", "PageDown", "Escape",
+        "Backspace", "Delete", "Enter", "Tab"
+    };
 
     public EuroOfficeOsrLabInputChannel(TextWriter output,
         Guid sessionId, Guid tabId, bool laboratoryApproved,
-        bool clickLabApproved = false)
+        bool clickLabApproved = false, bool keyboardLabApproved = false)
     {
         if (!laboratoryApproved)
             throw new NotSupportedException(
@@ -36,11 +44,69 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
         _output = output;
         _session = sessionId.ToString("N");
         _tab = tabId.ToString("N");
+        if (keyboardLabApproved && !clickLabApproved)
+            throw new NotSupportedException("Текстовый ввод требует отдельного click-lab разрешения.");
         _clickLabApproved = clickLabApproved;
+        _keyboardLabApproved = keyboardLabApproved;
     }
 
     /// <summary>True only inside this managed channel, not proof of CEF ACK.</summary>
     public bool ClickLabApproved => _clickLabApproved;
+    public bool KeyboardLabApproved => _keyboardLabApproved;
+
+    /// <summary>
+    /// An atomic navigation key press/release pair. No system accelerators,
+    /// Ctrl, Alt, Meta, clipboard, filesystem or generic key code accepted.
+    /// </summary>
+    public Task SendNavigationKeyAsync(string key, bool shift,
+        CancellationToken cancellationToken)
+    {
+        if (!_keyboardLabApproved)
+            throw new NotSupportedException("Навигация CEF требует отдельного GD-31J.16 разрешения.");
+        if (key is null || !AllowedNavigationKeys.Contains(key))
+            throw new ArgumentException("Клавиша не входит в список безопасной навигации.", nameof(key));
+        return SendAsync("nav-key", new SortedDictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["key"] = key,
+            ["shift"] = shift
+        }, cancellationToken, checkState: RequireKeyboardReady);
+    }
+
+    /// <summary>
+    /// A SINGLE already-committed BMP character. No intermediate IME/preedit,
+    /// paste, string payload, control characters or paired surrogates.
+    /// </summary>
+    public Task SendTextCharacterAsync(char character, CancellationToken cancellationToken)
+    {
+        if (!_keyboardLabApproved)
+            throw new NotSupportedException("Текст CEF требует отдельного GD-31J.16 разрешения.");
+        int codePoint = character;
+        // Explicitly exclude C0/C1, DEL, surrogates, bidi overrides and
+        // zero-width format controls; Unicode normalization is not inferred.
+        if (codePoint < 0x20 || codePoint is >= 0x7f and <= 0x9f ||
+            codePoint is >= 0xd800 and <= 0xdfff ||
+            codePoint is >= 0x200b and <= 0x200f ||
+            codePoint is >= 0x202a and <= 0x202e ||
+            codePoint is >= 0x2060 and <= 0x2069 ||
+            codePoint == 0xfeff)
+            throw new ArgumentOutOfRangeException(nameof(character),
+                "Запрещён служебный символ, суррогат или неполная IME-композиция.");
+        return SendAsync("text-char", new SortedDictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["codePoint"] = codePoint
+        }, cancellationToken, checkState: RequireKeyboardReady);
+    }
+
+    private void RequireKeyboardReady()
+    {
+        RequireFocus();
+        if (_leftDown)
+            throw new InvalidOperationException("Ввод текста запрещён при удержании мыши.");
+    }
+
+    public void SendImeComposition() =>
+        throw new NotSupportedException("IME preedit запрещён до отдельной проверенной реализации.");
+
 
     public Task SendPointerMoveAsync(double normalizedX, double normalizedY,
         CancellationToken cancellationToken) =>
