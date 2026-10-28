@@ -122,7 +122,9 @@ public static class EuroOfficeImeLabTextPolicy
                 code is >= 0x200b and <= 0x200f ||
                 code is >= 0x202a and <= 0x202e ||
                 code is >= 0x2060 and <= 0x2069 ||
-                code == 0xfeff)
+                code == 0xfeff ||
+                char.GetUnicodeCategory(unit) ==
+                    System.Globalization.UnicodeCategory.Format)
                 throw new ArgumentException("IME commit содержит запрещённый управляющий символ.", nameof(text));
         }
     }
