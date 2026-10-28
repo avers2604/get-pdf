@@ -71,15 +71,17 @@ class CefLabGateTests(unittest.TestCase):
         self.assertEqual(3, len(expected))
         with patch.object(cef_lab_gate, "git_head", side_effect=lambda p: expected[p.name]):
             with tempfile.TemporaryDirectory() as dirname:
-                root = pathlib.Path(dirname)
-                for name in expected:
-                    (root / name).mkdir()
+                root = pathlib.Path(dirname) / "DesktopEditors"
+                root.mkdir()
+                (root / "desktop-sdk").mkdir()
+                (root / "core").mkdir()
                 cef_lab_gate.check_revision_pins(root)
         with patch.object(cef_lab_gate, "git_head", return_value="0" * 40):
             with tempfile.TemporaryDirectory() as dirname:
-                root = pathlib.Path(dirname)
-                for name in expected:
-                    (root / name).mkdir()
+                root = pathlib.Path(dirname) / "DesktopEditors"
+                root.mkdir()
+                (root / "desktop-sdk").mkdir()
+                (root / "core").mkdir()
                 with self.assertRaises(cef_lab_gate.LabBlocked):
                     cef_lab_gate.check_revision_pins(root)
 
