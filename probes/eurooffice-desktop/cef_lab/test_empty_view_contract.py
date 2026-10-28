@@ -22,7 +22,7 @@ class EmptyCefViewContractTests(unittest.TestCase):
     def test_native_view_is_owned_by_qcefview_and_destroyed_by_manager(self):
         code = STAND.read_text(encoding="utf-8")
         self.assertIn('view->Create(&manager, cvwtEditor)', code)
-        self.assertIn('manager.DestroyCefView(viewId)', code)
+        self.assertIn('manager.DestroyCefView(viewId, false)', code)
         self.assertIn('manager.CloseApplication()', code)
         self.assertIn('CApplicationCEF::Prepare', code)
         self.assertIn('cef.Init_CEF(&manager', code)
