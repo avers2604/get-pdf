@@ -89,6 +89,12 @@ class AcceptancePlanTests(unittest.TestCase):
         self.assertEqual(1, len(display))
         self.assertIn("test_qt_display.py", display[0].command)
         self.assertEqual(str(qt_binary), display[0].command[-1])
+        ipc = [step for step in steps if step.name == "native-qt-tab-ipc"]
+        self.assertEqual(1, len(ipc))
+        self.assertIn("test_qt_ipc.py", ipc[0].command)
+        self.assertEqual(str(qt_binary), ipc[0].command[-1])
+        self.assertLess([step.name for step in steps].index("native-qt-tab-ipc"),
+                        [step.name for step in steps].index("solution-restore"))
 
     def test_linux_plan_does_not_assume_windows_only_build_tools(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
