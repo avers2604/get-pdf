@@ -502,7 +502,8 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     {
         if (_document is not { } document) return;
         OfficeFeatureDefinition feature;
-        try { feature = OfficeFeatureCatalog.Require(document.Kind, featureId, document.ReadOnly); }
+        try { feature = OfficeFeatureCatalog.Require(document.Kind, featureId, document.ReadOnly,
+                OfficeFeatureProvider.LibreOfficeUno); }
         catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
         {
             _status(ex.Message);
