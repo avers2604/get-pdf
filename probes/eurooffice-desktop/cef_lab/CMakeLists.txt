@@ -42,6 +42,13 @@ foreach(_entry
   if(NOT _rc EQUAL 0 OR NOT _got STREQUAL _expect)
     message(FATAL_ERROR "Unreviewed ${_name} revision. GD-31J.3 refuses to configure.")
   endif()
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" -C "${_dir}" status --porcelain --untracked-files=no
+    RESULT_VARIABLE _status_rc OUTPUT_VARIABLE _dirty
+    OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  if(NOT _status_rc EQUAL 0 OR NOT "${_dirty}" STREQUAL "")
+    message(FATAL_ERROR "${_name} has modified tracked files. Refusing CEF lab.")
+  endif()
 endforeach()
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets)
