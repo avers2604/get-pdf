@@ -23,6 +23,11 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
     private bool _leftDown;
     private readonly bool _clickLabApproved;
     private readonly bool _keyboardLabApproved;
+    private readonly bool _imeCommitLabApproved;
+    private int _imeCommittedUnits;
+    public Guid SessionId { get; }
+    public Guid TabId { get; }
+    public bool ImeCommitLabApproved => _imeCommitLabApproved;
 
     private static readonly HashSet<string> AllowedNavigationKeys = new(StringComparer.Ordinal)
     {
@@ -33,7 +38,8 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
 
     public EuroOfficeOsrLabInputChannel(TextWriter output,
         Guid sessionId, Guid tabId, bool laboratoryApproved,
-        bool clickLabApproved = false, bool keyboardLabApproved = false)
+        bool clickLabApproved = false, bool keyboardLabApproved = false,
+        bool imeCommitLabApproved = false)
     {
         if (!laboratoryApproved)
             throw new NotSupportedException(
@@ -44,10 +50,15 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
         _output = output;
         _session = sessionId.ToString("N");
         _tab = tabId.ToString("N");
+        SessionId = sessionId;
+        TabId = tabId;
         if (keyboardLabApproved && !clickLabApproved)
             throw new NotSupportedException("Текстовый ввод требует отдельного click-lab разрешения.");
         _clickLabApproved = clickLabApproved;
+        if (imeCommitLabApproved && !keyboardLabApproved)
+            throw new NotSupportedException("IME commit требует отдельного Keyboard Lab разрешения.");
         _keyboardLabApproved = keyboardLabApproved;
+        _imeCommitLabApproved = imeCommitLabApproved;
     }
 
     /// <summary>True only inside this managed channel, not proof of CEF ACK.</summary>
@@ -95,6 +106,29 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
         {
             ["codePoint"] = codePoint
         }, cancellationToken, checkState: RequireKeyboardReady);
+    }
+
+    /// <summary>
+    /// Send ONLY the final 1–16 already-committed BMP codepoints. No preedit,
+    /// string payload, clipboard or platform IME API travels over IPC.
+    /// </summary>
+    public Task SendImeCommittedTextAsync(string committed, CancellationToken cancellationToken)
+    {
+        if (!_imeCommitLabApproved)
+            throw new NotSupportedException("GD-31J.17 IME Commit Lab не разрешён.");
+        EuroOfficeImeLabTextPolicy.Validate(committed);
+        int[] codes = committed.Select(ch => (int)ch).ToArray();
+        return SendAsync("ime-commit", new SortedDictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["codePoints"] = codes
+        }, cancellationToken,
+        checkState: () =>
+        {
+            RequireKeyboardReady();
+            if (_imeCommittedUnits + codes.Length > 64)
+                throw new InvalidOperationException("Лимит IME символов за один лабораторный сеанс: 64.");
+        },
+        commitState: () => _imeCommittedUnits += codes.Length);
     }
 
     private void RequireKeyboardReady()

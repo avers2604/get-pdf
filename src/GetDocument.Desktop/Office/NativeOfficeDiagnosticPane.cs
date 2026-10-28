@@ -16,6 +16,7 @@ namespace GetDocument.Desktop.Office;
 internal sealed class NativeOfficeDiagnosticPane : Border
 {
     private EuroOfficeOsrLabInputChannel? _labInput;
+    private EuroOfficeImeLabComposition? _imeComposition;
     private Action? _onLabInputFailure;
     private bool _labFocused;
     private int _imageWidth, _imageHeight;
@@ -170,7 +171,13 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         DetachOsrLabInput();
         _labInput = input;
         _onLabInputFailure = onInputFailure;
-        _connection.Text = input.KeyboardLabApproved
+        if (input.ImeCommitLabApproved)
+            _imeComposition = new EuroOfficeImeLabComposition(input.SessionId, input.TabId,
+                approved: true);
+        _connection.Text = input.ImeCommitLabApproved
+            ? "Wayland CEF: локальная IME-композиция и итоговый commit подготовлены. " +
+              "Preedit в CEF не передаётся; clipboard отключён."
+            : input.KeyboardLabApproved
             ? "Wayland CEF: тестовая навигация и одиночные символы разрешены. " +
               "Ctrl/Alt/Meta, IME-композиция, clipboard и сохранение запрещены."
             : input.ClickLabApproved
@@ -184,6 +191,8 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     {
         if (expectedChannel is not null && !ReferenceEquals(_labInput, expectedChannel))
             return; // late callback from an older laboratory generation
+        _imeComposition?.Dispose();
+        _imeComposition = null;
         _labFocused = false;
         _labReservedModifierActive = false;
         _labInput = null;
@@ -204,6 +213,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         try
         {
             if (_labInput is not { } input) return;
+            _imeComposition?.Cancel(); // a tab switch must drop local preedit
             await ReleaseLabButtonAsync(input);
             if (_labFocused)
             {
@@ -397,6 +407,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     private async void OnLabTextInput(object? sender, TextInputEventArgs e)
     {
         if (!_labFocused || _labButtonHeld || _labReservedModifierActive ||
+            _imeComposition?.IsComposing == true ||
             _labInput is not { KeyboardLabApproved: true } input ||
             e.Text is not { Length: 1 } text)
             return;
@@ -410,6 +421,39 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         catch (Exception ex) { FailLabInput(ex); }
         finally { _labGestureGate.Release(); }
     }
+
+    // These methods are intentionally NOT wired to TextInput/clipboard: a
+    // multi-character TextInput event could be paste, not an OS IME commit.
+    // A reviewed ITextInputMethodClient adapter is required to invoke them.
+    internal void BeginImeLabComposition()
+    {
+        if (!_labFocused || _labButtonHeld || _labInput is not { ImeCommitLabApproved: true })
+            throw new InvalidOperationException("CEF IME Lab не в фокусе.");
+        (_imeComposition ?? throw new NotSupportedException(
+            "IME Lab input method adapter не подключён.")).Begin();
+    }
+
+    internal void UpdateImeLabComposition(string preedit) =>
+        (_imeComposition ?? throw new NotSupportedException("IME Lab не подключён."))
+            .Update(preedit);
+
+    internal async Task CommitImeLabCompositionAsync(CancellationToken token)
+    {
+        if (!_labFocused || _labButtonHeld || _labInput is not { ImeCommitLabApproved: true } input)
+            throw new InvalidOperationException("Нельзя отправить IME commit без фокуса.");
+        var composition = _imeComposition ??
+            throw new NotSupportedException("IME preedit не подключён.");
+        await _labGestureGate.WaitAsync(token);
+        try { await composition.CommitAsync(input, token); }
+        catch (Exception ex)
+        {
+            FailLabInput(ex);
+            throw;
+        }
+        finally { _labGestureGate.Release(); }
+    }
+
+    internal void CancelImeLabComposition() => _imeComposition?.Cancel();
 
     private bool TryNormalizedPosition(Point position, out double x, out double y)
     {

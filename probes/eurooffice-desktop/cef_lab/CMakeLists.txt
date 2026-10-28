@@ -18,6 +18,12 @@ option(GETDOC_GD31J15_ENABLE_CLICK_LAB "Enable synthetic-only Wayland CEF left-c
 # Deliberately separate from mouse privileges: nav keys and single committed
 # BMP text char; full IME composition and clipboard remain prohibited.
 option(GETDOC_GD31J16_ENABLE_KEYBOARD_LAB "Enable synthetic-only Wayland CEF navigation and committed character experiment" OFF)
+# IME preedit never leaves the GET shell. Only explicitly committed BMP
+# strings are encoded as bounded numeric codepoints in the synthetic lab.
+option(GETDOC_GD31J17_ENABLE_IME_COMMIT_LAB "Enable synthetic Wayland final IME commit experiment without clipboard" OFF)
+if(GETDOC_GD31J17_ENABLE_IME_COMMIT_LAB AND NOT GETDOC_GD31J16_ENABLE_KEYBOARD_LAB)
+  message(FATAL_ERROR "GD-31J.17 needs the approved GD-31J.16 keyboard laboratory.")
+endif()
 if(GETDOC_GD31J16_ENABLE_KEYBOARD_LAB AND NOT GETDOC_GD31J15_ENABLE_CLICK_LAB)
   message(FATAL_ERROR "GD-31J.16 requires explicitly enabled GD-31J.15 click lab.")
 endif()
@@ -161,6 +167,11 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
             target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
                 GETDOC_GD31J16_KEYBOARD_LAB=1)
             message(WARNING "GD-31J.16: nav keys/single BMP character only. No system shortcuts/IME/clipboard. Synthetic VM only.")
+            if(GETDOC_GD31J17_ENABLE_IME_COMMIT_LAB)
+              target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+                  GETDOC_GD31J17_IME_COMMIT_LAB=1)
+              message(WARNING "GD-31J.17: final BMP IME text only, no native preedit, OS clipboard or corporate files.")
+            endif()
           endif()
         endif()
       endif()

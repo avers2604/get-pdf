@@ -5,6 +5,8 @@
 #endif
 #include "cefview.h"
 #include "qcefview.h"
+#include <QChar>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -84,9 +86,10 @@ bool CalculatePosition(QCefView* view, const QJsonObject& request, int& x, int& 
 } // namespace
 
 OsrInputPump::OsrInputPump(QString sessionId, QString tabId, bool clicksApproved,
-                           bool keyboardApproved)
+                           bool keyboardApproved, bool imeCommitApproved)
     : m_sessionId(std::move(sessionId)), m_tabId(std::move(tabId)),
-      m_clicksApproved(clicksApproved), m_keyboardApproved(keyboardApproved) {}
+      m_clicksApproved(clicksApproved), m_keyboardApproved(keyboardApproved),
+      m_imeCommitApproved(imeCommitApproved) {}
 
 bool OsrInputPump::Enable() {
     const int flags = ::fcntl(STDIN_FILENO, F_GETFL);
@@ -210,9 +213,37 @@ bool OsrInputPump::Dispatch(const QByteArray& bytes,
         editor->SendKeyEvent(0, 0, 0, units);
         editor->SendKeyEvent(3, 0, 0, units);
         editor->SendKeyEvent(2, 0, 0, units);
+    } else if (command == "ime-commit" && m_imeCommitApproved &&
+               ExactKeys(request, {"codePoints", "command", "protocol",
+                                   "sequence", "sessionId", "tabId"})) {
+        // Only the FINAL committed BMP characters; preedit and candidate
+        // lists never cross IPC. Validate the ENTIRE array before side effects.
+        if (!m_focused || m_leftDown || !request.value("codePoints").isArray())
+            return false;
+        const QJsonArray units = request.value("codePoints").toArray();
+        if (units.isEmpty() || units.size() > 16 ||
+            m_committedUnits + units.size() > 64)
+            return false;
+        for (const QJsonValue& item : units) {
+            if (!BoundedInteger(item, 0x20, 0xffff) ||
+                !AllowedCommittedCharacter(item.toInt()) ||
+                QChar(static_cast<ushort>(item.toInt())).category() == QChar::Other_Format)
+                return false;
+        }
+        for (const QJsonValue& item : units) {
+            const wchar_t c = static_cast<wchar_t>(item.toInt());
+            // Pinned upstream QCefView inputMethodEvent supports 0/3/2
+            // committed characters, but NOT real CEF IME preedit/candidates.
+            std::wstring character(2, c);
+            character.push_back(0);
+            editor->SendKeyEvent(0, 0, 0, character);
+            editor->SendKeyEvent(3, 0, 0, character);
+            editor->SendKeyEvent(2, 0, 0, character);
+        }
+        m_committedUnits += units.size();
     } else {
-        // No generic key codes, Ctrl/Alt/Meta shortcuts, IME composition,
-        // clipboard, arbitrary strings, filenames, JS or printing commands.
+        // No generic key codes, Ctrl/Alt/Meta shortcuts, IME preedit,
+        // clipboard, arbitrary filenames, JavaScript or print commands.
         return false;
     }
     ++m_lastSequence;

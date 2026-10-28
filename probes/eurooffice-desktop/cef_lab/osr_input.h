@@ -13,7 +13,7 @@ class CCefViewEditor;
 class OsrInputPump final {
 public:
     OsrInputPump(QString sessionId, QString tabId, bool clicksApproved = false,
-                 bool keyboardApproved = false);
+                 bool keyboardApproved = false, bool imeCommitApproved = false);
     bool Enable();
     // Called ONLY from the Qt/CEF owner thread's QTimer, never OnPaint.
     bool Poll(QCefView* view, CCefViewEditor* editor);
@@ -27,6 +27,8 @@ private:
     bool m_focused = false;
     bool m_clicksApproved = false;
     bool m_keyboardApproved = false;
+    bool m_imeCommitApproved = false;
+    int m_committedUnits = 0;
     bool m_leftDown = false;
     int m_clickCount = 1;
     QElapsedTimer m_rateWindow;
