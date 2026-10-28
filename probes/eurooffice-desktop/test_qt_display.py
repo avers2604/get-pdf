@@ -49,6 +49,8 @@ class DisplayProbeTests(unittest.TestCase):
         self.assertEqual("qt-only-no-cef", report["runtimeKind"])
         self.assertTrue(report["closed"])
         self.assertFalse(report["cefInitialized"])
+        self.assertFalse(report["manualMode"])
+        self.assertGreaterEqual(report["windowEvents"]["dpiChanged"], 0)
         self.assertFalse(report["realMonitorVerified"])
         self.assertGreaterEqual(report["screenCount"], 1)
         self.assertEqual(report["screenCount"], len(report["screens"]))
