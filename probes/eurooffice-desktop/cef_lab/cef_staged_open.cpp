@@ -164,6 +164,92 @@ public:
     }
 };
 
+#if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) && defined(__linux__)
+// Lab-only, nonblocking, single-packet pending transport. We never fwrite a
+// 48-KiB PNG into a potentially full stdout pipe on the CEF/Qt owner thread.
+class BoundedStreamOutput {
+    QByteArray pending;
+    qsizetype offset = 0;
+public:
+    bool Enable() {
+        const int flags = fcntl(STDOUT_FILENO, F_GETFL);
+        if (flags < 0 || fcntl(STDOUT_FILENO, F_SETFL, flags | O_NONBLOCK) != 0)
+            return false;
+        std::signal(SIGPIPE, SIG_IGN); // EPIPE instead of process termination
+        return true;
+    }
+    bool HasPending() const { return !pending.isEmpty(); }
+    bool Queue(const QJsonObject& object) {
+        if (HasPending()) return false; // backpressure: drop intermediate frame
+        QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Compact);
+        if (bytes.isEmpty() || bytes.size() >= 65'535) return false;
+        bytes.append('\n');
+        pending = bytes;
+        offset = 0;
+        return true;
+    }
+    bool Drain() {
+        if (!HasPending()) return true;
+        const ssize_t amount = ::write(STDOUT_FILENO,
+            pending.constData() + offset,
+            static_cast<size_t>(pending.size() - offset));
+        if (amount > 0) {
+            offset += static_cast<qsizetype>(amount);
+            if (offset == pending.size()) {
+                pending.clear();
+                offset = 0;
+            }
+            return true;
+        }
+        if (amount < 0 &&
+            (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+            return true;
+        return false;
+    }
+    bool FlushFor(int milliseconds) {
+        QElapsedTimer timer;
+        timer.start();
+        while (HasPending() && timer.elapsed() < milliseconds) {
+            if (!Drain()) return false;
+            if (HasPending()) QThread::msleep(10);
+        }
+        return !HasPending();
+    }
+};
+
+bool Guid32(const QString& value) {
+    if (value.size() != 32 || value == QString(32, QChar('0'))) return false;
+    for (const QChar ch : value)
+        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')))
+            return false;
+    return true;
+}
+
+QJsonObject StreamFrameReceipt(const QString& session, const QString& tab,
+                               int frameNumber, const QImage& image,
+                               const QByteArray& pngBytes) {
+    const QString digest = QString::fromLatin1(
+        QCryptographicHash::hash(pngBytes, QCryptographicHash::Sha256).toHex());
+    return QJsonObject{
+        {"command", "frame"},
+        {"documentVerified", false},
+        {"frameNumber", frameNumber},
+        {"laboratoryOnly", true},
+        {"payloadBase64", QString::fromLatin1(pngBytes.toBase64())},
+        {"pdfVerified", false},
+        {"pixelHeight", image.height()},
+        {"pixelWidth", image.width()},
+        {"printApproved", false},
+        {"protocol", "getdoc-cef-osr-stream/1"},
+        {"saveVerified", false},
+        {"sessionId", session},
+        {"sha256", digest},
+        {"source", "cef-osr-wayland-synthetic-only"},
+        {"tabId", tab}
+    };
+}
+#endif
+
 constexpr char kManifest[] = "gd31j6-fixture-manifest.json";
 constexpr char kManifestSchema[] = "gd31j6-office-fixtures/1";
 
