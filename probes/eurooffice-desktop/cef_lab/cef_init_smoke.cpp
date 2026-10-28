@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
         return 5;
     // No QWidget, QCefView, CefDocument or editor is ever created.
     manager.CloseApplication();
-    cef.Close();
+    // CApplicationCEF destructor calls Close(); do not shut it down twice.
     // CEF init returned successfully. NOT proof of real editor API, security,
     // sandboxing, document roundtrip, event handling or shutdown stability.
     std::puts("GD31J3_CEF_INITIALIZATION_ONLY");
