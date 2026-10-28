@@ -41,6 +41,47 @@ public sealed class CorporateTemplateServiceTests
         Assert.IsTrue(new FileInfo(output).Length > 0);
     }
 
+    [DataTestMethod]
+    [DataRow(CorporateTemplateId.ServiceMemo)]
+    [DataRow(CorporateTemplateId.Act)]
+    [DataRow(CorporateTemplateId.Letter)]
+    public void PilotTemplateUsesA4AndLegibleTitleWithoutChangingFieldContents(CorporateTemplateId type)
+    {
+        using var folder = Scratch.Create();
+        string output = Path.Combine(folder.Path, "A4.docx");
+        CorporateTemplateService.CreateDocx(type, Sample("Первая строка\nВторая строка"), output);
+
+        using var package = WordprocessingDocument.Open(output, false);
+        var body = package.MainDocumentPart!.Document.Body!;
+        var properties = body.Elements<SectionProperties>().Single();
+        var paper = properties.GetFirstChild<PageSize>()!;
+        var margins = properties.GetFirstChild<PageMargin>()!;
+        Assert.AreEqual(11906U, paper.Width!.Value, "A4 width in twips");
+        Assert.AreEqual(16838U, paper.Height!.Value, "A4 height in twips");
+        Assert.IsTrue(margins.Left!.Value >= 1134U, "A4 pilot template must have readable left margin");
+        Assert.IsTrue(margins.Right!.Value >= 850U);
+
+        var paragraphs = body.Elements<Paragraph>().ToArray();
+        var title = paragraphs[0];
+        Assert.AreEqual(JustificationValues.Center,
+            title.ParagraphProperties?.Justification?.Val?.Value);
+        Assert.IsNotNull(title.Descendants<Bold>().FirstOrDefault(), "Document title must be bold");
+        Assert.IsTrue(paragraphs.Any(x => x.InnerText == "Первая строка"));
+        Assert.IsTrue(paragraphs.Any(x => x.InnerText == "Вторая строка"));
+    }
+
+    [TestMethod]
+    public void A4PilotTemplateDoesNotEmbedUnapprovedLogoOrExternalAssets()
+    {
+        using var folder = Scratch.Create();
+        string output = Path.Combine(folder.Path, "Акт.docx");
+        CorporateTemplateService.CreateDocx(CorporateTemplateId.Act, Sample(), output);
+        using var package = WordprocessingDocument.Open(output, false);
+        Assert.AreEqual(0, package.MainDocumentPart!.ImageParts.Count(),
+            "Official brand assets are not yet approved for these pilot templates");
+        Assert.IsFalse(package.MainDocumentPart.ExternalRelationships.Any());
+    }
+
     [TestMethod]
     public void UserProvidedTemplateSyntaxIsRenderedAsPlainTextNotEvaluated()
     {

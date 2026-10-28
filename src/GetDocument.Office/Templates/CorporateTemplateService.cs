@@ -130,13 +130,45 @@ public static class CorporateTemplateService
             {
                 var main = package.AddMainDocumentPart();
                 var body = new Body();
-                foreach (var line in text.Split('\n', StringSplitOptions.None))
-                    body.Append(line.Length == 0
-                        ? new Paragraph()
-                        : new Paragraph(new Run(new Text(line)
-                        {
-                            Space = SpaceProcessingModeValues.Preserve
-                        })));
+                string[] lines = text.Split('\n', StringSplitOptions.None);
+                for (int index = 0; index < lines.Length; index++)
+                {
+                    string line = lines[index];
+                    bool title = index == 0;
+                    var paragraph = new Paragraph(
+                        new ParagraphProperties(
+                            new SpacingBetweenLines
+                            {
+                                After = title ? "240" : "120",
+                                Line = "276",
+                                LineRule = LineSpacingRuleValues.Auto
+                            }));
+                    if (title)
+                        paragraph.ParagraphProperties!.Append(
+                            new Justification { Val = JustificationValues.Center });
+                    if (line.Length > 0)
+                    {
+                        var runStyle = new RunProperties(
+                            new RunFonts { Ascii = "Arial", HighAnsi = "Arial", ComplexScript = "Arial" });
+                        if (title) runStyle.Append(new Bold());
+                        // WordprocessingML requires w:b before w:sz in run properties.
+                        runStyle.Append(new FontSize { Val = title ? "26" : "22" });
+                        paragraph.Append(new Run(
+                            runStyle,
+                            new Text(line) { Space = SpaceProcessingModeValues.Preserve }));
+                    }
+                    body.Append(paragraph);
+                }
+                // Explicit A4 settings are part of the pilot layout, not an approved GET letterhead.
+                // Page dimensions/margins are in twips (1/20 pt); left margin is 30 mm.
+                body.Append(new SectionProperties(
+                    new PageSize { Width = 11906U, Height = 16838U },
+                    new PageMargin
+                    {
+                        Top = 1134, Bottom = 1134,
+                        Left = 1701U, Right = 1134U,
+                        Header = 708U, Footer = 708U
+                    }));
                 main.Document = new Document(body);
                 main.Document.Save();
             }
