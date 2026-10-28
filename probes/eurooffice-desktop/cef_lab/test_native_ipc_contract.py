@@ -17,6 +17,9 @@ class CefLabIpcContractTests(unittest.TestCase):
         self.assertIn('ipc["kind"] = "snapshot"', source)
         self.assertIn('ipc["sequence"] = 1', source)
         self.assertIn('ipc["sessionId"] = sessionId', source)
+        self.assertIn('closed["sequence"] = 2', source)
+        self.assertIn('closed["event"] = "closed"', source)
+        self.assertIn('closed["eventCode"] = 2001', source)
 
     def test_snapshot_is_diagnostic_and_cannot_claim_verified_save_or_pdf(self):
         source = SOURCE.read_text(encoding="utf-8")
