@@ -654,16 +654,22 @@ public sealed class MainWindow : Window
         Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
         if (!labApproved)
             throw new NotSupportedException("Реальный CEF разрешён только в отдельной лаборатории.");
+        if (_nativeTabViews.ContainsKey(tabId) || _nativeOsrLabStreams.ContainsKey(tabId) ||
+            _nativeOsrLabTabs.Contains(tabId))
+            throw new InvalidOperationException("Идентификатор CEF лабораторной вкладки уже занят.");
         // Preflight all file and process gates BEFORE exposing a tab.
         _ = EuroOfficeOsrStreamProcessLab.CreateStartInfo(approvedHost,
             stagingRoot, syntheticFixture, sessionId, tabId, labApproved);
         var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _nativeOsrLabStreams.Add(tabId, lifetime);
         _nativeOsrLabTabs.Add(tabId);
+        bool registered = false;
         try
         {
             AddNativeDiagnosticTab(tabId, sessionId, syntheticFixture,
+
                 "EuroOffice CEF — синтетический документ");
+            registered = true;
             var sink = new AvaloniaNativeOsrLabFrameSink(this);
             int received = await EuroOfficeOsrStreamProcessLab.RunAsync(
                 approvedHost, stagingRoot, syntheticFixture, sessionId, tabId,
@@ -677,14 +683,16 @@ public sealed class MainWindow : Window
         }
         catch
         {
-            if (_nativeTabViews.ContainsKey(tabId))
+            if (registered && _nativeTabViews.ContainsKey(tabId))
                 ReportNativeDiagnosticCrash(tabId, sessionId);
             throw;
         }
         finally
         {
             _nativeOsrLabStreams.Remove(tabId);
-            if (lifetime.IsCancellationRequested && _nativeTabViews.ContainsKey(tabId))
+            if (!registered)
+                _nativeOsrLabTabs.Remove(tabId);
+            else if (lifetime.IsCancellationRequested && _nativeTabViews.ContainsKey(tabId))
                 CloseNativeDiagnosticTab(tabId, sessionId);
             lifetime.Dispose();
         }
