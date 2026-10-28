@@ -52,15 +52,14 @@ public sealed record EuroOfficeNativeArtifactCandidate(string Format, long Lengt
                     name.Contains("activeX", StringComparison.OrdinalIgnoreCase) ||
                     name.EndsWith(".bin", StringComparison.OrdinalIgnoreCase) ||
                     name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-                    entry.ExternalAttributes >> 16 is int mode &&
-                    (mode & 0xF000) == 0xA000)
+                    (((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000))
                     throw new InvalidDataException("Макросы, ActiveX и ссылки запрещены.");
                 if (entry.Length > MaxFileBytes || entry.Length < 0 ||
                     aggregate > MaxArchiveBytes - entry.Length)
                     throw new InvalidDataException("Превышен размер ZIP части.");
                 if (entry.Length > 4096 &&
                     (entry.CompressedLength == 0 ||
-                     entry.Length > entry.CompressedLength * 500L))
+                     entry.Length / Math.Max(1L, entry.CompressedLength) > 500L))
                     throw new InvalidDataException("Подозрительное сжатие ZIP части.");
                 aggregate += entry.Length;
 
