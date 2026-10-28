@@ -336,10 +336,25 @@ int main(int argc, char** argv) {
     eventObserver.expectedViewId.store(viewId, std::memory_order_release);
     window.show();
 
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
+    // EuroOffice's Linux CEF path uses CefDoMessageLoopWork(). A plain Qt
+    // app.exec() does not necessarily pump Chromium: schedule CEF work on the
+    // Qt owner thread, NEVER from OnPaint itself (reentrancy is unsafe).
+    QTimer cefWorkPump;
+    if (osrLab) {
+        QObject::connect(&cefWorkPump, &QTimer::timeout, &app,
+                         [&cef]() { cef.DoMessageLoopEvent(); });
+        cefWorkPump.start(10);
+    }
+#endif
+
     // No success acknowledgement is available yet. Timeout merely limits the
     // trial and does NOT claim the document loaded or saved successfully.
     QTimer::singleShot(15000, &app, &QCoreApplication::quit);
     const int exitCode = app.exec();
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
+    cefWorkPump.stop();
+#endif
     // Snapshot BEFORE any CEF/Qt destroy callback can invalidate the widget.
     // A browser callback does not prove OOXML was parsed/rendered correctly.
     const bool viewCallback = view && view->cefViewLoaded.load(std::memory_order_acquire);
