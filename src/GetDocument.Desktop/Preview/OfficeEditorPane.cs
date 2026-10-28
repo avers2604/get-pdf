@@ -235,6 +235,16 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
                 ("Сбросить область печати", "feature:calc-clear-print-area"),
                 ("Повторять первую строку", "feature:calc-repeat-first-row"),
                 ("Отключить повтор строк", "feature:calc-stop-repeat-rows"))));
+            Add(Separator());
+            Add(EditFeature(MenuButton("Диаграмма", Icons.Presentation,
+                    "Выделите диапазон с числовыми данными, затем выберите тип диаграммы",
+                    ("Столбчатая", "feature:calc-chart-column"),
+                    ("Линейная", "feature:calc-chart-line"))),
+                EditFeature(MenuButton("Проверка данных", Icons.Check,
+                    "Проверка данных для выделенных ячеек",
+                    ("Только целые числа ≥ 0", "feature:calc-validate-whole-nonnegative"),
+                    ("Только числа ≥ 0", "feature:calc-validate-decimal-nonnegative"),
+                    ("Снять ограничения", "feature:calc-validate-clear"))));
             return;
         }
 

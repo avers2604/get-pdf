@@ -50,6 +50,11 @@ FEATURES = {
     "calc-clear-print-area": ("calc", True),
     "calc-repeat-first-row": ("calc", True),
     "calc-stop-repeat-rows": ("calc", True),
+    "calc-chart-column": ("calc", True),
+    "calc-chart-line": ("calc", True),
+    "calc-validate-whole-nonnegative": ("calc", True),
+    "calc-validate-decimal-nonnegative": ("calc", True),
+    "calc-validate-clear": ("calc", True),
     "impress-duplicate-slide": ("impress", True),
 }
 
@@ -427,6 +432,24 @@ class Bridge:
             entry.frame.getComponentWindow().setFocus()
         return {}
 
+    def selected_calc_range(self, doc, max_cells, min_rows=1, min_cols=1):
+        """Require one bounded contiguous selection in the active Calc worksheet."""
+        controller = doc.getCurrentController()
+        selected = controller.getSelection()
+        if selected is None or not hasattr(selected, "getRangeAddress"):
+            raise RuntimeError("выделите один непрерывный диапазон ячеек")
+        area = selected.getRangeAddress()
+        rows = area.EndRow - area.StartRow + 1
+        cols = area.EndColumn - area.StartColumn + 1
+        if rows < min_rows or cols < min_cols or rows * cols > max_cells:
+            raise RuntimeError("нужен диапазон от %s×%s до %s ячеек" %
+                               (min_cols, min_rows, max_cells))
+        sheet = controller.getActiveSheet()
+        index = sheet.getCellRangeByPosition(0, 0, 0, 0).getRangeAddress().Sheet
+        if area.Sheet != index:
+            raise RuntimeError("выбранный диапазон не принадлежит активному листу")
+        return sheet, area
+
     def op_feature(self, request):
         entry = self.document(request)
         feature = request.get("feature")
@@ -497,6 +520,61 @@ class Bridge:
             if feature == "calc-stop-repeat-rows":
                 sheet.setPrintTitleRows(False)
                 return {}
+
+        if feature in ("calc-chart-column", "calc-chart-line"):
+            sheet, area = self.selected_calc_range(doc, max_cells=5000, min_rows=2, min_cols=2)
+            values = sheet.getCellRangeByPosition(area.StartColumn, area.StartRow,
+                                                   area.EndColumn, area.EndRow).getDataArray()
+            if not any(isinstance(value, (int, float)) and not isinstance(value, bool)
+                       for row in values for value in row):
+                raise RuntimeError("диаграмма требует хотя бы одно числовое значение")
+            charts = sheet.getCharts()
+            if charts.getCount() >= 40:
+                raise RuntimeError("на листе уже 40 диаграмм")
+            index = 1
+            while charts.hasByName("ГЭТ диаграмма %d" % index):
+                index += 1
+            name = "ГЭТ диаграмма %d" % index
+            rect = uno.createUnoStruct("com.sun.star.awt.Rectangle")
+            rect.X, rect.Y, rect.Width, rect.Height = 15000, 2000 + charts.getCount() * 8500, 14000, 8000
+            charts.addNewByName(name, rect, (area,), True, True)
+            try:
+                chart = charts.getByName(name).getEmbeddedObject()
+                service = ("com.sun.star.chart.LineDiagram" if feature == "calc-chart-line"
+                           else "com.sun.star.chart.BarDiagram")
+                diagram = chart.createInstance(service)
+                if diagram is None:
+                    raise RuntimeError("движок не поддерживает выбранный тип диаграммы")
+                if feature == "calc-chart-column":
+                    diagram.Vertical = True
+                chart.setDiagram(diagram)
+            except Exception:
+                charts.removeByName(name)
+                raise
+            return {"chart": name}
+
+        if feature in ("calc-validate-whole-nonnegative", "calc-validate-decimal-nonnegative",
+                       "calc-validate-clear"):
+            sheet, area = self.selected_calc_range(doc, max_cells=50000)
+            cells = sheet.getCellRangeByPosition(area.StartColumn, area.StartRow,
+                                                  area.EndColumn, area.EndRow)
+            validation = cells.getPropertyValue("Validation")
+            if feature == "calc-validate-clear":
+                validation.Type = uno.Enum("com.sun.star.sheet.ValidationType", "ANY")
+                validation.ShowErrorMessage = False
+            else:
+                kind = ("WHOLE" if feature == "calc-validate-whole-nonnegative" else "DECIMAL")
+                validation.Type = uno.Enum("com.sun.star.sheet.ValidationType", kind)
+                validation.Operator = uno.Enum("com.sun.star.sheet.ConditionOperator", "GREATER_EQUAL")
+                validation.Formula1 = "0"
+                validation.ShowErrorMessage = True
+                validation.ErrorTitle = "ГЭТ Документ — проверка данных"
+                validation.ErrorMessage = ("Введите целое число от 0." if kind == "WHOLE"
+                                           else "Введите число, не меньшее 0.")
+                validation.ErrorAlertStyle = uno.Enum("com.sun.star.sheet.ValidationAlertStyle", "STOP")
+            cells.setPropertyValue("Validation", validation)
+            return {"cells": (area.EndColumn - area.StartColumn + 1) *
+                    (area.EndRow - area.StartRow + 1)}
 
         if feature == "impress-duplicate-slide":
             controller = doc.getCurrentController()

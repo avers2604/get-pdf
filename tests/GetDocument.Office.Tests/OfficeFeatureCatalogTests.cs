@@ -15,7 +15,9 @@ public sealed class OfficeFeatureCatalogTests
         CollectionAssert.AreEquivalent(
             new[] { "calc-freeze-top-row", "calc-freeze-first-column", "calc-unfreeze", "calc-recalculate",
                 "calc-print-used-area", "calc-clear-print-area",
-                "calc-repeat-first-row", "calc-stop-repeat-rows" },
+                "calc-repeat-first-row", "calc-stop-repeat-rows",
+                "calc-chart-column", "calc-chart-line",
+                "calc-validate-whole-nonnegative", "calc-validate-decimal-nonnegative", "calc-validate-clear" },
             OfficeFeatureCatalog.ForKind("calc").Select(x => x.Id).ToArray());
         CollectionAssert.AreEquivalent(
             new[] { "impress-duplicate-slide" },
@@ -54,6 +56,23 @@ public sealed class OfficeFeatureCatalogTests
             Assert.AreEqual(command, OfficeFeatureCatalog.Require("calc", command, readOnly: false).Id);
             Assert.ThrowsExactly<NotSupportedException>(
                 () => OfficeFeatureCatalog.Require("writer", command, readOnly: false));
+        }
+    }
+
+    [TestMethod]
+    public void ChartAndValidationCommandsRequireEditableCalc()
+    {
+        foreach (string command in new[] { "calc-chart-column", "calc-chart-line",
+                     "calc-validate-whole-nonnegative", "calc-validate-decimal-nonnegative",
+                     "calc-validate-clear" })
+        {
+            Assert.ThrowsExactly<InvalidOperationException>(
+                () => OfficeFeatureCatalog.Require("calc", command, readOnly: true));
+            Assert.AreEqual(command, OfficeFeatureCatalog.Require("calc", command, readOnly: false).Id);
+            Assert.ThrowsExactly<NotSupportedException>(
+                () => OfficeFeatureCatalog.Require("writer", command, readOnly: false));
+            Assert.ThrowsExactly<NotSupportedException>(
+                () => OfficeFeatureCatalog.Require("impress", command, readOnly: false));
         }
     }
 
@@ -129,6 +148,9 @@ public sealed class OfficeFeatureCatalogTests
                 await calc.ExecuteFeatureAsync("calc-repeat-first-row");
                 await calc.ExecuteFeatureAsync("calc-stop-repeat-rows");
                 await calc.ExecuteFeatureAsync("calc-clear-print-area");
+                await calc.ExecuteFeatureAsync("calc-validate-whole-nonnegative");
+                await calc.ExecuteFeatureAsync("calc-validate-decimal-nonnegative");
+                await calc.ExecuteFeatureAsync("calc-validate-clear");
                 await calc.SaveAsync();
                 Assert.IsTrue(new FileInfo(xlsx).Length > 0);
                 Assert.ThrowsExactly<NotSupportedException>(() =>
