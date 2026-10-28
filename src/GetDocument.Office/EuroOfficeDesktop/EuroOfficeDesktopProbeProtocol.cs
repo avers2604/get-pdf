@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 
 namespace GetDocument.Office.EuroOfficeDesktop;
@@ -23,6 +24,43 @@ public static class EuroOfficeDesktopProbeProtocol
             "open-local", "save-as-new-revision", "export-pdf", "resize"
         };
     private const long MaxStagedDocumentBytes = 128L * 1024 * 1024;
+
+    /// <summary>
+    /// Lab-only JSON line protocol. Does not start a process and does not grant
+    /// access to files or claim a Qt/CEF editor is running. The caller must own
+    /// a verified, sandboxed native child process before passing its streams.
+    /// </summary>
+    public static async Task<EuroOfficeDesktopProbeCapabilities> ExchangeHelloAsync(
+        TextReader replies, TextWriter requests, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(replies);
+        ArgumentNullException.ThrowIfNull(requests);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string request = JsonSerializer.Serialize(new
+        {
+            command = "hello",
+            protocol = Protocol,
+            upstreamCommit = PinnedUpstreamCommit
+        });
+        await requests.WriteLineAsync(request.AsMemory(), cancellationToken);
+        await requests.FlushAsync(cancellationToken);
+
+        const int maxReplyChars = 16 * 1024;
+        var response = new StringBuilder(256);
+        var single = new char[1];
+        for (int i = 0; i < maxReplyChars; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int read = await replies.ReadAsync(single.AsMemory(), cancellationToken);
+            if (read == 0)
+                throw new InvalidDataException("Нативный хост закрыл соединение до подтверждения версии.");
+            if (single[0] == '\n')
+                return ParseHello(response.ToString().TrimEnd('\r'));
+            response.Append(single[0]);
+        }
+        throw new InvalidDataException("Ответ нативного хоста превысил допустимую длину.");
+    }
 
     public static EuroOfficeDesktopProbeCapabilities ParseHello(string json)
     {
