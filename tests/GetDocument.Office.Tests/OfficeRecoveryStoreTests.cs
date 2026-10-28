@@ -123,8 +123,16 @@ public sealed class OfficeRecoveryStoreTests
             string target = Path.Combine(Root, filename);
             using var output = File.Create(target);
             using var zip = new ZipArchive(output, ZipArchiveMode.Create);
-            using var part = new StreamWriter(zip.CreateEntry("[Content_Types].xml").Open());
-            part.Write("<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"/>");
+            using (var part = new StreamWriter(zip.CreateEntry("[Content_Types].xml").Open()))
+                part.Write("<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"/>");
+            string mainPart = Path.GetExtension(filename).ToLowerInvariant() switch
+            {
+                ".docx" => "word/document.xml",
+                ".xlsx" => "xl/workbook.xml",
+                _ => "ppt/presentation.xml"
+            };
+            using (var part = new StreamWriter(zip.CreateEntry(mainPart).Open()))
+                part.Write("<root/>");
             return target;
         }
 
