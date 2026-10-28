@@ -96,6 +96,13 @@ public sealed class LibreOfficeEditorTests
                 string pdf = Path.Combine(folder, "out.pdf");
                 await document.ExportPdfAsync(pdf);
                 Assert.IsTrue(new FileInfo(pdf).Length > 0);
+                // Crash recovery must export the live unsaved state without changing the source file.
+                byte[] beforeRecovery = File.ReadAllBytes(doc);
+                var recovery = new OfficeRecoveryStore(Path.Combine(folder, "recovery"));
+                OfficeRecoveryCopy snapshot = await recovery.CaptureAsync(doc, document.ExportRecoveryCopyAsync);
+                Assert.IsTrue(document.IsModified, "backup must not clear the unsaved marker");
+                CollectionAssert.AreEqual(beforeRecovery, File.ReadAllBytes(doc), "backup must not overwrite original");
+                Assert.AreEqual(snapshot.FilePath, recovery.FindLatest(doc)?.FilePath);
                 string copy = Path.Combine(folder, "копия.odt");
                 await document.SaveAsAsync(copy);
                 Assert.IsTrue(File.Exists(copy));
