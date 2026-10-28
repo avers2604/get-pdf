@@ -79,6 +79,61 @@ public sealed class ImageEditServiceTests
         Assert.IsFalse(File.Exists(output));
     }
 
+
+    [TestMethod]
+    public void NewJpegRevisionPreservesOriginalAndDoesNotLeaveScratch()
+    {
+        using var sandbox = TempDirectory.Create();
+        string original = Path.Combine(sandbox.Path, "input.png");
+        string output = Path.Combine(sandbox.Path, "new-revision.jpeg");
+        byte[] originalBytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAGElEQVR4nGNkYJAzYmCAIBaGKAY4QOEAACQwAXJRPwcJAAAAAElFTkSuQmCC");
+        File.WriteAllBytes(original, originalBytes);
+        ImageEditService.SaveNewRevision(original, output,
+            new ImageEditPlan(ClockwiseQuarterTurns: 1));
+
+        using var saved = NetVips.Image.NewFromFile(output);
+        Assert.AreEqual(3, saved.Width);
+        Assert.AreEqual(4, saved.Height);
+        CollectionAssert.AreEqual(originalBytes, File.ReadAllBytes(original));
+        Assert.AreEqual(0, Directory.GetDirectories(sandbox.Path,
+            ".get-document-image-*").Length);
+    }
+
+    [TestMethod]
+    public void ExportReclaimsOnlyOldOwnedScratchAndNeverRemovesUserDocuments()
+    {
+        using var sandbox = TempDirectory.Create();
+        string original = Path.Combine(sandbox.Path, "input.png");
+        string output = Path.Combine(sandbox.Path, "revision.png");
+        File.WriteAllBytes(original, Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAGElEQVR4nGNkYJAzYmCAIBaGKAY4QOEAACQwAXJRPwcJAAAAAElFTkSuQmCC"));
+
+        string oldScratch = Path.Combine(sandbox.Path,
+            ".get-document-image-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(oldScratch);
+        string marker = Path.Combine(oldScratch, ImageExportScratch.LeaseFileName);
+        File.WriteAllText(marker, ImageExportScratch.LeaseMarker,
+            System.Text.Encoding.ASCII);
+        File.WriteAllBytes(Path.Combine(oldScratch, "stage.png"), [1, 2, 3]);
+        File.SetLastWriteTimeUtc(marker, DateTime.UtcNow.AddDays(-3));
+
+        string document = Path.Combine(sandbox.Path, "user-invoice.docx");
+        string legacyTemp = Path.Combine(sandbox.Path,
+            ".get-image-" + Guid.NewGuid().ToString("N") + ".png");
+        File.WriteAllText(document, "business content");
+        File.WriteAllText(legacyTemp, "unowned temp");
+
+        ImageEditService.SaveNewRevision(original, output, new ImageEditPlan(FlipHorizontal: true));
+
+        Assert.IsFalse(Directory.Exists(oldScratch));
+        Assert.IsTrue(File.Exists(output));
+        Assert.AreEqual("business content", File.ReadAllText(document));
+        Assert.AreEqual("unowned temp", File.ReadAllText(legacyTemp));
+        Assert.AreEqual(0, Directory.GetDirectories(sandbox.Path,
+            ".get-document-image-*").Length);
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public string Path { get; }
