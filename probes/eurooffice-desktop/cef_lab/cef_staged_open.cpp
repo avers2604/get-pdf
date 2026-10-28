@@ -381,8 +381,10 @@ int main(int argc, char** argv) {
     // No URL, arbitrary filename, output path, save or print commands.
     const bool osrLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-wayland-osr-lab") == 0;
+    const bool imeCommitLab = argc == 6 &&
+        std::strcmp(argv[1], "--open-staged-wayland-ime-commit-lab") == 0;
     const bool keyboardLab = argc == 6 &&
-        std::strcmp(argv[1], "--open-staged-wayland-keyboard-lab") == 0;
+        (std::strcmp(argv[1], "--open-staged-wayland-keyboard-lab") == 0 || imeCommitLab);
     const bool clickLab = argc == 6 &&
         (std::strcmp(argv[1], "--open-staged-wayland-click-lab") == 0 || keyboardLab);
     const bool inputLab = argc == 6 &&
@@ -397,6 +399,9 @@ int main(int argc, char** argv) {
 #endif
 #ifndef GETDOC_GD31J16_KEYBOARD_LAB
     if (keyboardLab) return 2;
+#endif
+#ifndef GETDOC_GD31J17_IME_COMMIT_LAB
+    if (imeCommitLab) return 2;
 #endif
     const bool ordinaryLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-lab") == 0;
@@ -417,7 +422,8 @@ int main(int argc, char** argv) {
     BoundedStreamOutput streamOutput;
     if (streamLab && !streamOutput.Enable()) return 10;
 #ifdef GETDOC_GD31J14_POINTER_INPUT
-    OsrInputPump inputPump(streamSession, streamTab, clickLab, keyboardLab);
+    OsrInputPump inputPump(streamSession, streamTab, clickLab,
+                           keyboardLab, imeCommitLab);
     if (inputLab && !inputPump.Enable()) return 10;
 #endif
 #else
