@@ -23,4 +23,9 @@ if(Python3_Interpreter_FOUND)
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../test_qt_display.py"
             "$<TARGET_FILE:getdoc-eurooffice-qt-probe>")
   set_tests_properties(gd31j5_qt_offscreen_display PROPERTIES TIMEOUT 45)
+  add_test(
+    NAME gd31j8_qt_tab_ipc
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../test_qt_ipc.py"
+            "$<TARGET_FILE:getdoc-eurooffice-qt-probe>")
+  set_tests_properties(gd31j8_qt_tab_ipc PROPERTIES TIMEOUT 45)
 endif()
