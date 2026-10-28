@@ -22,6 +22,33 @@ constexpr int kMaximumInputLine = 4096;
 constexpr int kMaximumInputMessages = 128;
 constexpr int kRatePerSecond = 30;
 constexpr int kCefLeftButton = 1 << 4; // Verified upstream GetCefModifiers Qt::LeftButton
+constexpr int kCefShift = 1 << 1;
+// Explicit Windows virtual-key whitelist. No Ctrl/Alt/Meta shortcuts.
+int ApprovedNavigationVk(const QString& key) {
+    if (key == "ArrowLeft") return 37;
+    if (key == "ArrowUp") return 38;
+    if (key == "ArrowRight") return 39;
+    if (key == "ArrowDown") return 40;
+    if (key == "Home") return 36;
+    if (key == "End") return 35;
+    if (key == "PageUp") return 33;
+    if (key == "PageDown") return 34;
+    if (key == "Escape") return 27;
+    if (key == "Backspace") return 8;
+    if (key == "Delete") return 46;
+    if (key == "Enter") return 13;
+    if (key == "Tab") return 9;
+    return 0;
+}
+bool AllowedCommittedCharacter(int code) {
+    return code >= 0x20 && code <= 0xffff &&
+           !(code >= 0x7f && code <= 0x9f) &&
+           !(code >= 0xd800 && code <= 0xdfff) &&
+           !(code >= 0x200b && code <= 0x200f) &&
+           !(code >= 0x202a && code <= 0x202e) &&
+           !(code >= 0x2060 && code <= 0x2069) &&
+           code != 0xfeff;
+}
 
 bool ExactKeys(const QJsonObject& object, std::initializer_list<const char*> fields) {
     if (object.size() != static_cast<int>(fields.size())) return false;
@@ -56,9 +83,10 @@ bool CalculatePosition(QCefView* view, const QJsonObject& request, int& x, int& 
 }
 } // namespace
 
-OsrInputPump::OsrInputPump(QString sessionId, QString tabId, bool clicksApproved)
+OsrInputPump::OsrInputPump(QString sessionId, QString tabId, bool clicksApproved,
+                           bool keyboardApproved)
     : m_sessionId(std::move(sessionId)), m_tabId(std::move(tabId)),
-      m_clicksApproved(clicksApproved) {}
+      m_clicksApproved(clicksApproved), m_keyboardApproved(keyboardApproved) {}
 
 bool OsrInputPump::Enable() {
     const int flags = ::fcntl(STDIN_FILENO, F_GETFL);
@@ -156,8 +184,35 @@ bool OsrInputPump::Dispatch(const QByteArray& bytes,
         editor->SendMouseClickEvent(x, y, 1, true, 0, m_clickCount);
         m_leftDown = false;
         m_clickCount = 1;
+    } else if (command == "nav-key" && m_keyboardApproved &&
+               ExactKeys(request, {"command", "key", "protocol", "sequence",
+                                   "sessionId", "shift", "tabId"})) {
+        const int vk = ApprovedNavigationVk(request.value("key").toString());
+        if (!m_focused || m_leftDown || vk == 0 || !request.value("shift").isBool())
+            return false;
+        const int modifiers = request.value("shift").toBool() ? kCefShift : 0;
+        // This is ONE atomic key down/up pair on the Qt owner thread.
+        editor->SendKeyEvent(0, vk, modifiers, L"");
+        editor->SendKeyEvent(2, vk, modifiers, L"");
+    } else if (command == "text-char" && m_keyboardApproved &&
+               ExactKeys(request, {"codePoint", "command", "protocol",
+                                   "sequence", "sessionId", "tabId"})) {
+        if (!m_focused || m_leftDown ||
+            !BoundedInteger(request.value("codePoint"), 0x20, 0xffff))
+            return false;
+        const int code = request.value("codePoint").toInt();
+        if (!AllowedCommittedCharacter(code)) return false;
+        const wchar_t character = static_cast<wchar_t>(code);
+        // Upstream QCefView::inputMethodEvent uses 0/3/2 with zero VK.
+        // Single committed BMP codepoint ONLY; no IME preedit/candidate list.
+        std::wstring units(2, character);
+        units.push_back(0);
+        editor->SendKeyEvent(0, 0, 0, units);
+        editor->SendKeyEvent(3, 0, 0, units);
+        editor->SendKeyEvent(2, 0, 0, units);
     } else {
-        // Keyboard, IME, clipboard, file paths, JS and direct print forbidden.
+        // No generic key codes, Ctrl/Alt/Meta shortcuts, IME composition,
+        // clipboard, arbitrary strings, filenames, JS or printing commands.
         return false;
     }
     ++m_lastSequence;

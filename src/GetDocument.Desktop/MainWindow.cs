@@ -690,7 +690,7 @@ public sealed class MainWindow : Window
         string stagingRoot, string syntheticFixture,
         Guid tabId, Guid sessionId, bool labApproved,
         CancellationToken cancellationToken, bool pointerInputLabApproved = false,
-        bool pointerClickLabApproved = false)
+        bool pointerClickLabApproved = false, bool keyboardLabApproved = false)
     {
         Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
         if (!labApproved)
@@ -698,14 +698,20 @@ public sealed class MainWindow : Window
         if (pointerClickLabApproved && !pointerInputLabApproved)
             throw new NotSupportedException(
                 "Клики требуют отдельного лабораторного разрешения на ввод мыши.");
+        if (keyboardLabApproved && !pointerClickLabApproved)
+            throw new NotSupportedException(
+                "GD-31J.16 требует отдельного разрешения на клики и тестовый ввод.");
         if (_nativeTabViews.ContainsKey(tabId) || _nativeOsrLabStreams.ContainsKey(tabId) ||
             _nativeOsrLabTabs.Contains(tabId))
             throw new InvalidOperationException("Идентификатор CEF лабораторной вкладки уже занят.");
         // Preflight all file and process gates BEFORE exposing a tab.
-        _ = pointerClickLabApproved
-            ? EuroOfficeOsrStreamProcessLab.CreateClickStartInfo(approvedHost,
+        _ = keyboardLabApproved
+            ? EuroOfficeOsrStreamProcessLab.CreateKeyboardStartInfo(approvedHost,
                 stagingRoot, syntheticFixture, sessionId, tabId, labApproved)
-            : pointerInputLabApproved
+            : pointerClickLabApproved
+                ? EuroOfficeOsrStreamProcessLab.CreateClickStartInfo(approvedHost,
+                    stagingRoot, syntheticFixture, sessionId, tabId, labApproved)
+                : pointerInputLabApproved
                 ? EuroOfficeOsrStreamProcessLab.CreateInputStartInfo(approvedHost,
                     stagingRoot, syntheticFixture, sessionId, tabId, labApproved)
                 : EuroOfficeOsrStreamProcessLab.CreateStartInfo(approvedHost,
@@ -745,7 +751,8 @@ public sealed class MainWindow : Window
                                     DetachNativeOsrLabInput(tabId, sessionId, old);
                             });
                     },
-                    labApproved, lifetime.Token, pointerClickLabApproved)
+                    labApproved, lifetime.Token, pointerClickLabApproved,
+                    keyboardLabApproved)
                 : await EuroOfficeOsrStreamProcessLab.RunAsync(
                     approvedHost, stagingRoot, syntheticFixture, sessionId, tabId,
                     frame => sink.PreviewAsync(tabId, sessionId, frame, lifetime.Token),
