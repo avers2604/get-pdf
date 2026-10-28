@@ -52,6 +52,20 @@ public sealed class ImageExportScratchTests
     }
 
     [TestMethod]
+    public void CrashAfterPublishReclaimsOnlyEmptyOwnedFolder()
+    {
+        using var fixture = new Fixture();
+        string oldScratch = fixture.MakeAbandonedScratch(".png");
+        string published = Path.Combine(fixture.Path, "published.png");
+        File.Move(Path.Combine(oldScratch, "stage.png"), published, overwrite: false);
+
+        ImageExportScratch.CleanupAbandoned(fixture.Path, TimeSpan.FromHours(24));
+
+        Assert.IsFalse(Directory.Exists(oldScratch));
+        CollectionAssert.AreEqual(new byte[] { 4, 5, 6 }, File.ReadAllBytes(published));
+    }
+
+    [TestMethod]
     public void ActiveLeaseCannotBeReclaimedEvenWithZeroAge()
     {
         using var fixture = new Fixture();
