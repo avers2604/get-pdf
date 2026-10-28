@@ -33,6 +33,15 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_qt_ipc_static_contract_is_checked_without_running_qt(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [item.name for item in steps]
+        self.assertIn("qt-ipc-contract-tests", names)
+        self.assertLess(names.index("qt-ipc-contract-tests"),
+                        names.index("solution-restore"))
+        step = next(item for item in steps if item.name == "qt-ipc-contract-tests")
+        self.assertIn("test_qt_ipc_contract.py", step.command)
+
     def test_native_sdk_event_contract_will_be_checked_in_local_acceptance(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [item.name for item in steps]
