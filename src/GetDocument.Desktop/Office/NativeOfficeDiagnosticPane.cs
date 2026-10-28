@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using GetDocument.Office.EuroOfficeDesktop;
 
 namespace GetDocument.Desktop.Office;
@@ -24,6 +25,15 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     {
         TextWrapping = TextWrapping.Wrap,
         Opacity = 0.8
+    };
+
+    // A decoded, bounded Qt painter preview, not a CEF screenshot or editor.
+    private readonly Image _preview = new()
+    {
+        Stretch = Stretch.Uniform,
+        MaxWidth = 640,
+        MaxHeight = 360,
+        IsVisible = false
     };
 
     private readonly TextBlock _connection = new()
@@ -49,6 +59,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         });
         layout.Children.Add(_state);
         layout.Children.Add(_connection);
+        layout.Children.Add(_preview);
         layout.Children.Add(_details);
         layout.Children.Add(new TextBlock
         {
@@ -65,8 +76,37 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     public void SetTransportConnected() =>
         _connection.Text = "Qt IPC подключён. Редактор CEF и документ не подтверждены.";
 
-    public void SetTransportLost() =>
+    public void SetTransportLost()
+    {
         _connection.Text = "Связь с Qt-хостом потеряна; правки не восстановлены.";
+        _preview.IsVisible = false;
+        if (_preview.Source is IDisposable old) old.Dispose();
+        _preview.Source = null;
+    }
+
+    /// <summary>
+    /// Display only the validated, bounded Qt painter image on UI thread.
+    /// No native HWND/XID or Qt QWidget* is attached to Avalonia.
+    /// </summary>
+    public void SetDiagnosticFrame(EuroOfficeNativeDiagnosticFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        if (frame.CefRendered || frame.OfficeDocumentVerified ||
+            frame.RevisionCommitted || frame.PrintApproved)
+            throw new InvalidDataException("Нельзя показывать неподтверждённый офисный кадр.");
+        using var input = new MemoryStream(frame.PngBytes, writable: false);
+        var bitmap = new Bitmap(input);
+        if (bitmap.PixelSize.Width != frame.Width ||
+            bitmap.PixelSize.Height != frame.Height)
+        {
+            bitmap.Dispose();
+            throw new InvalidDataException("Размеры диагностического кадра не совпадают.");
+        }
+        if (_preview.Source is IDisposable previous) previous.Dispose();
+        _preview.Source = bitmap;
+        _preview.IsVisible = true;
+        _connection.Text = "Доставлен тестовый кадр Qt (без CEF и офисного документа).";
+    }
 
     public void Update(EuroOfficeNativeWorkspaceTabState state)
     {
