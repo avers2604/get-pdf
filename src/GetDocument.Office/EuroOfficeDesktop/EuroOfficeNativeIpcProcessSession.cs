@@ -7,7 +7,7 @@ namespace GetDocument.Office.EuroOfficeDesktop;
 /// No CEF, native editor window, document path, save/print or access grant is
 /// made through this process. Do not wire into production GET Document tabs.
 /// </summary>
-public sealed class EuroOfficeNativeIpcProcessSession : IAsyncDisposable
+public sealed class EuroOfficeNativeIpcProcessSession : IEuroOfficeNativeSessionTransport
 {
     private readonly Process _process;
     private readonly EuroOfficeNativeTabIpc _channel;
@@ -71,6 +71,16 @@ public sealed class EuroOfficeNativeIpcProcessSession : IAsyncDisposable
     {
         ThrowIfDisposed();
         return _channel.ResizeAsync(width, height, scale, cancellationToken);
+    }
+
+    /// <summary>
+    /// Completes when the diagnostic Qt-only process exits. The coordinator
+    /// uses this solely for host-loss detection, never as Office success ACK.
+    /// </summary>
+    public Task WaitForExitAsync(CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        return _process.WaitForExitAsync(cancellationToken);
     }
 
     public async Task CloseAsync(CancellationToken cancellationToken)
