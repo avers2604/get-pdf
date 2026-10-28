@@ -21,6 +21,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -30,6 +31,18 @@
 #include "qcefview.h"
 
 namespace {
+// OnLoaded is a CEF-view event, NOT an Office file loaded/saved acknowledgement.
+// Atomic because the upstream CEF callback's threading is not yet certified.
+class SyntheticEditorView final : public QCefView {
+public:
+    using QCefView::QCefView;
+    std::atomic<bool> cefViewLoaded{false};
+    void OnLoaded() override {
+        cefViewLoaded.store(true, std::memory_order_release);
+        QCefView::OnLoaded();
+    }
+};
+
 constexpr char kManifest[] = "gd31j6-fixture-manifest.json";
 constexpr char kManifestSchema[] = "gd31j6-office-fixtures/1";
 
@@ -190,7 +203,7 @@ int main(int argc, char** argv) {
         "Печать, WORM, корпоративные файлы и сервер запрещены."));
     banner->setWordWrap(true);
     layout->addWidget(banner);
-    QPointer<QCefView> view = new QCefView(&window, QSize(980, 620));
+    QPointer<SyntheticEditorView> view = new SyntheticEditorView(&window, QSize(980, 620));
     layout->addWidget(view);
     view->Create(&manager, cvwtEditor);
     if (!view || !view->GetCefView()) {
@@ -216,8 +229,12 @@ int main(int argc, char** argv) {
     const int exitCode = app.exec();
     if (view && viewId > 0)
         manager.DestroyCefView(viewId, false);
+    // Capture callback state before manager tears down the native editor.
+    // A browser callback does not prove OOXML was parsed/rendered correctly.
+    const bool viewCallback = view && view->cefViewLoaded.load(std::memory_order_acquire);
     manager.CloseApplication();
-
-    std::puts("GD31J6_OPEN_REQUEST_DISPATCHED_NOT_VERIFIED");
+    std::puts(viewCallback
+        ? "GD31J6_CEF_VIEW_CALLBACK_OBSERVED_DOCUMENT_UNVERIFIED"
+        : "GD31J6_OPEN_REQUEST_DISPATCHED_NOT_VERIFIED");
     return exitCode;
 }
