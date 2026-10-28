@@ -17,6 +17,10 @@ public static class OfficeFeatureCatalog
         new("calc-freeze-first-column", "Закрепить первый столбец", "calc", false),
         new("calc-unfreeze", "Снять закрепление", "calc", false),
         new("calc-recalculate", "Пересчитать все формулы", "calc", true),
+        new("calc-print-used-area", "Печатать заполненную область", "calc", true),
+        new("calc-clear-print-area", "Сбросить область печати", "calc", true),
+        new("calc-repeat-first-row", "Повторять первую строку при печати", "calc", true),
+        new("calc-stop-repeat-rows", "Не повторять строки при печати", "calc", true),
         new("impress-duplicate-slide", "Дублировать слайд", "impress", true)
     ];
 
