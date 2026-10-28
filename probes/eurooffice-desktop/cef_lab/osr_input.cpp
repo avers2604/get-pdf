@@ -5,6 +5,7 @@
 #endif
 #include "cefview.h"
 #include "qcefview.h"
+#include <QChar>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
