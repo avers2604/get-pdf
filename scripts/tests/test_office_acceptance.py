@@ -33,6 +33,15 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_native_sdk_event_contract_will_be_checked_in_local_acceptance(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [item.name for item in steps]
+        self.assertIn("native-event-contract-tests", names)
+        self.assertLess(names.index("native-event-contract-tests"),
+                        names.index("solution-restore"))
+        step = next(item for item in steps if item.name == "native-event-contract-tests")
+        self.assertIn("test_native_event_contract.py", step.command)
+
     def test_qt_display_evidence_validator_is_checked_before_dotnet(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
