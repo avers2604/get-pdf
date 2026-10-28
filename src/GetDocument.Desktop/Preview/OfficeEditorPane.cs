@@ -37,6 +37,11 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     private readonly Button _save;
     private readonly Button _undo;
     private readonly Button _redo;
+    private readonly OfficeRecoveryStore _recovery = new();
+    private readonly DispatcherTimer _recoveryTimer = new() { Interval = TimeSpan.FromSeconds(60) };
+    private readonly SemaphoreSlim _persistence = new(1, 1);
+    private readonly Border _recoveryBanner = new() { IsVisible = false };
+    private bool _checkpointing;
     private ComboBox? _font;
     private ComboBox? _size;
     private ComboBox? _style;
@@ -49,6 +54,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     {
         _path = Path.GetFullPath(path);
         _status = status;
+        _recoveryTimer.Tick += (_, _) => _ = CheckpointAsync();
 
         _save = TextButton("Сохранить", Icons.Save, "Сохранить документ (Ctrl+S)", () => _ = SaveAsync());
         _undo = IconButton(Icons.Undo, "Отменить (Ctrl+Z)", () => Dispatch(".uno:Undo"));
@@ -71,6 +77,8 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
         header.Classes.Add("header");
         SetDock(header, Dock.Top);
         Children.Add(header);
+        DockPanel.SetDock(_recoveryBanner, Dock.Top);
+        Children.Add(_recoveryBanner);
 
         var body = new Grid();
         _host.IsVisible = false;
@@ -103,6 +111,10 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     public event Action? PrintRequested;
     /// <summary>Close was asked for from inside the document (Ctrl+W / Ctrl+F4).</summary>
     public event Action? CloseRequested;
+    /// <summary>Open a verified recovery copy in another GET Document tab, leaving the source untouched.</summary>
+    public event Action<string>? RecoveryCopyRequested;
+
+    private bool SupportsRecovery => Path.GetExtension(_path).ToLowerInvariant() is ".docx" or ".xlsx" or ".pptx";
 
     private async Task StartAsync()
     {
@@ -137,6 +149,18 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             _status(document.ReadOnly
                 ? $"«{Path.GetFileName(_path)}» открыт только для чтения: файл занят или защищён. Изменения можно сохранить копией."
                 : $"«{Path.GetFileName(_path)}» открыт для редактирования.");
+            if (SupportsRecovery)
+            {
+                try
+                {
+                    OfficeRecoveryCopy? copy = await Task.Run(() => _recovery.FindLatest(_path));
+                    if (!_disposed && copy is not null) ShowRecoveryBanner(copy);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _status("Невозможно проверить аварийные копии: " + ex.Message);
+                }
+            }
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or
                                    UnauthorizedAccessException or NotSupportedException)
@@ -378,6 +402,8 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
         if (_disposed) return;
         _save.Classes.Set("primary", modified);
         _save.Classes.Set("ghost", !modified);
+        if (modified && SupportsRecovery) _recoveryTimer.Start();
+        else _recoveryTimer.Stop();
         ModifiedChanged?.Invoke(modified);
     }
 
@@ -414,6 +440,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     private void OnClosedByOffice()
     {
         if (_disposed || _document is null) return;
+        _recoveryTimer.Stop();
         _document = null;
         SetEnabled(false);
         ShowMessage("Редактор закрылся", "LibreOffice неожиданно завершил работу. Закройте вкладку и откройте документ снова — " +
@@ -447,15 +474,72 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             await SaveCopyAsync();
             return;
         }
+        await _persistence.WaitAsync();
         try
         {
+            if (_disposed) return;
             await document.SaveAsync();
+            // Deleting old recovery data is allowed only after the original save succeeded.
+            if (SupportsRecovery)
+            {
+                try { _recovery.Discard(_path); _recoveryBanner.IsVisible = false; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _status("Сохранено, но не удалось удалить старые аварийные копии: " + ex.Message);
+                    return;
+                }
+            }
             _status($"Сохранено: {Path.GetFileName(_path)} · {DateTime.Now:HH:mm}");
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException)
         {
             _status("Не удалось сохранить: " + ex.Message);
         }
+        finally { _persistence.Release(); }
+    }
+
+    private async Task CheckpointAsync()
+    {
+        if (_checkpointing || _disposed || _document is not { IsModified: true, ReadOnly: false } document || !SupportsRecovery)
+            return;
+        _checkpointing = true;
+        try
+        {
+            await _persistence.WaitAsync();
+            try
+            {
+                if (_disposed || !document.IsModified) return;
+                await _recovery.CaptureAsync(_path, document.ExportRecoveryCopyAsync);
+            }
+            finally { _persistence.Release(); }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or
+                                   UnauthorizedAccessException or InvalidDataException)
+        {
+            if (!_disposed) _status("Не удалось создать аварийную копию: " + ex.Message);
+        }
+        finally { _checkpointing = false; }
+    }
+
+    private void ShowRecoveryBanner(OfficeRecoveryCopy copy)
+    {
+        var bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(16, 6) };
+        bar.Children.Add(new TextBlock
+        {
+            Text = $"Найдена аварийная копия от {copy.CapturedUtc.ToLocalTime():dd.MM HH:mm}. Исходный файл не изменён.",
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        var open = new Button { Content = "Открыть копию", MinHeight = 32 };
+        open.Classes.Add("primary");
+        open.Click += (_, _) => { _recoveryBanner.IsVisible = false; RecoveryCopyRequested?.Invoke(copy.FilePath); };
+        bar.Children.Add(open);
+        var dismiss = new Button { Content = "Скрыть", MinHeight = 32 };
+        dismiss.Classes.Add("ghost");
+        dismiss.Click += (_, _) => _recoveryBanner.IsVisible = false;
+        bar.Children.Add(dismiss);
+        _recoveryBanner.Child = bar;
+        _recoveryBanner.Classes.Add("header");
+        _recoveryBanner.IsVisible = true;
     }
 
     private async Task SaveCopyAsync()
@@ -560,6 +644,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _recoveryTimer.Stop();
         var document = _document;
         _document = null;
         if (document is not null) _ = document.CloseAsync();
