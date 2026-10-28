@@ -429,7 +429,8 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     {
         if (!_labFocused || _labButtonHeld || _labInput is not { ImeCommitLabApproved: true })
             throw new InvalidOperationException("CEF IME Lab не в фокусе.");
-        _imeComposition?.Begin();
+        (_imeComposition ?? throw new NotSupportedException(
+            "IME Lab input method adapter не подключён.")).Begin();
     }
 
     internal void UpdateImeLabComposition(string preedit) =>
