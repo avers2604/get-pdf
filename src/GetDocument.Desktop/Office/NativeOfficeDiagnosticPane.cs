@@ -16,6 +16,7 @@ namespace GetDocument.Desktop.Office;
 internal sealed class NativeOfficeDiagnosticPane : Border
 {
     private EuroOfficeOsrLabInputChannel? _labInput;
+    private Action? _onLabInputFailure;
     private bool _labFocused;
     private int _imageWidth, _imageHeight;
     private long _lastMoveTimestamp;
@@ -156,11 +157,14 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     }
 
     /// <summary>Explicitly attached only to a SHA-approved synthetic OSR process.</summary>
-    public void AttachOsrLabInput(EuroOfficeOsrLabInputChannel input)
+    public void AttachOsrLabInput(EuroOfficeOsrLabInputChannel input,
+        Action onInputFailure)
     {
         ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(onInputFailure);
         DetachOsrLabInput();
         _labInput = input;
+        _onLabInputFailure = onInputFailure;
         _connection.Text = input.ClickLabApproved
             ? "Wayland CEF: лабораторные клики, двойной клик и выделение разрешены. " +
               "Клавиатура, IME, буфер обмена и сохранение запрещены."
@@ -174,6 +178,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             return; // late callback from an older laboratory generation
         _labFocused = false;
         _labInput = null;
+        _onLabInputFailure = null;
         _lastMoveTimestamp = 0;
         _labButtonHeld = false;
         _capturedLabPointer?.Capture(null);
@@ -349,7 +354,10 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     private void FailLabInput(Exception exception)
     {
         // Never claim a CEF action succeeded after a broken pipe.
+        // Terminate the associated child process, not only the UI controls.
+        var terminate = _onLabInputFailure;
         DetachOsrLabInput();
+        terminate?.Invoke();
         _connection.Text = "Лабораторный ввод отключён: " +
             exception.GetType().Name + ". Документ не проверен.";
     }
