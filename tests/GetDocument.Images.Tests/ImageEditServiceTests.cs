@@ -115,8 +115,11 @@ public sealed class ImageEditServiceTests
         string marker = Path.Combine(oldScratch, ImageExportScratch.LeaseFileName);
         File.WriteAllText(marker, ImageExportScratch.LeaseMarker,
             System.Text.Encoding.ASCII);
-        File.WriteAllBytes(Path.Combine(oldScratch, "stage.png"), [1, 2, 3]);
-        File.SetLastWriteTimeUtc(marker, DateTime.UtcNow.AddDays(-3));
+        string staged = Path.Combine(oldScratch, "stage.png");
+        File.WriteAllBytes(staged, [1, 2, 3]);
+        DateTime abandoned = DateTime.UtcNow.AddDays(-3);
+        File.SetLastWriteTimeUtc(staged, abandoned);
+        File.SetLastWriteTimeUtc(marker, abandoned);
 
         string document = Path.Combine(sandbox.Path, "user-invoice.docx");
         string legacyTemp = Path.Combine(sandbox.Path,
