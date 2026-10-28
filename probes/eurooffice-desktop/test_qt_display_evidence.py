@@ -21,7 +21,7 @@ def make_report(*, manual=False, screen_count=1, switched=0, focus=0):
             {"width": 1920, "height": 1080, "devicePixelRatio": 1.5,
              "logicalDpi": 120.0} for _ in range(screen_count)],
         "windowEvents": {"show": 1, "resize": 2, "move": 2,
-                         "focus": focus, "screenChanged": switched},
+                         "focus": focus, "screenChanged": switched, "dpiChanged": 0},
     }
 
 
