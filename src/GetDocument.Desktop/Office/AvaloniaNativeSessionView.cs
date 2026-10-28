@@ -10,26 +10,31 @@ namespace GetDocument.Desktop.Office;
 /// </summary>
 internal sealed class AvaloniaNativeSessionView(MainWindow window) : IEuroOfficeNativeSessionView
 {
-    private static Task OnUiAsync(Action action, CancellationToken token)
+    private static async Task OnUiAsync(Action action, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (Dispatcher.UIThread.CheckAccess())
         {
             action();
-            return Task.CompletedTask;
+            return;
         }
+        // UI dispatch is bounded too: closing the window must not leave a
+        // native Qt process waiting for an unprocessed status callback.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(5));
+        CancellationToken uiToken = deadline.Token;
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Dispatcher.UIThread.Post(() =>
         {
             try
             {
-                token.ThrowIfCancellationRequested();
+                uiToken.ThrowIfCancellationRequested();
                 action();
                 completion.TrySetResult();
             }
             catch (Exception ex) { completion.TrySetException(ex); }
         });
-        return completion.Task.WaitAsync(token);
+        await completion.Task.WaitAsync(uiToken);
     }
 
     private static async Task<T> OnUiAsync<T>(Func<T> callback, CancellationToken token)
