@@ -35,7 +35,7 @@ internal sealed class AvaloniaNativeSessionView(MainWindow window) : IEuroOffice
     private static async Task<T> OnUiAsync<T>(Func<T> callback, CancellationToken token)
     {
         T result = default!;
-        await OnUiAsync(() => result = callback(), token);
+        await OnUiAsync((Action)(() => { result = callback(); }), token);
         return result;
     }
 
