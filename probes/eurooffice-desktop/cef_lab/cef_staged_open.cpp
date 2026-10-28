@@ -378,16 +378,26 @@ int main(int argc, char** argv) {
     // No URL, arbitrary filename, output path, save or print commands.
     const bool osrLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-wayland-osr-lab") == 0;
+    const bool streamLab = argc == 6 &&
+        std::strcmp(argv[1], "--open-staged-wayland-stream-lab") == 0;
     const bool ordinaryLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-lab") == 0;
-    if (!ordinaryLab && !osrLab) return 2;
+    if (!ordinaryLab && !osrLab && !streamLab) return 2;
 #ifndef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
-    if (osrLab) return 2;
+    if (osrLab || streamLab) return 2;
 #else
-    // The current pinned SDK enables CEF windowless rendering ONLY on
-    // QT_QPA_PLATFORM=wayland. Windows and X11 use SetAsChild native windows.
-    // Do not change QT_QPA_PLATFORM here; require an approved OS lab setup.
-    if (osrLab && qgetenv("QT_QPA_PLATFORM") != "wayland") return 9;
+    // This pinned SDK supports CEF windowless rendering ONLY on Wayland.
+    // Do not set QT_QPA_PLATFORM from the executable: verify lab isolation.
+    if ((osrLab || streamLab) && qgetenv("QT_QPA_PLATFORM") != "wayland") return 9;
+#if defined(__linux__)
+    const QString streamSession = streamLab ? QString::fromLatin1(argv[4]) : QString();
+    const QString streamTab = streamLab ? QString::fromLatin1(argv[5]) : QString();
+    if (streamLab && (!Guid32(streamSession) || !Guid32(streamTab))) return 2;
+    BoundedStreamOutput streamOutput;
+    if (streamLab && !streamOutput.Enable()) return 10;
+#else
+    if (streamLab) return 2;
+#endif
 #endif
     const QString staging = QString::fromLocal8Bit(argv[2]);
     const QString fixtureName = QString::fromLocal8Bit(argv[3]);
@@ -400,7 +410,7 @@ int main(int argc, char** argv) {
 
     QApplication app(argc, argv);
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
-    if (osrLab && app.platformName() != "wayland") return 9;
+    if ((osrLab || streamLab) && app.platformName() != "wayland") return 9;
 #endif
     QTemporaryDir profile(QDir::tempPath() + "/get-document-gd31j6-XXXXXX");
     if (!profile.isValid()) return 4;
@@ -429,7 +439,7 @@ int main(int argc, char** argv) {
     layout->addWidget(banner);
     QPointer<SyntheticEditorView> view = new SyntheticEditorView(&window, QSize(980, 620));
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
-    if (osrLab) view->EnableSyntheticOsrCapture();
+    if (osrLab || streamLab) view->EnableSyntheticOsrCapture(streamLab);
 #endif
     layout->addWidget(view);
     view->Create(&manager, cvwtEditor);
@@ -456,11 +466,44 @@ int main(int argc, char** argv) {
     // app.exec() does not necessarily pump Chromium: schedule CEF work on the
     // Qt owner thread, NEVER from OnPaint itself (reentrancy is unsafe).
     QTimer cefWorkPump;
-    if (osrLab) {
+    if (osrLab || streamLab) {
         QObject::connect(&cefWorkPump, &QTimer::timeout, &app,
                          [&cef]() { cef.DoMessageLoopEvent(); });
         cefWorkPump.start(10);
     }
+#if defined(__linux__)
+    int framesProduced = 0;
+    quint64 observedRevision = 0;
+    bool pipeHealthy = true;
+    QTimer pipeDrainTimer;
+    QTimer frameSampleTimer;
+    if (streamLab) {
+        QObject::connect(&pipeDrainTimer, &QTimer::timeout, &app, [&]() {
+            if (!streamOutput.Drain()) {
+                pipeHealthy = false;
+                app.quit();
+            }
+        });
+        pipeDrainTimer.start(10);
+        QObject::connect(&frameSampleTimer, &QTimer::timeout, &app, [&]() {
+            // One latest frame, <= 8 samples, no buffered frame buildup.
+            if (!view || !pipeHealthy || framesProduced >= 8 ||
+                streamOutput.HasPending()) return;
+            const QImage newest = view->TakeLatestStreamFrame(observedRevision);
+            if (newest.isNull()) return;
+            QByteArray png;
+            QBuffer buffer(&png);
+            if (!buffer.open(QIODevice::WriteOnly) ||
+                !newest.save(&buffer, "PNG") ||
+                png.size() <= 0 || png.size() > 48 * 1024)
+                return;
+            if (streamOutput.Queue(StreamFrameReceipt(
+                    streamSession, streamTab, framesProduced + 1, newest, png)))
+                ++framesProduced;
+        });
+        frameSampleTimer.start(500); // <= 2 frames/sec
+    }
+#endif
 #endif
 
     // No success acknowledgement is available yet. Timeout merely limits the
@@ -469,6 +512,12 @@ int main(int argc, char** argv) {
     const int exitCode = app.exec();
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
     cefWorkPump.stop();
+#if defined(__linux__)
+    if (streamLab) {
+        frameSampleTimer.stop();
+        pipeDrainTimer.stop();
+    }
+#endif
 #endif
     // Snapshot BEFORE any CEF/Qt destroy callback can invalidate the widget.
     // A browser callback does not prove OOXML was parsed/rendered correctly.
@@ -482,6 +531,26 @@ int main(int argc, char** argv) {
         manager.DestroyCefView(viewId, false);
     manager.SetEventListener(nullptr);
     manager.CloseApplication();
+
+#if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) && defined(__linux__)
+    if (streamLab) {
+        // No legacy stdout diagnostic markers in this IPC mode. The reader
+        // expects exactly bounded frame JSONL messages followed by one end.
+        if (!pipeHealthy || !streamOutput.FlushFor(1500)) return 11;
+        const QJsonObject ending{
+            {"command", "end"},
+            {"framesProduced", framesProduced},
+            {"laboratoryOnly", true},
+            {"protocol", "getdoc-cef-osr-stream/1"},
+            {"reason", "time-limit"},
+            {"sessionId", streamSession},
+            {"tabId", streamTab}
+        };
+        if (!streamOutput.Queue(ending) || !streamOutput.FlushFor(1500))
+            return 12;
+        return exitCode;
+    }
+#endif
 
     QJsonObject nativeEvents;
     nativeEvents["viewLoaded"] = viewCallback;
