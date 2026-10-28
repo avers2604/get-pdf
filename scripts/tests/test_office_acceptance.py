@@ -33,6 +33,15 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_qt_ipc_static_contract_is_checked_without_running_qt(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [item.name for item in steps]
+        self.assertIn("qt-ipc-contract-tests", names)
+        self.assertLess(names.index("qt-ipc-contract-tests"),
+                        names.index("solution-restore"))
+        step = next(item for item in steps if item.name == "qt-ipc-contract-tests")
+        self.assertIn("test_qt_ipc_contract.py", step.command)
+
     def test_native_sdk_event_contract_will_be_checked_in_local_acceptance(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [item.name for item in steps]
@@ -89,6 +98,12 @@ class AcceptancePlanTests(unittest.TestCase):
         self.assertEqual(1, len(display))
         self.assertIn("test_qt_display.py", display[0].command)
         self.assertEqual(str(qt_binary), display[0].command[-1])
+        ipc = [step for step in steps if step.name == "native-qt-tab-ipc"]
+        self.assertEqual(1, len(ipc))
+        self.assertIn("test_qt_ipc.py", ipc[0].command)
+        self.assertEqual(str(qt_binary), ipc[0].command[-1])
+        self.assertLess([step.name for step in steps].index("native-qt-tab-ipc"),
+                        [step.name for step in steps].index("solution-restore"))
 
     def test_linux_plan_does_not_assume_windows_only_build_tools(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")

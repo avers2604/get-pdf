@@ -82,6 +82,10 @@ def build_steps(root: Path, feed: Path, host: str,
                     [sys.executable, "-m", "unittest", "discover", "-s",
                      "probes/eurooffice-desktop/cef_lab",
                      "-p", "test_native_event_contract.py"]),
+        CommandStep("qt-ipc-contract-tests",
+                    [sys.executable, "-m", "unittest", "discover", "-s",
+                     "probes/eurooffice-desktop",
+                     "-p", "test_qt_ipc_contract.py"]),
         CommandStep("solution-restore",
                     ["dotnet", "restore", "GetDocument.slnx", "--source", str(feed), "-p:NuGetAudit=false"]),
         CommandStep("solution-build",
@@ -96,6 +100,10 @@ def build_steps(root: Path, feed: Path, host: str,
         ]))
         steps.insert(3, CommandStep("native-qt-display-offscreen", [
             sys.executable, "probes/eurooffice-desktop/test_qt_display.py",
+            str(qt_host_binary)
+        ]))
+        steps.insert(4, CommandStep("native-qt-tab-ipc", [
+            sys.executable, "probes/eurooffice-desktop/test_qt_ipc.py",
             str(qt_host_binary)
         ]))
     for label, project in TEST_PROJECTS.items():
