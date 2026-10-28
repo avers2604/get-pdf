@@ -7,7 +7,7 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-if (-not $IsWindows) { throw 'Use Linux GD-31I entry point on Linux.' }
+if ([Environment]::OSVersion.Platform -ne 'Win32NT') { throw 'Use Linux GD-31I entry point on Linux.' }
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $python = Get-Command python -ErrorAction SilentlyContinue
 if (-not $python) {
