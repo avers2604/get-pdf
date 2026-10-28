@@ -526,7 +526,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             TextWrapping = TextWrapping.Wrap,
             MinHeight = 155,
             MaxLength = 1000,
-            Watermark = "Например: В работе / Завершено / На проверке",
+            PlaceholderText = "Например: В работе / Завершено / На проверке",
             Text = "В работе\nЗавершено\nНа проверке"
         };
         var error = new TextBlock
