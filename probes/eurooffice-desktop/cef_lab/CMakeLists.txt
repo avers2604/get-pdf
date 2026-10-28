@@ -13,6 +13,11 @@ option(GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB "Enable real Wayland CEF OnPaint la
 option(GETDOC_GD31J13_ENABLE_OSR_STREAM_LAB "Enable session-bound CEF OSR preview streaming on isolated Wayland VM" OFF)
 # Separate opt-in for input on the bounded synthetic-only stream.
 option(GETDOC_GD31J14_ENABLE_INPUT_LAB "Enable Wayland pointer/wheel/focus-only input experiment" OFF)
+# Additional explicit privilege for left click, double click and selection drag.
+option(GETDOC_GD31J15_ENABLE_CLICK_LAB "Enable synthetic-only Wayland CEF left-click and selection drag experiment" OFF)
+if(GETDOC_GD31J15_ENABLE_CLICK_LAB AND NOT GETDOC_GD31J14_ENABLE_INPUT_LAB)
+  message(FATAL_ERROR "GD-31J.15 requires GD-31J.14 input lab with explicit approval.")
+endif()
 if(GETDOC_GD31J14_ENABLE_INPUT_LAB AND NOT GETDOC_GD31J13_ENABLE_OSR_STREAM_LAB)
   message(FATAL_ERROR "GD-31J.14 requires explicitly enabled synthetic CEF OSR streaming.")
 endif()
@@ -142,6 +147,11 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
         target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
             GETDOC_GD31J14_POINTER_INPUT=1)
         message(WARNING "GD-31J.14: only pointer/wheel/focus; no clicks/keys/IME/clipboard; isolated synthetic Wayland lab.")
+        if(GETDOC_GD31J15_ENABLE_CLICK_LAB)
+          target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+              GETDOC_GD31J15_CLICK_LAB=1)
+          message(WARNING "GD-31J.15: left click/drag on synthetic-only Wayland VM; keyboard/IME/clipboard still forbidden.")
+        endif()
       endif()
     endif()
   endif()

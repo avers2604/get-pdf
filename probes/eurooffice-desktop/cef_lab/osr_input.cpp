@@ -21,6 +21,7 @@ namespace {
 constexpr int kMaximumInputLine = 4096;
 constexpr int kMaximumInputMessages = 128;
 constexpr int kRatePerSecond = 30;
+constexpr int kCefLeftButton = 1 << 4; // Verified upstream GetCefModifiers Qt::LeftButton
 
 bool ExactKeys(const QJsonObject& object, std::initializer_list<const char*> fields) {
     if (object.size() != static_cast<int>(fields.size())) return false;
@@ -55,8 +56,9 @@ bool CalculatePosition(QCefView* view, const QJsonObject& request, int& x, int& 
 }
 } // namespace
 
-OsrInputPump::OsrInputPump(QString sessionId, QString tabId)
-    : m_sessionId(std::move(sessionId)), m_tabId(std::move(tabId)) {}
+OsrInputPump::OsrInputPump(QString sessionId, QString tabId, bool clicksApproved)
+    : m_sessionId(std::move(sessionId)), m_tabId(std::move(tabId)),
+      m_clicksApproved(clicksApproved) {}
 
 bool OsrInputPump::Enable() {
     const int flags = ::fcntl(STDIN_FILENO, F_GETFL);
@@ -112,6 +114,7 @@ bool OsrInputPump::Dispatch(const QByteArray& bytes,
         ExactKeys(request, {"command","focused","protocol","sequence","sessionId","tabId"})) {
         if (!request.value("focused").isBool()) return false;
         const bool enable = request.value("focused").toBool();
+        if (!enable && m_leftDown) return false;
         editor->focus(enable); // Verified pinned EuroOffice CCefView::focus(bool)
         m_focused = enable;
     } else if (command == "move" &&
@@ -119,20 +122,42 @@ bool OsrInputPump::Dispatch(const QByteArray& bytes,
                                    "tabId","x10000","y10000"})) {
         int x = 0, y = 0;
         if (!m_focused || !CalculatePosition(view, request, x, y)) return false;
-        editor->SendMouseMoveEvent(x, y, false, 0);
+        editor->SendMouseMoveEvent(x, y, false, m_leftDown ? kCefLeftButton : 0);
     } else if (command == "wheel" &&
                ExactKeys(request, {"command","deltaX","deltaY","protocol","sequence",
                                    "sessionId","tabId","x10000","y10000"})) {
         int x = 0, y = 0;
-        if (!m_focused || !CalculatePosition(view, request, x, y) ||
+        if (!m_focused || m_leftDown ||
+            !CalculatePosition(view, request, x, y) ||
             !BoundedInteger(request.value("deltaX"), -120, 120) ||
             !BoundedInteger(request.value("deltaY"), -120, 120) ||
             (request.value("deltaX").toInt() == 0 && request.value("deltaY").toInt() == 0))
             return false;
         editor->SendMouseWheelEvent(x, y, request.value("deltaX").toInt(),
                                    request.value("deltaY").toInt(), 0);
+    } else if (command == "left-down" && m_clicksApproved &&
+               ExactKeys(request, {"clickCount", "command", "protocol", "sequence",
+                                   "sessionId", "tabId", "x10000", "y10000"})) {
+        int x = 0, y = 0;
+        if (!m_focused || m_leftDown ||
+            !CalculatePosition(view, request, x, y) ||
+            !BoundedInteger(request.value("clickCount"), 1, 2))
+            return false;
+        const int clickCount = request.value("clickCount").toInt();
+        editor->SendMouseClickEvent(x, y, 1, false, kCefLeftButton, clickCount);
+        m_leftDown = true;
+        m_clickCount = clickCount;
+    } else if (command == "left-up" && m_clicksApproved &&
+               ExactKeys(request, {"command", "protocol", "sequence",
+                                   "sessionId", "tabId", "x10000", "y10000"})) {
+        int x = 0, y = 0;
+        if (!m_focused || !m_leftDown || !CalculatePosition(view, request, x, y))
+            return false;
+        editor->SendMouseClickEvent(x, y, 1, true, 0, m_clickCount);
+        m_leftDown = false;
+        m_clickCount = 1;
     } else {
-        // No clicks, keyboard, IME, drag/drop, clipboard, URLs or file access.
+        // Keyboard, IME, clipboard, file paths, JS and direct print forbidden.
         return false;
     }
     ++m_lastSequence;

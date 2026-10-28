@@ -381,12 +381,17 @@ int main(int argc, char** argv) {
     // No URL, arbitrary filename, output path, save or print commands.
     const bool osrLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-wayland-osr-lab") == 0;
+    const bool clickLab = argc == 6 &&
+        std::strcmp(argv[1], "--open-staged-wayland-click-lab") == 0;
     const bool inputLab = argc == 6 &&
-        std::strcmp(argv[1], "--open-staged-wayland-input-lab") == 0;
+        (std::strcmp(argv[1], "--open-staged-wayland-input-lab") == 0 || clickLab);
     const bool streamLab = argc == 6 &&
         (std::strcmp(argv[1], "--open-staged-wayland-stream-lab") == 0 || inputLab);
 #ifndef GETDOC_GD31J14_POINTER_INPUT
     if (inputLab) return 2;
+#endif
+#ifndef GETDOC_GD31J15_CLICK_LAB
+    if (clickLab) return 2;
 #endif
     const bool ordinaryLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-lab") == 0;
@@ -407,7 +412,7 @@ int main(int argc, char** argv) {
     BoundedStreamOutput streamOutput;
     if (streamLab && !streamOutput.Enable()) return 10;
 #ifdef GETDOC_GD31J14_POINTER_INPUT
-    OsrInputPump inputPump(streamSession, streamTab);
+    OsrInputPump inputPump(streamSession, streamTab, clickLab);
     if (inputLab && !inputPump.Enable()) return 10;
 #endif
 #else

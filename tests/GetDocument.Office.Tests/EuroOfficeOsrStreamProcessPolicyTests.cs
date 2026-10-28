@@ -71,6 +71,38 @@ public sealed class EuroOfficeOsrStreamProcessPolicyTests
     }
 
     [TestMethod]
+    public void ClickLabUsesItsOwnExecutableModeAndNeverChangesOldInputMode()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        string root = Path.Combine(Path.GetTempPath(), "gd31j15-click-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string executable = Path.Combine(root, "approved-eurooffice-lab");
+            File.WriteAllBytes(executable, [0x47, 0x45, 0x54, 0x31, 0x35]);
+            string digest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(executable)));
+            File.WriteAllBytes(Path.Combine(root, "gd31j6_writer.docx"),
+                [0x50, 0x4B, 0x03, 0x04]);
+            File.WriteAllText(Path.Combine(root, "gd31j6-fixture-manifest.json"),
+                "{\"testOnly\":true}");
+            var policy = new EuroOfficeNativeLabHostPolicy(root, executable, digest);
+            Guid session = Guid.NewGuid(), tab = Guid.NewGuid();
+            var click = EuroOfficeOsrStreamProcessLab.CreateClickStartInfo(
+                policy, root, "gd31j6_writer.docx", session, tab, true);
+            var pointer = EuroOfficeOsrStreamProcessLab.CreateInputStartInfo(
+                policy, root, "gd31j6_writer.docx", session, tab, true);
+            Assert.AreEqual("--open-staged-wayland-click-lab", click.ArgumentList[0]);
+            Assert.AreEqual("--open-staged-wayland-input-lab", pointer.ArgumentList[0]);
+            Assert.IsTrue(click.RedirectStandardInput);
+            Assert.IsTrue(click.RedirectStandardOutput);
+            Assert.IsFalse(click.UseShellExecute);
+            Assert.AreEqual(session.ToString("N"), click.ArgumentList[3]);
+            Assert.AreEqual(tab.ToString("N"), click.ArgumentList[4]);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
     public void WithoutApprovalProcessCannotBeStarted()
     {
         Assert.ThrowsExactly<NotSupportedException>(() =>

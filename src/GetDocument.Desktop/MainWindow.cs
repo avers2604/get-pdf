@@ -647,8 +647,15 @@ public sealed class MainWindow : Window
             !_nativeOsrLabStreams.ContainsKey(tabId))
             throw new InvalidDataException("Чужой или закрытый CEF input-seance.");
         if (_nativeTabViews.TryGetValue(tabId, out var tab) &&
-            tab.Content is NativeOfficeDiagnosticPane pane)
-            pane.AttachOsrLabInput(input);
+            tab.Content is NativeOfficeDiagnosticPane pane &&
+            _nativeOsrLabStreams.TryGetValue(tabId, out var lifetime))
+            pane.AttachOsrLabInput(input, () =>
+            {
+                // Revoke only THIS native generation, never another tab's host.
+                if (_nativeOsrLabStreams.TryGetValue(tabId, out var active) &&
+                    ReferenceEquals(active, lifetime))
+                    active.Cancel();
+            });
     }
 
     internal void DetachNativeOsrLabInput(Guid tabId, Guid sessionId,
@@ -682,20 +689,27 @@ public sealed class MainWindow : Window
         EuroOfficeNativeLabHostPolicy approvedHost,
         string stagingRoot, string syntheticFixture,
         Guid tabId, Guid sessionId, bool labApproved,
-        CancellationToken cancellationToken, bool pointerInputLabApproved = false)
+        CancellationToken cancellationToken, bool pointerInputLabApproved = false,
+        bool pointerClickLabApproved = false)
     {
         Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
         if (!labApproved)
             throw new NotSupportedException("Реальный CEF разрешён только в отдельной лаборатории.");
+        if (pointerClickLabApproved && !pointerInputLabApproved)
+            throw new NotSupportedException(
+                "Клики требуют отдельного лабораторного разрешения на ввод мыши.");
         if (_nativeTabViews.ContainsKey(tabId) || _nativeOsrLabStreams.ContainsKey(tabId) ||
             _nativeOsrLabTabs.Contains(tabId))
             throw new InvalidOperationException("Идентификатор CEF лабораторной вкладки уже занят.");
         // Preflight all file and process gates BEFORE exposing a tab.
-        _ = pointerInputLabApproved
-            ? EuroOfficeOsrStreamProcessLab.CreateInputStartInfo(approvedHost,
+        _ = pointerClickLabApproved
+            ? EuroOfficeOsrStreamProcessLab.CreateClickStartInfo(approvedHost,
                 stagingRoot, syntheticFixture, sessionId, tabId, labApproved)
-            : EuroOfficeOsrStreamProcessLab.CreateStartInfo(approvedHost,
-                stagingRoot, syntheticFixture, sessionId, tabId, labApproved);
+            : pointerInputLabApproved
+                ? EuroOfficeOsrStreamProcessLab.CreateInputStartInfo(approvedHost,
+                    stagingRoot, syntheticFixture, sessionId, tabId, labApproved)
+                : EuroOfficeOsrStreamProcessLab.CreateStartInfo(approvedHost,
+                    stagingRoot, syntheticFixture, sessionId, tabId, labApproved);
         var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _nativeOsrLabStreams.Add(tabId, lifetime);
         _nativeOsrLabTabs.Add(tabId);
@@ -731,7 +745,7 @@ public sealed class MainWindow : Window
                                     DetachNativeOsrLabInput(tabId, sessionId, old);
                             });
                     },
-                    labApproved, lifetime.Token)
+                    labApproved, lifetime.Token, pointerClickLabApproved)
                 : await EuroOfficeOsrStreamProcessLab.RunAsync(
                     approvedHost, stagingRoot, syntheticFixture, sessionId, tabId,
                     frame => sink.PreviewAsync(tabId, sessionId, frame, lifetime.Token),
