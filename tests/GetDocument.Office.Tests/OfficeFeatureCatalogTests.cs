@@ -13,7 +13,9 @@ public sealed class OfficeFeatureCatalogTests
             new[] { "writer-toc-insert", "writer-toc-update" },
             OfficeFeatureCatalog.ForKind("writer").Select(x => x.Id).ToArray());
         CollectionAssert.AreEquivalent(
-            new[] { "calc-freeze-top-row", "calc-freeze-first-column", "calc-unfreeze", "calc-recalculate" },
+            new[] { "calc-freeze-top-row", "calc-freeze-first-column", "calc-unfreeze", "calc-recalculate",
+                "calc-print-used-area", "calc-clear-print-area",
+                "calc-repeat-first-row", "calc-stop-repeat-rows" },
             OfficeFeatureCatalog.ForKind("calc").Select(x => x.Id).ToArray());
         CollectionAssert.AreEquivalent(
             new[] { "impress-duplicate-slide" },
@@ -39,6 +41,20 @@ public sealed class OfficeFeatureCatalogTests
     {
         foreach (string id in new[] { "calc-freeze-top-row", "calc-freeze-first-column", "calc-unfreeze" })
             Assert.AreEqual(id, OfficeFeatureCatalog.Require("calc", id, readOnly: true).Id);
+    }
+
+    [TestMethod]
+    public void PrintLayoutCommandsRequireWriteAccessAndRemainCalcOnly()
+    {
+        foreach (string command in new[] { "calc-print-used-area", "calc-clear-print-area",
+                     "calc-repeat-first-row", "calc-stop-repeat-rows" })
+        {
+            Assert.ThrowsExactly<InvalidOperationException>(
+                () => OfficeFeatureCatalog.Require("calc", command, readOnly: true));
+            Assert.AreEqual(command, OfficeFeatureCatalog.Require("calc", command, readOnly: false).Id);
+            Assert.ThrowsExactly<NotSupportedException>(
+                () => OfficeFeatureCatalog.Require("writer", command, readOnly: false));
+        }
     }
 
     [TestMethod]
@@ -109,6 +125,12 @@ public sealed class OfficeFeatureCatalogTests
                 await calc.ExecuteFeatureAsync("calc-freeze-first-column");
                 await calc.ExecuteFeatureAsync("calc-unfreeze");
                 await calc.ExecuteFeatureAsync("calc-recalculate");
+                await calc.ExecuteFeatureAsync("calc-print-used-area");
+                await calc.ExecuteFeatureAsync("calc-repeat-first-row");
+                await calc.ExecuteFeatureAsync("calc-stop-repeat-rows");
+                await calc.ExecuteFeatureAsync("calc-clear-print-area");
+                await calc.SaveAsync();
+                Assert.IsTrue(new FileInfo(xlsx).Length > 0);
                 Assert.ThrowsExactly<NotSupportedException>(() =>
                     OfficeFeatureCatalog.Require(calc.Kind, "writer-toc-update", calc.ReadOnly));
             }
