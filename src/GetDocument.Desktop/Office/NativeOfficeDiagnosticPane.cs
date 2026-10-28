@@ -45,7 +45,8 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         Stretch = Stretch.Uniform,
         MaxWidth = 640,
         MaxHeight = 360,
-        IsVisible = false
+        IsVisible = false,
+        Focusable = true
     };
 
     private readonly TextBlock _connection = new()
@@ -78,6 +79,8 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         _preview.PointerPressed += OnLabPointerPressed;
         _preview.PointerReleased += OnLabPointerReleased;
         _preview.PointerCaptureLost += OnLabPointerCaptureLost;
+        _preview.KeyDown += OnLabKeyDown;
+        _preview.TextInput += OnLabTextInput;
         _preview.PointerMoved += OnLabPointerMoved;
         _preview.PointerWheelChanged += OnLabPointerWheel;
         _preview.PointerExited += OnLabPointerExited;
@@ -165,11 +168,14 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         DetachOsrLabInput();
         _labInput = input;
         _onLabInputFailure = onInputFailure;
-        _connection.Text = input.ClickLabApproved
-            ? "Wayland CEF: лабораторные клики, двойной клик и выделение разрешены. " +
-              "Клавиатура, IME, буфер обмена и сохранение запрещены."
-            : "Лабораторная мышь: нажмите на изображение для фокуса. " +
-              "Клики, клавиатура, IME и буфер обмена заблокированы.";
+        _connection.Text = input.KeyboardLabApproved
+            ? "Wayland CEF: тестовая навигация и одиночные символы разрешены. " +
+              "Ctrl/Alt/Meta, IME-композиция, clipboard и сохранение запрещены."
+            : input.ClickLabApproved
+                ? "Wayland CEF: лабораторные клики, двойной клик и выделение разрешены. " +
+                  "Клавиатура, IME, буфер обмена и сохранение запрещены."
+                : "Лабораторная мышь: нажмите на изображение для фокуса. " +
+                  "Клики, клавиатура, IME и буфер обмена заблокированы.";
     }
 
     public void DetachOsrLabInput(EuroOfficeOsrLabInputChannel? expectedChannel = null)
@@ -244,6 +250,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             {
                 await input.SendFocusAsync(true, CancellationToken.None);
                 _labFocused = true;
+                if (input.KeyboardLabApproved) _preview.Focus();
             }
             if (!input.ClickLabApproved) return; // GD-31J.14 mode: focus only
             long now = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -326,6 +333,68 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             await input.SendWheelAsync(x, y, deltaX, deltaY, CancellationToken.None);
             e.Handled = true;
         }
+        catch (Exception ex) { FailLabInput(ex); }
+        finally { _labGestureGate.Release(); }
+    }
+
+    /// <summary>
+    /// System and GET shell shortcuts are never forwarded. The editor gets
+    /// only an explicit navigation whitelist, with optional Shift selection.
+    /// </summary>
+    private async void OnLabKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!_labFocused || _labButtonHeld ||
+            _labInput is not { KeyboardLabApproved: true } input)
+            return;
+        if ((e.KeyModifiers &
+            (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0)
+            return; // Ctrl+Tab, Ctrl+W, Ctrl+P, Alt+F4, Win, etc -> GET/OS.
+        string? name = e.Key switch
+        {
+            Key.Left => "ArrowLeft",
+            Key.Right => "ArrowRight",
+            Key.Up => "ArrowUp",
+            Key.Down => "ArrowDown",
+            Key.Home => "Home",
+            Key.End => "End",
+            Key.PageUp => "PageUp",
+            Key.PageDown => "PageDown",
+            Key.Escape => "Escape",
+            Key.Back => "Backspace",
+            Key.Delete => "Delete",
+            Key.Enter => "Enter",
+            Key.Tab => "Tab",
+            _ => null
+        };
+        if (name is null) return; // never pass generic virtual key codes
+        e.Handled = true;
+        await _labGestureGate.WaitAsync();
+        try
+        {
+            await input.SendNavigationKeyAsync(name,
+                (e.KeyModifiers & KeyModifiers.Shift) != 0, CancellationToken.None);
+        }
+        catch (Exception ex) { FailLabInput(ex); }
+        finally { _labGestureGate.Release(); }
+    }
+
+    /// <summary>
+    /// TextInput delivers already committed characters. Do not forward
+    /// preedit/intermediate IME strings or multi-character paste payloads.
+    /// </summary>
+    private async void OnLabTextInput(object? sender, TextInputEventArgs e)
+    {
+        if (!_labFocused || _labButtonHeld ||
+            _labInput is not { KeyboardLabApproved: true } input ||
+            e.Text is not { Length: 1 } text)
+            return;
+        char c = text[0];
+        if (char.IsControl(c) || char.IsSurrogate(c) ||
+            char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format)
+            return;
+        e.Handled = true;
+        await _labGestureGate.WaitAsync();
+        try { await input.SendTextCharacterAsync(c, CancellationToken.None); }
         catch (Exception ex) { FailLabInput(ex); }
         finally { _labGestureGate.Release(); }
     }
