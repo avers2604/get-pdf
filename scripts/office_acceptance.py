@@ -59,6 +59,9 @@ def build_steps(root: Path, feed: Path, host: str) -> list[CommandStep]:
     """Offline restore is the ONLY allowed NuGet source; never guess a remote URL."""
     _ = root  # Callers and subprocess always operate at the checked-out repo root.
     steps = [
+        CommandStep("runner-self-tests",
+                    [sys.executable, "-m", "unittest", "discover",
+                     "-s", "scripts/tests", "-p", "test_office_acceptance.py"]),
         CommandStep("solution-restore",
                     ["dotnet", "restore", "GetDocument.slnx", "--source", str(feed)]),
         CommandStep("solution-build",
