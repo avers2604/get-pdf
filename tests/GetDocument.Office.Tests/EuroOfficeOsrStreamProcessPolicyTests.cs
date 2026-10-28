@@ -103,6 +103,37 @@ public sealed class EuroOfficeOsrStreamProcessPolicyTests
     }
 
     [TestMethod]
+    public void KeyboardLabIsDedicatedAndExistingClickModeRemainsUnaffected()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        string root = Path.Combine(Path.GetTempPath(),
+            "gd31j16-keys-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string binary = Path.Combine(root, "approved-eurooffice-lab");
+            File.WriteAllBytes(binary, [0x47, 0x45, 0x54, 0x31, 0x36]);
+            string digest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(binary)));
+            File.WriteAllBytes(Path.Combine(root, "gd31j6_writer.docx"),
+                [0x50, 0x4B, 0x03, 0x04]);
+            File.WriteAllText(Path.Combine(root, "gd31j6-fixture-manifest.json"),
+                "{\"testOnly\":true}");
+            var policy = new EuroOfficeNativeLabHostPolicy(root, binary, digest);
+            Guid session = Guid.NewGuid(), tab = Guid.NewGuid();
+            var keyboard = EuroOfficeOsrStreamProcessLab.CreateKeyboardStartInfo(
+                policy, root, "gd31j6_writer.docx", session, tab, true);
+            var click = EuroOfficeOsrStreamProcessLab.CreateClickStartInfo(
+                policy, root, "gd31j6_writer.docx", session, tab, true);
+            Assert.AreEqual("--open-staged-wayland-keyboard-lab", keyboard.ArgumentList[0]);
+            Assert.AreEqual("--open-staged-wayland-click-lab", click.ArgumentList[0]);
+            Assert.IsTrue(keyboard.RedirectStandardInput);
+            Assert.IsTrue(keyboard.RedirectStandardOutput);
+            Assert.IsFalse(keyboard.UseShellExecute);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
     public void WithoutApprovalProcessCannotBeStarted()
     {
         Assert.ThrowsExactly<NotSupportedException>(() =>
