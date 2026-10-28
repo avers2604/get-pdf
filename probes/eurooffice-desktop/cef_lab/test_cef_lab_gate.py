@@ -85,6 +85,30 @@ class CefLabGateTests(unittest.TestCase):
                 with self.assertRaises(cef_lab_gate.LabBlocked):
                     cef_lab_gate.check_revision_pins(root)
 
+    def test_asset_parent_symlink_is_rejected(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            root = pathlib.Path(dirname)
+            trusted = root / "trusted"
+            trusted.mkdir()
+            (trusted / "editor").write_bytes(b"fake")
+            (root / "linked").symlink_to(trusted, target_is_directory=True)
+            with self.assertRaises(cef_lab_gate.LabBlocked):
+                cef_lab_gate.check_assets(
+                    root, cef_lab_gate.AssetSet(
+                        helper="linked/editor", libraries=(), web_editor="linked/editor"))
+
+    def test_git_dirty_source_checkout_is_rejected(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            tree = pathlib.Path(dirname) / "DesktopEditors"
+            tree.mkdir()
+            (tree / "desktop-sdk").mkdir()
+            (tree / "core").mkdir()
+            with patch.object(cef_lab_gate, "git_head",
+                              side_effect=lambda path: cef_lab_gate.REQUIRED_COMMITS[path.name]):
+                with patch.object(cef_lab_gate, "git_clean", return_value=False):
+                    with self.assertRaises(cef_lab_gate.LabBlocked):
+                        cef_lab_gate.check_revision_pins(tree)
+
     def test_lab_assessment_fails_closed_for_document_editing_even_if_approved(self):
         with self.assertRaises(cef_lab_gate.LabBlocked):
             cef_lab_gate.check_lab(
