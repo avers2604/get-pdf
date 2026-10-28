@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Xml;
 
 namespace GetDocument.Office.LibreOffice;
 
@@ -209,9 +210,59 @@ public sealed class OfficeRecoveryStore
                 (entry.CompressedLength == 0 ||
                  entry.Length > entry.CompressedLength * (long)MaxCompressionRatio))
                 throw new InvalidDataException("Подозрительная степень сжатия аварийной копии.");
+
+            // ZIP metadata alone does not prove recoverability. Stream each part
+            // without extracting or buffering it in memory. XML must be parseable
+            // and may not carry DTD/external-entity declarations.
+            ValidateEntryContents(entry);
         }
         if (!parts.Contains("[Content_Types].xml") || !parts.Contains(mainPart))
             throw new InvalidDataException("В аварийной копии отсутствуют основные OOXML-части.");
+    }
+
+    private static void ValidateEntryContents(ZipArchiveEntry entry)
+    {
+        try
+        {
+            using Stream content = entry.Open();
+            if (entry.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) ||
+                entry.FullName.EndsWith(".rels", StringComparison.OrdinalIgnoreCase))
+            {
+                using var reader = XmlReader.Create(content, new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Prohibit,
+                    XmlResolver = null,
+                    MaxCharactersInDocument = MaxEntryBytes,
+                    IgnoreComments = true
+                });
+                bool hasRoot = false;
+                while (reader.Read())
+                    if (reader.NodeType == XmlNodeType.Element)
+                        hasRoot = true;
+                if (!hasRoot)
+                    throw new InvalidDataException("XML-часть аварийной копии не содержит корневого элемента.");
+            }
+            else
+            {
+                // In addition to central-directory checks, verify actual stream
+                // lengths so a truncated archive cannot masquerade as a valid copy.
+                byte[] buffer = new byte[65536];
+                long readTotal = 0;
+                int read;
+                while ((read = content.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    readTotal += read;
+                    if (readTotal > entry.Length || readTotal > MaxEntryBytes)
+                        throw new InvalidDataException("Распакованная часть превышает объявленный размер.");
+                }
+                if (readTotal != entry.Length)
+                    throw new InvalidDataException("Распакованная часть короче объявленного размера.");
+            }
+        }
+        catch (Exception ex) when (ex is XmlException or NotSupportedException)
+        {
+            throw new InvalidDataException("Аварийная копия содержит повреждённую или недопустимую ZIP/XML-часть.", ex);
+        }
     }
 
     private static string CanonicalSource(string path)
