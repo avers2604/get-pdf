@@ -43,6 +43,8 @@ public sealed class MainWindow : Window
     // Never initialized by the normal user launcher. Only the explicitly
     // approved diagnostic entry point may create this Qt-only coordinator.
     private EuroOfficeNativeSessionCoordinator? _nativeSessionCoordinator;
+    private readonly Dictionary<Guid, CancellationTokenSource> _nativeOsrLabStreams = [];
+    private readonly HashSet<Guid> _nativeOsrLabTabs = [];
     private readonly TabControl _tabs = new();
     private readonly TextBlock _status = new();
     private TabItem? _gameTab;
@@ -140,6 +142,8 @@ public sealed class MainWindow : Window
         };
         Closed += async (_, _) =>
         {
+            foreach (var stream in _nativeOsrLabStreams.Values)
+                stream.Cancel();
             if (_nativeSessionCoordinator is { } nativeCoordinator)
             {
                 try { await nativeCoordinator.DisposeAsync(); }
@@ -600,6 +604,100 @@ public sealed class MainWindow : Window
         _status.Text = "Отображён диагностический кадр Qt без CEF. Документ не проверен.";
     }
 
+    /// <summary>
+    /// Real CEF OnPaint LAB preview, not a verified DOCX/XLSX/PPTX rendering.
+    /// Only frames from the registered synthetic Wayland lab process are shown.
+    /// </summary>
+    internal void ShowNativeOsrLabFrame(Guid tabId, Guid sessionId,
+        EuroOfficeOsrStreamFrame frame)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        if (!_nativeOsrLabTabs.Contains(tabId) ||
+            frame.SessionId != sessionId || frame.TabId != tabId ||
+            frame.OfficeDocumentVerified || frame.SaveCompleted ||
+            frame.PdfReady || frame.PrintApproved || frame.ApprovedForProduction)
+            throw new InvalidDataException("Неавторизованная CEF OSR лабораторная вкладка.");
+        var state = _nativeWorkspaceTabs.Get(tabId);
+        if (state.SessionId != sessionId || state.Status is
+            (EuroOfficeNativeDocumentStatus.Failed or EuroOfficeNativeDocumentStatus.Closed))
+            throw new InvalidDataException("CEF OSR кадр устаревшего сеанса.");
+        if (!_nativeTabViews.TryGetValue(tabId, out var tab) ||
+            tab.Content is not NativeOfficeDiagnosticPane pane)
+            throw new InvalidDataException("Нет целевой CEF лабораторной вкладки.");
+        pane.SetCefOsrLabFrame(frame);
+        _status.Text = "Wayland CEF OnPaint — тестовый кадр, документ не подтверждён.";
+    }
+
+    internal void ReportNativeOsrLabCompleted(Guid tabId, Guid sessionId, int count)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        var state = _nativeWorkspaceTabs.Get(tabId);
+        if (!_nativeOsrLabTabs.Contains(tabId) || state.SessionId != sessionId ||
+            count is < 0 or > EuroOfficeOsrStreamFrame.MaximumFrames)
+            throw new InvalidDataException("Чужой или повреждённый итог CEF OSR.");
+        if (_nativeTabViews.TryGetValue(tabId, out var tab) &&
+            tab.Content is NativeOfficeDiagnosticPane pane)
+            pane.SetCefOsrLabCompleted(count);
+        _status.Text = "Лабораторный CEF поток завершён без подтверждения документа.";
+    }
+
+    /// <summary>
+    /// Deliberately not linked to the normal launcher. Requires a separate
+    /// OS-isolated offline Wayland VM and a SHA-approved CEF executable.
+    /// </summary>
+    internal async Task StartNativeCefOsrLabStreamAsync(
+        EuroOfficeNativeLabHostPolicy approvedHost,
+        string stagingRoot, string syntheticFixture,
+        Guid tabId, Guid sessionId, bool labApproved,
+        CancellationToken cancellationToken)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        if (!labApproved)
+            throw new NotSupportedException("Реальный CEF разрешён только в отдельной лаборатории.");
+        if (_nativeTabViews.ContainsKey(tabId) || _nativeOsrLabStreams.ContainsKey(tabId) ||
+            _nativeOsrLabTabs.Contains(tabId))
+            throw new InvalidOperationException("Идентификатор CEF лабораторной вкладки уже занят.");
+        // Preflight all file and process gates BEFORE exposing a tab.
+        _ = EuroOfficeOsrStreamProcessLab.CreateStartInfo(approvedHost,
+            stagingRoot, syntheticFixture, sessionId, tabId, labApproved);
+        var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _nativeOsrLabStreams.Add(tabId, lifetime);
+        _nativeOsrLabTabs.Add(tabId);
+        bool registered = false;
+        try
+        {
+            AddNativeDiagnosticTab(tabId, sessionId, syntheticFixture,
+
+                "EuroOffice CEF — синтетический документ");
+            registered = true;
+            var sink = new AvaloniaNativeOsrLabFrameSink(this);
+            int received = await EuroOfficeOsrStreamProcessLab.RunAsync(
+                approvedHost, stagingRoot, syntheticFixture, sessionId, tabId,
+                frame => sink.PreviewAsync(tabId, sessionId, frame, lifetime.Token),
+                labApproved, lifetime.Token);
+            await sink.CompletedAsync(tabId, sessionId, received, lifetime.Token);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            // Closing the tab triggers process cleanup in RunAsync/finally.
+        }
+        catch
+        {
+            if (registered && _nativeTabViews.ContainsKey(tabId))
+                ReportNativeDiagnosticCrash(tabId, sessionId);
+            throw;
+        }
+        finally
+        {
+            _nativeOsrLabStreams.Remove(tabId);
+            if (!registered)
+                _nativeOsrLabTabs.Remove(tabId);
+            else if (lifetime.IsCancellationRequested && _nativeTabViews.ContainsKey(tabId))
+                CloseNativeDiagnosticTab(tabId, sessionId);
+            lifetime.Dispose();
+        }
+    }
+
     internal bool NativeDiagnosticHasUnverifiedChanges(Guid tabId, Guid sessionId)
     {
         Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
@@ -680,6 +778,18 @@ public sealed class MainWindow : Window
                 "Рабочий WORM-оригинал не менялся этим модулем.",
                 "Закрыть без подтверждения", "Вернуться"))
             return;
+        if (_nativeOsrLabTabs.Contains(tabId))
+        {
+            // A live CEF OSR lab is terminated by its own process supervisor;
+            // the tab is removed only after that process has been reaped.
+            if (_nativeOsrLabStreams.TryGetValue(tabId, out var activeStream))
+            {
+                activeStream.Cancel();
+                return;
+            }
+            CloseNativeDiagnosticTab(tabId, snapshot.SessionId);
+            return;
+        }
         if (_nativeSessionCoordinator is { } coordinator)
         {
             try
@@ -705,7 +815,10 @@ public sealed class MainWindow : Window
         // This is a passive status tab. When a real process is connected,
         // its process supervisor must stop/reap it BEFORE this UI cleanup.
         _nativeWorkspaceTabs.Close(tabId, sessionId);
+        if (view.Content is NativeOfficeDiagnosticPane oldPane)
+            oldPane.SetTransportLost(); // dispose last decoded bitmap
         _nativeTabViews.Remove(tabId);
+        _nativeOsrLabTabs.Remove(tabId);
         _items.Remove(view);
         if (_tabs.SelectedItem is null || ReferenceEquals(_tabs.SelectedItem, view))
         {

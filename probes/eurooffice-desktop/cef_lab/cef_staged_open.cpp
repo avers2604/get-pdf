@@ -16,6 +16,8 @@
 #include <QJsonDocument>
 #include <QBuffer>
 #include <QImage>
+#include <QElapsedTimer>
+#include <QThread>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QJsonObject>
@@ -29,6 +31,12 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) && defined(__linux__)
+#include <cerrno>
+#include <csignal>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 #include "cefapplication.h"
 #include "cefview.h"
 #include "applicationmanager_events.h"
@@ -48,7 +56,8 @@ public:
     }
 
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
-    void EnableSyntheticOsrCapture() {
+    void EnableSyntheticOsrCapture(bool streaming = false) {
+        m_streaming.store(streaming, std::memory_order_release);
         m_captureEnabled.store(true, std::memory_order_release);
     }
 
@@ -58,7 +67,8 @@ public:
     void OnPaint(const void* buffer, int width, int height) override {
         QCefView::OnPaint(buffer, width, height);
         if (!m_captureEnabled.load(std::memory_order_acquire) ||
-            m_paintObserved.load(std::memory_order_acquire) ||
+            (!m_streaming.load(std::memory_order_acquire) &&
+             m_paintObserved.load(std::memory_order_acquire)) ||
             !IsWayland() || !buffer ||
             width < 1 || height < 1 || width > 4096 || height > 4096 ||
             static_cast<long long>(width) * height > 4'194'304)
@@ -74,6 +84,14 @@ public:
         if (preview.isNull() || preview.width() < 1 || preview.height() < 1)
             return;
         QMutexLocker lock(&m_captureMutex);
+        if (m_streaming.load(std::memory_order_relaxed)) {
+            // Latest-frame-only single-slot buffer. If the pipe is busy we
+            // overwrite the sample, never accumulate or block CEF OnPaint.
+            m_latestFrame = preview;
+            ++m_latestRevision;
+            m_paintObserved.store(true, std::memory_order_release);
+            return;
+        }
         if (m_paintObserved.load(std::memory_order_relaxed))
             return;
         m_capture = preview;
@@ -84,11 +102,22 @@ public:
         QMutexLocker lock(&m_captureMutex);
         return m_capture.copy();
     }
+
+    QImage TakeLatestStreamFrame(quint64& knownRevision) {
+        QMutexLocker lock(&m_captureMutex);
+        if (m_latestRevision == knownRevision || m_latestFrame.isNull())
+            return QImage();
+        knownRevision = m_latestRevision;
+        return m_latestFrame.copy();
+    }
 private:
     std::atomic<bool> m_captureEnabled{false};
+    std::atomic<bool> m_streaming{false};
     std::atomic<bool> m_paintObserved{false};
     QMutex m_captureMutex;
     QImage m_capture;
+    QImage m_latestFrame;
+    quint64 m_latestRevision = 0;
 #endif
 };
 
@@ -134,6 +163,92 @@ public:
         NSEditorApi::CAscCefMenuEventListener::OnEvent(event);
     }
 };
+
+#if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) && defined(__linux__)
+// Lab-only, nonblocking, single-packet pending transport. We never fwrite a
+// 48-KiB PNG into a potentially full stdout pipe on the CEF/Qt owner thread.
+class BoundedStreamOutput {
+    QByteArray pending;
+    qsizetype offset = 0;
+public:
+    bool Enable() {
+        const int flags = fcntl(STDOUT_FILENO, F_GETFL);
+        if (flags < 0 || fcntl(STDOUT_FILENO, F_SETFL, flags | O_NONBLOCK) != 0)
+            return false;
+        std::signal(SIGPIPE, SIG_IGN); // EPIPE instead of process termination
+        return true;
+    }
+    bool HasPending() const { return !pending.isEmpty(); }
+    bool Queue(const QJsonObject& object) {
+        if (HasPending()) return false; // backpressure: drop intermediate frame
+        QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Compact);
+        if (bytes.isEmpty() || bytes.size() >= 65'535) return false;
+        bytes.append('\n');
+        pending = bytes;
+        offset = 0;
+        return true;
+    }
+    bool Drain() {
+        if (!HasPending()) return true;
+        const ssize_t amount = ::write(STDOUT_FILENO,
+            pending.constData() + offset,
+            static_cast<size_t>(pending.size() - offset));
+        if (amount > 0) {
+            offset += static_cast<qsizetype>(amount);
+            if (offset == pending.size()) {
+                pending.clear();
+                offset = 0;
+            }
+            return true;
+        }
+        if (amount < 0 &&
+            (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+            return true;
+        return false;
+    }
+    bool FlushFor(int milliseconds) {
+        QElapsedTimer timer;
+        timer.start();
+        while (HasPending() && timer.elapsed() < milliseconds) {
+            if (!Drain()) return false;
+            if (HasPending()) QThread::msleep(10);
+        }
+        return !HasPending();
+    }
+};
+
+bool Guid32(const QString& value) {
+    if (value.size() != 32 || value == QString(32, QChar('0'))) return false;
+    for (const QChar ch : value)
+        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')))
+            return false;
+    return true;
+}
+
+QJsonObject StreamFrameReceipt(const QString& session, const QString& tab,
+                               int frameNumber, const QImage& image,
+                               const QByteArray& pngBytes) {
+    const QString digest = QString::fromLatin1(
+        QCryptographicHash::hash(pngBytes, QCryptographicHash::Sha256).toHex());
+    return QJsonObject{
+        {"command", "frame"},
+        {"documentVerified", false},
+        {"frameNumber", frameNumber},
+        {"laboratoryOnly", true},
+        {"payloadBase64", QString::fromLatin1(pngBytes.toBase64())},
+        {"pdfVerified", false},
+        {"pixelHeight", image.height()},
+        {"pixelWidth", image.width()},
+        {"printApproved", false},
+        {"protocol", "getdoc-cef-osr-stream/1"},
+        {"saveVerified", false},
+        {"sessionId", session},
+        {"sha256", digest},
+        {"source", "cef-osr-wayland-synthetic-only"},
+        {"tabId", tab}
+    };
+}
+#endif
 
 constexpr char kManifest[] = "gd31j6-fixture-manifest.json";
 constexpr char kManifestSchema[] = "gd31j6-office-fixtures/1";
@@ -263,16 +378,29 @@ int main(int argc, char** argv) {
     // No URL, arbitrary filename, output path, save or print commands.
     const bool osrLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-wayland-osr-lab") == 0;
+    const bool streamLab = argc == 6 &&
+        std::strcmp(argv[1], "--open-staged-wayland-stream-lab") == 0;
     const bool ordinaryLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-lab") == 0;
-    if (!ordinaryLab && !osrLab) return 2;
+    if (!ordinaryLab && !osrLab && !streamLab) return 2;
 #ifndef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
-    if (osrLab) return 2;
+    if (osrLab || streamLab) return 2;
 #else
-    // The current pinned SDK enables CEF windowless rendering ONLY on
-    // QT_QPA_PLATFORM=wayland. Windows and X11 use SetAsChild native windows.
-    // Do not change QT_QPA_PLATFORM here; require an approved OS lab setup.
-    if (osrLab && qgetenv("QT_QPA_PLATFORM") != "wayland") return 9;
+#ifndef GETDOC_GD31J13_OSR_STREAM_LAB
+    if (streamLab) return 2;
+#endif
+    // This pinned SDK supports CEF windowless rendering ONLY on Wayland.
+    // Do not set QT_QPA_PLATFORM from the executable: verify lab isolation.
+    if ((osrLab || streamLab) && qgetenv("QT_QPA_PLATFORM") != "wayland") return 9;
+#if defined(__linux__)
+    const QString streamSession = streamLab ? QString::fromLatin1(argv[4]) : QString();
+    const QString streamTab = streamLab ? QString::fromLatin1(argv[5]) : QString();
+    if (streamLab && (!Guid32(streamSession) || !Guid32(streamTab))) return 2;
+    BoundedStreamOutput streamOutput;
+    if (streamLab && !streamOutput.Enable()) return 10;
+#else
+    if (streamLab) return 2;
+#endif
 #endif
     const QString staging = QString::fromLocal8Bit(argv[2]);
     const QString fixtureName = QString::fromLocal8Bit(argv[3]);
@@ -285,7 +413,7 @@ int main(int argc, char** argv) {
 
     QApplication app(argc, argv);
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
-    if (osrLab && app.platformName() != "wayland") return 9;
+    if ((osrLab || streamLab) && app.platformName() != "wayland") return 9;
 #endif
     QTemporaryDir profile(QDir::tempPath() + "/get-document-gd31j6-XXXXXX");
     if (!profile.isValid()) return 4;
@@ -314,7 +442,7 @@ int main(int argc, char** argv) {
     layout->addWidget(banner);
     QPointer<SyntheticEditorView> view = new SyntheticEditorView(&window, QSize(980, 620));
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
-    if (osrLab) view->EnableSyntheticOsrCapture();
+    if (osrLab || streamLab) view->EnableSyntheticOsrCapture(streamLab);
 #endif
     layout->addWidget(view);
     view->Create(&manager, cvwtEditor);
@@ -341,11 +469,44 @@ int main(int argc, char** argv) {
     // app.exec() does not necessarily pump Chromium: schedule CEF work on the
     // Qt owner thread, NEVER from OnPaint itself (reentrancy is unsafe).
     QTimer cefWorkPump;
-    if (osrLab) {
+    if (osrLab || streamLab) {
         QObject::connect(&cefWorkPump, &QTimer::timeout, &app,
                          [&cef]() { cef.DoMessageLoopEvent(); });
         cefWorkPump.start(10);
     }
+#if defined(__linux__)
+    int framesProduced = 0;
+    quint64 observedRevision = 0;
+    bool pipeHealthy = true;
+    QTimer pipeDrainTimer;
+    QTimer frameSampleTimer;
+    if (streamLab) {
+        QObject::connect(&pipeDrainTimer, &QTimer::timeout, &app, [&]() {
+            if (!streamOutput.Drain()) {
+                pipeHealthy = false;
+                app.quit();
+            }
+        });
+        pipeDrainTimer.start(10);
+        QObject::connect(&frameSampleTimer, &QTimer::timeout, &app, [&]() {
+            // One latest frame, <= 8 samples, no buffered frame buildup.
+            if (!view || !pipeHealthy || framesProduced >= 8 ||
+                streamOutput.HasPending()) return;
+            const QImage newest = view->TakeLatestStreamFrame(observedRevision);
+            if (newest.isNull()) return;
+            QByteArray png;
+            QBuffer buffer(&png);
+            if (!buffer.open(QIODevice::WriteOnly) ||
+                !newest.save(&buffer, "PNG") ||
+                png.size() <= 0 || png.size() > 48 * 1024)
+                return;
+            if (streamOutput.Queue(StreamFrameReceipt(
+                    streamSession, streamTab, framesProduced + 1, newest, png)))
+                ++framesProduced;
+        });
+        frameSampleTimer.start(500); // <= 2 frames/sec
+    }
+#endif
 #endif
 
     // No success acknowledgement is available yet. Timeout merely limits the
@@ -354,6 +515,12 @@ int main(int argc, char** argv) {
     const int exitCode = app.exec();
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
     cefWorkPump.stop();
+#if defined(__linux__)
+    if (streamLab) {
+        frameSampleTimer.stop();
+        pipeDrainTimer.stop();
+    }
+#endif
 #endif
     // Snapshot BEFORE any CEF/Qt destroy callback can invalidate the widget.
     // A browser callback does not prove OOXML was parsed/rendered correctly.
@@ -367,6 +534,26 @@ int main(int argc, char** argv) {
         manager.DestroyCefView(viewId, false);
     manager.SetEventListener(nullptr);
     manager.CloseApplication();
+
+#if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) && defined(__linux__)
+    if (streamLab) {
+        // No legacy stdout diagnostic markers in this IPC mode. The reader
+        // expects exactly bounded frame JSONL messages followed by one end.
+        if (!pipeHealthy || !streamOutput.FlushFor(1500)) return 11;
+        const QJsonObject ending{
+            {"command", "end"},
+            {"framesProduced", framesProduced},
+            {"laboratoryOnly", true},
+            {"protocol", "getdoc-cef-osr-stream/1"},
+            {"reason", "time-limit"},
+            {"sessionId", streamSession},
+            {"tabId", streamTab}
+        };
+        if (!streamOutput.Queue(ending) || !streamOutput.FlushFor(1500))
+            return 12;
+        return exitCode;
+    }
+#endif
 
     QJsonObject nativeEvents;
     nativeEvents["viewLoaded"] = viewCallback;
