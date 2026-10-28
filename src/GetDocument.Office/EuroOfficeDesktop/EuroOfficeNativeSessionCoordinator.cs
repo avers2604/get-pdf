@@ -141,7 +141,7 @@ public sealed class EuroOfficeNativeSessionCoordinator : IAsyncDisposable
             entry.StopMonitoring.Cancel();
             try
             {
-                if (!entry.Faulted)
+                if (!entry.Faulted && !entry.TransportDisposed)
                     await entry.Transport.CloseAsync(cancellationToken);
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or
