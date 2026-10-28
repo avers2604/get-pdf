@@ -90,6 +90,20 @@ public static class EuroOfficeOsrStreamProcessLab
     }
 
     /// <summary>
+    /// Extra click/selection privilege is a separate CLI; the old pointer-only
+    /// program cannot receive left button commands via this method.
+    /// </summary>
+    public static ProcessStartInfo CreateClickStartInfo(EuroOfficeNativeLabHostPolicy host,
+        string stagingDirectory, string fixtureName,
+        Guid sessionId, Guid tabId, bool labApproved)
+    {
+        var info = CreateInputStartInfo(host, stagingDirectory, fixtureName,
+            sessionId, tabId, labApproved);
+        info.ArgumentList[0] = "--open-staged-wayland-click-lab";
+        return info;
+    }
+
+    /// <summary>
     /// Start the approved interactive CEF lab. The synchronous callback
     /// registers the bounded input channel with the LAB UI only. It must not
     /// retain the channel after onInputClosed. Writer has no command ACK.
@@ -99,14 +113,18 @@ public static class EuroOfficeOsrStreamProcessLab
         Guid sessionId, Guid tabId,
         Func<EuroOfficeOsrStreamFrame, Task> onFrame,
         Action<EuroOfficeOsrLabInputChannel> onInputReady,
-        Action onInputClosed, bool labApproved, CancellationToken cancellationToken)
+        Action onInputClosed, bool labApproved, CancellationToken cancellationToken,
+        bool clickLabApproved = false)
     {
         ArgumentNullException.ThrowIfNull(onInputReady);
         ArgumentNullException.ThrowIfNull(onInputClosed);
-        var info = CreateInputStartInfo(host, stagingDirectory, fixtureName,
-            sessionId, tabId, labApproved);
+        var info = clickLabApproved
+            ? CreateClickStartInfo(host, stagingDirectory, fixtureName,
+                sessionId, tabId, labApproved)
+            : CreateInputStartInfo(host, stagingDirectory, fixtureName,
+                sessionId, tabId, labApproved);
         return RunCoreAsync(info, sessionId, tabId,
-            onFrame, onInputReady, onInputClosed, cancellationToken);
+            onFrame, onInputReady, onInputClosed, cancellationToken, clickLabApproved);
     }
 
     public static async Task<int> RunAsync(EuroOfficeNativeLabHostPolicy host,
@@ -125,7 +143,8 @@ public static class EuroOfficeOsrStreamProcessLab
         Guid sessionId, Guid tabId,
         Func<EuroOfficeOsrStreamFrame, Task> onFrame,
         Action<EuroOfficeOsrLabInputChannel>? onInputReady,
-        Action? onInputClosed, CancellationToken cancellationToken)
+        Action? onInputClosed, CancellationToken cancellationToken,
+        bool clickLabApproved = false)
     {
         using var process = new Process { StartInfo = info };
         bool started = false;
@@ -142,7 +161,8 @@ public static class EuroOfficeOsrStreamProcessLab
                 if (!info.RedirectStandardInput)
                     throw new InvalidOperationException("Input lab must use private stdin.");
                 input = new EuroOfficeOsrLabInputChannel(
-                    process.StandardInput, sessionId, tabId, laboratoryApproved: true);
+                    process.StandardInput, sessionId, tabId,
+                    laboratoryApproved: true, clickLabApproved: clickLabApproved);
                 onInputReady(input);
             }
             var receiver = new EuroOfficeOsrStreamReader(sessionId, tabId);
