@@ -9,9 +9,28 @@ namespace GetDocument.Office.EuroOfficeDesktop;
 /// It is not CEF OSR, not the current office document, and never authorizes
 /// file save, export or printing. PNG bytes are an UNTRUSTED image input.
 /// </summary>
-public sealed record EuroOfficeNativeDiagnosticFrame(
-    Guid SessionId, Guid TabId, int Width, int Height, byte[] PngBytes)
+public sealed class EuroOfficeNativeDiagnosticFrame
 {
+    private readonly byte[] _pngBytes;
+
+    // Only Parse can construct a frame. Do not allow unvalidated callers to
+    // forge an image object or mutate the buffer after SHA-256 validation.
+    private EuroOfficeNativeDiagnosticFrame(
+        Guid sessionId, Guid tabId, int width, int height, byte[] pngBytes)
+    {
+        SessionId = sessionId;
+        TabId = tabId;
+        Width = width;
+        Height = height;
+        _pngBytes = (byte[])pngBytes.Clone();
+    }
+
+    public Guid SessionId { get; }
+    public Guid TabId { get; }
+    public int Width { get; }
+    public int Height { get; }
+    public byte[] PngBytes => (byte[])_pngBytes.Clone();
+
     public bool CefRendered => false;
     public bool OfficeDocumentVerified => false;
     public bool RevisionCommitted => false;
