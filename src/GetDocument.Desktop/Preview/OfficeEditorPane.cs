@@ -230,6 +230,11 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
                     ("Снять закрепление", "feature:calc-unfreeze")),
                 EditFeature(TextButton("Пересчитать", Icons.Refresh, "Пересчитать все формулы",
                     () => RunFeature("calc-recalculate"))));
+            Add(EditFeature(MenuButton("Печать таблицы", Icons.Printer, "Настройка области и строк, повторяемых при печати",
+                ("Печатать заполненную область", "feature:calc-print-used-area"),
+                ("Сбросить область печати", "feature:calc-clear-print-area"),
+                ("Повторять первую строку", "feature:calc-repeat-first-row"),
+                ("Отключить повтор строк", "feature:calc-stop-repeat-rows"))));
             return;
         }
 
