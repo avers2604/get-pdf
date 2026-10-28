@@ -76,6 +76,10 @@ class AcceptancePlanTests(unittest.TestCase):
         self.assertEqual(str(qt_binary), checks[0].command[-1])
         self.assertLess([step.name for step in steps].index("native-qt-headless-smoke"),
                         [step.name for step in steps].index("solution-restore"))
+        display = [step for step in steps if step.name == "native-qt-display-offscreen"]
+        self.assertEqual(1, len(display))
+        self.assertIn("test_qt_display.py", display[0].command)
+        self.assertEqual(str(qt_binary), display[0].command[-1])
 
     def test_linux_plan_does_not_assume_windows_only_build_tools(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
