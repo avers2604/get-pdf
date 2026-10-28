@@ -69,14 +69,16 @@ class CefLabGateTests(unittest.TestCase):
     def test_upstream_revision_check_requires_exact_all_three_pins(self):
         expected = cef_lab_gate.REQUIRED_COMMITS
         self.assertEqual(3, len(expected))
-        with patch.object(cef_lab_gate, "git_head", side_effect=lambda p: expected[p.name]):
+        with patch.object(cef_lab_gate, "git_head", side_effect=lambda p: expected[p.name]), \
+             patch.object(cef_lab_gate, "git_clean", return_value=True):
             with tempfile.TemporaryDirectory() as dirname:
                 root = pathlib.Path(dirname) / "DesktopEditors"
                 root.mkdir()
                 (root / "desktop-sdk").mkdir()
                 (root / "core").mkdir()
                 cef_lab_gate.check_revision_pins(root)
-        with patch.object(cef_lab_gate, "git_head", return_value="0" * 40):
+        with patch.object(cef_lab_gate, "git_head", return_value="0" * 40), \
+             patch.object(cef_lab_gate, "git_clean", return_value=True):
             with tempfile.TemporaryDirectory() as dirname:
                 root = pathlib.Path(dirname) / "DesktopEditors"
                 root.mkdir()
