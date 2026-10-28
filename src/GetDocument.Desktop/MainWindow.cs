@@ -584,6 +584,22 @@ public sealed class MainWindow : Window
         _status.Text = "Qt IPC подключён; документ EuroOffice не проверен.";
     }
 
+    internal void ShowNativeDiagnosticFrame(Guid tabId, Guid sessionId,
+        EuroOfficeNativeDiagnosticFrame frame)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        var current = _nativeWorkspaceTabs.Get(tabId);
+        if (current.SessionId != sessionId || frame.SessionId != sessionId ||
+            frame.TabId != tabId || current.Status is
+                (EuroOfficeNativeDocumentStatus.Failed or EuroOfficeNativeDocumentStatus.Closed))
+            throw new InvalidDataException("Устаревший или чужой кадр Qt IPC.");
+        if (!_nativeTabViews.TryGetValue(tabId, out var tab) ||
+            tab.Content is not NativeOfficeDiagnosticPane pane)
+            throw new InvalidDataException("Диагностическая вкладка отсутствует.");
+        pane.SetDiagnosticFrame(frame);
+        _status.Text = "Отображён диагностический кадр Qt без CEF. Документ не проверен.";
+    }
+
     internal bool NativeDiagnosticHasUnverifiedChanges(Guid tabId, Guid sessionId)
     {
         Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
