@@ -50,7 +50,7 @@ public sealed record ImageEditPlan(
     public static void ValidateDestinationExtension(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        if (!Path.GetExtension(path).Equals(".png", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Новая редакция сохраняется в PNG без потерь.", nameof(path));
+        if (Path.GetExtension(path).ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg"))
+            throw new ArgumentException("Новая редакция сохраняется в PNG или JPEG.", nameof(path));
     }
 }
