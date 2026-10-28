@@ -16,6 +16,8 @@
 #include <QJsonDocument>
 #include <QBuffer>
 #include <QImage>
+#include <QElapsedTimer>
+#include <QThread>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QJsonObject>
@@ -29,6 +31,12 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) && defined(__linux__)
+#include <cerrno>
+#include <csignal>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 #include "cefapplication.h"
 #include "cefview.h"
 #include "applicationmanager_events.h"
@@ -48,7 +56,8 @@ public:
     }
 
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
-    void EnableSyntheticOsrCapture() {
+    void EnableSyntheticOsrCapture(bool streaming = false) {
+        m_streaming.store(streaming, std::memory_order_release);
         m_captureEnabled.store(true, std::memory_order_release);
     }
 
@@ -58,7 +67,8 @@ public:
     void OnPaint(const void* buffer, int width, int height) override {
         QCefView::OnPaint(buffer, width, height);
         if (!m_captureEnabled.load(std::memory_order_acquire) ||
-            m_paintObserved.load(std::memory_order_acquire) ||
+            (!m_streaming.load(std::memory_order_acquire) &&
+             m_paintObserved.load(std::memory_order_acquire)) ||
             !IsWayland() || !buffer ||
             width < 1 || height < 1 || width > 4096 || height > 4096 ||
             static_cast<long long>(width) * height > 4'194'304)
@@ -74,6 +84,14 @@ public:
         if (preview.isNull() || preview.width() < 1 || preview.height() < 1)
             return;
         QMutexLocker lock(&m_captureMutex);
+        if (m_streaming.load(std::memory_order_relaxed)) {
+            // Latest-frame-only single-slot buffer. If the pipe is busy we
+            // overwrite the sample, never accumulate or block CEF OnPaint.
+            m_latestFrame = preview;
+            ++m_latestRevision;
+            m_paintObserved.store(true, std::memory_order_release);
+            return;
+        }
         if (m_paintObserved.load(std::memory_order_relaxed))
             return;
         m_capture = preview;
@@ -84,11 +102,22 @@ public:
         QMutexLocker lock(&m_captureMutex);
         return m_capture.copy();
     }
+
+    QImage TakeLatestStreamFrame(quint64& knownRevision) {
+        QMutexLocker lock(&m_captureMutex);
+        if (m_latestRevision == knownRevision || m_latestFrame.isNull())
+            return QImage();
+        knownRevision = m_latestRevision;
+        return m_latestFrame.copy();
+    }
 private:
     std::atomic<bool> m_captureEnabled{false};
+    std::atomic<bool> m_streaming{false};
     std::atomic<bool> m_paintObserved{false};
     QMutex m_captureMutex;
     QImage m_capture;
+    QImage m_latestFrame;
+    quint64 m_latestRevision = 0;
 #endif
 };
 
