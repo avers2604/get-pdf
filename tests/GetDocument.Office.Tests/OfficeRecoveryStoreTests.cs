@@ -51,6 +51,7 @@ public sealed class OfficeRecoveryStoreTests
         using var fixture = new RecoveryFixture();
         string source = fixture.CreateOfficeFile("Доклад.pptx");
         var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        byte[] original = File.ReadAllBytes(source);
 
         await Assert.ThrowsExactlyAsync<IOException>(() => store.CaptureAsync(source, target =>
         {
@@ -59,7 +60,7 @@ public sealed class OfficeRecoveryStoreTests
         }));
 
         Assert.IsNull(store.FindLatest(source));
-        CollectionAssert.AreEqual(RecoveryFixture.SampleBytes(source), File.ReadAllBytes(source));
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(source));
     }
 
     [TestMethod]
@@ -112,6 +113,24 @@ public sealed class OfficeRecoveryStoreTests
         Assert.IsNotNull(store.FindLatest(first));
     }
 
+    [TestMethod]
+    public async Task RetainsOnlyThreeMostRecentValidatedCopies()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("План.docx");
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        for (int i = 0; i < 5; i++)
+        {
+            await store.CaptureAsync(source, target =>
+            {
+                File.Copy(source, target);
+                return Task.CompletedTask;
+            });
+        }
+        Assert.AreEqual(3, Directory.GetFiles(fixture.RecoveryDirectory, "*.json", SearchOption.AllDirectories).Length);
+        Assert.IsNotNull(store.FindLatest(source));
+    }
+
     private sealed class RecoveryFixture : IDisposable
     {
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "getdoc-recovery-test-" + Guid.NewGuid().ToString("N"));
@@ -135,8 +154,6 @@ public sealed class OfficeRecoveryStoreTests
                 part.Write("<root/>");
             return target;
         }
-
-        public static byte[] SampleBytes(string source) => File.ReadAllBytes(source);
 
         public void Dispose()
         {
