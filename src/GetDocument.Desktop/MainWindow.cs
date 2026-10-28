@@ -105,6 +105,14 @@ public sealed class MainWindow : Window
         _tabs.SelectedIndex = 0;
         _tabs.SelectionChanged += (_, _) =>
         {
+            // A hidden native tab must not keep keyboard/browser focus when
+            // the operator switches to LibreOffice, PDF or another tab.
+            foreach (var native in _nativeTabViews)
+            {
+                if (!ReferenceEquals(_tabs.SelectedItem, native.Value) &&
+                    native.Value.Content is NativeOfficeDiagnosticPane pane)
+                    _ = pane.SuspendLabInputAsync();
+            }
             if (_tabs.SelectedItem is TabItem tab && tab.Tag is Guid id)
             {
                 if (_views.ContainsKey(id))
@@ -695,7 +703,6 @@ public sealed class MainWindow : Window
         try
         {
             AddNativeDiagnosticTab(tabId, sessionId, syntheticFixture,
-
                 "EuroOffice CEF — синтетический документ");
             registered = true;
             var sink = new AvaloniaNativeOsrLabFrameSink(this);
