@@ -98,6 +98,10 @@ def build_steps(root: Path, feed: Path, host: str,
             sys.executable, "probes/eurooffice-desktop/test_qt_display.py",
             str(qt_host_binary)
         ]))
+        steps.insert(4, CommandStep("native-qt-tab-ipc", [
+            sys.executable, "probes/eurooffice-desktop/test_qt_ipc.py",
+            str(qt_host_binary)
+        ]))
     for label, project in TEST_PROJECTS.items():
         steps.append(CommandStep(
             "test-" + label,
