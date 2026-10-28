@@ -176,12 +176,17 @@ def new_report(revision: str, host: str, stage: str) -> dict:
 
 def write_report(path: Path, report: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
     try:
         with temporary.open("x", encoding="utf-8") as output:
             json.dump(report, output, ensure_ascii=False, indent=2)
             output.write("\n")
-        os.replace(temporary, path)
+            output.flush()
+            os.fsync(output.fileno())
+        # A hard-link publishes a complete report atomically and FAILS if the
+        # named evidence file already exists. Do not use os.replace here:
+        # overwriting an earlier result would defeat the acceptance audit.
+        os.link(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
 
