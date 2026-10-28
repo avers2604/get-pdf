@@ -33,6 +33,15 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_avalonia_ime_caret_source_contract_is_in_deferred_acceptance(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("avalonia-ime-caret-source-contract-tests", names)
+        self.assertLess(names.index("avalonia-ime-caret-source-contract-tests"),
+                        names.index("solution-restore"))
+        step = next(s for s in steps if s.name == "avalonia-ime-caret-source-contract-tests")
+        self.assertIn("test_avalonia_ime_caret_contract.py", step.command)
+
     def test_ime_commit_source_contract_is_in_deferred_acceptance(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]

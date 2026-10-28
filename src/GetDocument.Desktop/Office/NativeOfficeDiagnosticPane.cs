@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.TextInput;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -17,6 +18,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
 {
     private EuroOfficeOsrLabInputChannel? _labInput;
     private EuroOfficeImeLabComposition? _imeComposition;
+    private AvaloniaNativeImeLabClient? _nativeImeClient;
     private Action? _onLabInputFailure;
     private bool _labFocused;
     private int _imageWidth, _imageHeight;
@@ -84,6 +86,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         _preview.KeyDown += OnLabKeyDown;
         _preview.KeyUp += OnLabKeyUp;
         _preview.TextInput += OnLabTextInput;
+        _preview.TextInputMethodClientRequested += OnLabImeClientRequested;
         _preview.PointerMoved += OnLabPointerMoved;
         _preview.PointerWheelChanged += OnLabPointerWheel;
         _preview.PointerExited += OnLabPointerExited;
@@ -172,8 +175,16 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         _labInput = input;
         _onLabInputFailure = onInputFailure;
         if (input.ImeCommitLabApproved)
+        {
             _imeComposition = new EuroOfficeImeLabComposition(input.SessionId, input.TabId,
                 approved: true);
+            _nativeImeClient = new AvaloniaNativeImeLabClient(
+                _preview, input.SessionId, input.TabId,
+                OnLabImePreeditChanged,
+                () => ReferenceEquals(_labInput, input) && _labFocused);
+            // No CEF editor caret telemetry exists yet, so CanRegisterWithOsIme
+            // remains FALSE. Do NOT use pointer coordinates to fake the caret.
+        }
         _connection.Text = input.ImeCommitLabApproved
             ? "Wayland CEF: локальная IME-композиция и итоговый commit подготовлены. " +
               "Preedit в CEF не передаётся; clipboard отключён."
@@ -191,6 +202,8 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     {
         if (expectedChannel is not null && !ReferenceEquals(_labInput, expectedChannel))
             return; // late callback from an older laboratory generation
+        _nativeImeClient?.Dispose();
+        _nativeImeClient = null;
         _imeComposition?.Dispose();
         _imeComposition = null;
         _labFocused = false;
@@ -213,6 +226,7 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         try
         {
             if (_labInput is not { } input) return;
+            _nativeImeClient?.Revoke();
             _imeComposition?.Cancel(); // a tab switch must drop local preedit
             await ReleaseLabButtonAsync(input);
             if (_labFocused)
@@ -420,6 +434,47 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         try { await input.SendTextCharacterAsync(c, CancellationToken.None); }
         catch (Exception ex) { FailLabInput(ex); }
         finally { _labGestureGate.Release(); }
+    }
+
+    /// <summary>
+    /// Avalonia 12.1.4 will ask for an OS IME client on input focus. Until
+    /// real, authenticated CEF caret telemetry exists, we must NOT claim
+    /// that mouse/pixel-preview coordinates are the editor caret.
+    /// </summary>
+    private void OnLabImeClientRequested(object? sender,
+        TextInputMethodClientRequestedEventArgs e)
+    {
+        if (!_labFocused || _labInput is not { ImeCommitLabApproved: true } ||
+            _nativeImeClient is not { CanRegisterWithOsIme: true } client)
+            return;
+        e.Client = client;
+    }
+
+    private void OnLabImePreeditChanged(string? preedit)
+    {
+        if (_imeComposition is not { } composition) return;
+        if (string.IsNullOrEmpty(preedit))
+        {
+            composition.Cancel();
+            return;
+        }
+        try
+        {
+            if (!composition.IsComposing)
+                composition.Begin();
+            composition.Update(preedit);
+            // Do not echo text into diagnostics or audit. OS candidate UI
+            // must be independently verified against actual CEF caret rect.
+            _connection.Text = "IME preedit локально активен; данные не отправлены в CEF.";
+        }
+        catch (ArgumentException)
+        {
+            composition.Cancel();
+        }
+        catch (InvalidOperationException)
+        {
+            composition.Cancel();
+        }
     }
 
     // These methods are intentionally NOT wired to TextInput/clipboard: a
