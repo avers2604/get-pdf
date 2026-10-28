@@ -17,6 +17,8 @@ using GetDocument.Desktop.Templates;
 using GetDocument.Desktop.Revisions;
 using GetDocument.Desktop.Collaboration;
 using GetDocument.Office;
+using GetDocument.Office.EuroOfficeDesktop;
+using GetDocument.Desktop.Office;
 using GetDocument.Core.Integration;
 using GetDocument.Desktop.Integration;
 using GetDocument.Desktop.Printing;
@@ -34,6 +36,10 @@ public sealed class MainWindow : Window
     private readonly HiddenGameGesture _hiddenGame = new();
     private readonly ObservableCollection<TabItem> _items = [];
     private readonly Dictionary<Guid, TabItem> _views = [];
+    // Native lab tabs share this SAME TabControl, not DocumentWorkspace or
+    // the verified LibreOffice/PDF rendering and print paths.
+    private readonly EuroOfficeNativeWorkspaceTabs _nativeWorkspaceTabs = new();
+    private readonly Dictionary<Guid, TabItem> _nativeTabViews = [];
     private readonly TabControl _tabs = new();
     private readonly TextBlock _status = new();
     private TabItem? _gameTab;
@@ -95,7 +101,19 @@ public sealed class MainWindow : Window
         _tabs.SelectionChanged += (_, _) =>
         {
             if (_tabs.SelectedItem is TabItem tab && tab.Tag is Guid id)
-                _workspace.Select(id);
+            {
+                if (_views.ContainsKey(id))
+                {
+                    _nativeWorkspaceTabs.Deselect();
+                    _workspace.Select(id);
+                }
+                else if (_nativeTabViews.ContainsKey(id))
+                    _nativeWorkspaceTabs.Select(id);
+                else
+                    _nativeWorkspaceTabs.Deselect();
+            }
+            else
+                _nativeWorkspaceTabs.Deselect();
             if (_tabs.SelectedIndex == 0) RefreshHome();
         };
         try { _history.ImportFromGetPdfOnce(); }
@@ -121,11 +139,18 @@ public sealed class MainWindow : Window
         {
             if (_closeConfirmed) return;
             var unsaved = _views.Values.Where(t => HasUnsaved(t.Content)).ToList();
-            if (unsaved.Count == 0) return;
+            var nativeUnverified = _nativeTabViews.Keys
+                .Select(id => _nativeWorkspaceTabs.Get(id))
+                .Where(state => state.ModifiedObserved).ToArray();
+            if (unsaved.Count == 0 && nativeUnverified.Length == 0) return;
             args.Cancel = true;
-            string names = string.Join(", ", unsaved.Select(t => (t.Header as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault()?.Text ?? "документ").Take(4));
+            string names = string.Join(", ", unsaved.Select(t =>
+                    (t.Header as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault()?.Text
+                    ?? "документ")
+                .Concat(nativeUnverified.Select(state => state.Title)).Take(4));
             if (await GetDialogs.ConfirmAsync(this, "Закрыть без сохранения?",
-                    $"Есть несохранённые изменения: {names}. Если закрыть программу, они пропадут. Исходные файлы не изменены.",
+                    $"Есть несохранённые или неподтверждённые изменения: {names}. " +
+                    "При закрытии они могут быть потеряны. Исходные WORM-файлы не изменялись этим модулем.",
                     "Закрыть без сохранения", "Вернуться"))
             {
                 _closeConfirmed = true;
@@ -823,6 +848,13 @@ public sealed class MainWindow : Window
 
     private async void ShowPrintWizard()
     {
+        if (_tabs.SelectedItem is TabItem { Tag: Guid nativeId } &&
+            _nativeTabViews.ContainsKey(nativeId))
+        {
+            _status.Text = "Печать из диагностического EuroOffice запрещена: " +
+                "нет проверенного PDF для собственного мастера ГЭТ.";
+            return;
+        }
         if (_tabs.SelectedItem is TabItem { Tag: Guid id })
         {
             var document = _workspace.Tabs.FirstOrDefault(x => x.Id == id);
@@ -1141,6 +1173,9 @@ public sealed class MainWindow : Window
             e.Handled = true;
             AddDocument(_workspace.CreateDraft(WorkspaceDocumentKind.Text));
         }
+        else if (e.Key == Key.W && _tabs.SelectedItem is TabItem { Tag: Guid nativeId } &&
+                 _nativeTabViews.ContainsKey(nativeId))
+        { e.Handled = true; await CloseNativeDiagnosticTabAsync(nativeId); }
         else if (e.Key == Key.W && _tabs.SelectedItem is TabItem { Tag: Guid id })
         { e.Handled = true; await CloseDocumentAsync(id); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _filesTab))
