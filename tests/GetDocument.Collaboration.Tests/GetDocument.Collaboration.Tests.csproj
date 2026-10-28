@@ -7,5 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/GetDocument.Collaboration/GetDocument.Collaboration.csproj" />
+    <!-- Test-only architectural boundary: EuroOffice must not inherit LibreOffice/UNO commands. -->
+    <ProjectReference Include="../../src/GetDocument.Office/GetDocument.Office.csproj" />
   </ItemGroup>
 </Project>
