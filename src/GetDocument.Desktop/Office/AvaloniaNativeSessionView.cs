@@ -51,6 +51,10 @@ internal sealed class AvaloniaNativeSessionView(MainWindow window) : IEuroOffice
     public Task ConnectedAsync(Guid tabId, Guid sessionId, CancellationToken ct) =>
         OnUiAsync(() => window.ReportNativeDiagnosticConnected(tabId, sessionId), ct);
 
+    public Task PreviewFrameAsync(Guid tabId, Guid sessionId,
+        EuroOfficeNativeDiagnosticFrame frame, CancellationToken ct) =>
+        OnUiAsync(() => window.ShowNativeDiagnosticFrame(tabId, sessionId, frame), ct);
+
     public Task HostLostAsync(Guid tabId, Guid sessionId, CancellationToken ct) =>
         OnUiAsync(() => window.ReportNativeDiagnosticCrash(tabId, sessionId), ct);
 
