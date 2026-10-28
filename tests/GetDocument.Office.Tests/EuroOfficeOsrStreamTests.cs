@@ -73,7 +73,8 @@ public sealed class EuroOfficeOsrStreamTests
             Frame(1) + "\n" + End(0),
             Frame(1) + "\n",
             End(1) + "\n",
-            Frame(1) + "\n" + End(1, session: Guid.NewGuid())
+            Frame(1) + "\n" + End(1, session: Guid.NewGuid()),
+            Frame(1) + "\n" + End(1) + "\n" + "trailing-data"
         })
         {
             using var incoming = new StringReader(payload);
