@@ -73,7 +73,10 @@ public sealed class EuroOfficeNativeSessionCoordinator : IAsyncDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_entries.ContainsKey(tabId))
+            {
+                await transport.DisposeAsync();
                 throw new InvalidOperationException("Для вкладки уже существует процесс.");
+            }
             try
             {
                 await transport.AttachAsync(cancellationToken);
