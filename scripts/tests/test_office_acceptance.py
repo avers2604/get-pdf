@@ -5,6 +5,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import office_acceptance as acceptance
@@ -49,6 +51,21 @@ class AcceptancePlanTests(unittest.TestCase):
         self.assertFalse(passed)
         self.assertEqual(["restore", "build"], invoked)
         self.assertEqual(["passed", "failed", "not-run"], [s["status"] for s in results])
+
+    def test_refuses_dirty_worktree_so_git_sha_identifies_tested_sources(self):
+        with patch.object(acceptance.subprocess, "run", side_effect=[
+            SimpleNamespace(stdout="a" * 40 + "\n"),
+            SimpleNamespace(stdout=" M src/GetDocument.Office/LibreOffice/lo_editor.py\n")
+        ]):
+            with self.assertRaises(RuntimeError):
+                acceptance.git_revision(Path("/repo"))
+
+    def test_rejects_preview_sdk_for_release_gate(self):
+        with patch.object(acceptance.shutil, "which", return_value="/bin/dotnet"):
+            with patch.object(acceptance.subprocess, "run",
+                              return_value=SimpleNamespace(stdout="10.0.100-preview.1\n")):
+                with self.assertRaises(RuntimeError):
+                    acceptance.ensure_dotnet10()
 
     def test_empty_plan_is_not_an_automatic_success(self):
         results, passed = acceptance.run_steps([], lambda _: 0)
