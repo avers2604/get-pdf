@@ -33,6 +33,15 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_native_frame_transport_contract_is_deferred_to_local_acceptance(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [s.name for s in steps]
+        self.assertIn("native-frame-shell-contract-tests", names)
+        self.assertLess(names.index("native-frame-shell-contract-tests"),
+                        names.index("solution-restore"))
+        check = next(s for s in steps if s.name == "native-frame-shell-contract-tests")
+        self.assertIn("test_native_frame_shell_contract.py", check.command)
+
     def test_native_session_dispatch_contract_is_checked_before_restore(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
