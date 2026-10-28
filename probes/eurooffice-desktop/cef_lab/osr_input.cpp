@@ -225,7 +225,8 @@ bool OsrInputPump::Dispatch(const QByteArray& bytes,
             return false;
         for (const QJsonValue& item : units) {
             if (!BoundedInteger(item, 0x20, 0xffff) ||
-                !AllowedCommittedCharacter(item.toInt()))
+                !AllowedCommittedCharacter(item.toInt()) ||
+                QChar(static_cast<ushort>(item.toInt())).category() == QChar::Other_Format)
                 return false;
         }
         for (const QJsonValue& item : units) {
