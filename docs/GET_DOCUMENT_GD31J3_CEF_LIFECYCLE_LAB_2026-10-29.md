@@ -14,6 +14,7 @@
 - `desktop-sdk/ChromiumBasedEditors/lib/include/applicationmanager.h`: класс `CAscApplicationManager` и настройки каталогов.
 - `desktop-sdk/ChromiumBasedEditors/lib/qt_wrapper/include/qascapplicationmanager.h`: `QAscApplicationManager`; этот слой требует Qt6/нативных библиотек.
 - `desktop-sdk/ChromiumBasedEditors/lib/include/cefview.h`: `CCefViewEditor::OpenLocalFile` присутствует, **но в новом стенде не вызывается**, потому что не подтверждены безопасный хост, lifecycle, события завершения и сохранение новой редакции.
+- `desktop-sdk/ChromiumBasedEditors/lib/qt_wrapper/src/qcefview.cpp`: проверен конкретный маршрут создания настоящего окна редактора — `QCefView::Create(manager, cvwtEditor)` внутри вызывает `CAscApplicationManager::CreateCefEditor(this)`. Значит, **не надо** вызывать `CreateCefEditor` второй раз напрямую: в дальнейшем нужно сохранить владение одним `QCefView` и его CEF-child. Для этого необходим отдельный GUI/lifecycle тест, а не нынешняя init-only проверка.
 
 Источник: [Euro-Office DesktopEditors](https://github.com/Euro-Office/DesktopEditors), [desktop-sdk cefapplication.cpp](https://github.com/Euro-Office/desktop-sdk/blob/8cc8d747cb48953bf8020c2bfbb67ede6cb55c51/ChromiumBasedEditors/lib/src/cefapplication.cpp).
 
