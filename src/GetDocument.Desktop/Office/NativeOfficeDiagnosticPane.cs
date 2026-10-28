@@ -19,6 +19,11 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     private bool _labFocused;
     private int _imageWidth, _imageHeight;
     private long _lastMoveTimestamp;
+    private long _lastPressTimestamp;
+    private double _previousPressX, _previousPressY;
+    private double _latestPointerX, _latestPointerY;
+    private bool _labButtonHeld;
+    private IPointer? _capturedLabPointer;
     private readonly TextBlock _state = new()
     {
         FontSize = 16,
@@ -69,6 +74,8 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         // Pointer-only CEF input is enabled exclusively by the lab process
         // supervisor. A pointer press grants focus, NOT a browser click.
         _preview.PointerPressed += OnLabPointerPressed;
+        _preview.PointerReleased += OnLabPointerReleased;
+        _preview.PointerCaptureLost += OnLabPointerCaptureLost;
         _preview.PointerMoved += OnLabPointerMoved;
         _preview.PointerWheelChanged += OnLabPointerWheel;
         _preview.PointerExited += OnLabPointerExited;
@@ -153,8 +160,11 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         ArgumentNullException.ThrowIfNull(input);
         DetachOsrLabInput();
         _labInput = input;
-        _connection.Text = "Лабораторная мышь: нажмите на изображение для фокуса. " +
-            "Клики, клавиатура, IME и буфер обмена заблокированы.";
+        _connection.Text = input.ClickLabApproved
+            ? "Wayland CEF: лабораторные клики, двойной клик и выделение разрешены. " +
+              "Клавиатура, IME, буфер обмена и сохранение запрещены."
+            : "Лабораторная мышь: нажмите на изображение для фокуса. " +
+              "Клики, клавиатура, IME и буфер обмена заблокированы.";
     }
 
     public void DetachOsrLabInput(EuroOfficeOsrLabInputChannel? expectedChannel = null)
@@ -164,6 +174,9 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         _labFocused = false;
         _labInput = null;
         _lastMoveTimestamp = 0;
+        _labButtonHeld = false;
+        _capturedLabPointer?.Capture(null);
+        _capturedLabPointer = null;
     }
 
     /// <summary>
@@ -172,31 +185,97 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     /// </summary>
     public async Task SuspendLabInputAsync()
     {
-        if (!_labFocused || _labInput is not { } input) return;
-        _labFocused = false;
-        try { await input.SendFocusAsync(false, CancellationToken.None); }
+        if (_labInput is not { } input) return;
+        try
+        {
+            await ReleaseLabButtonAsync(input);
+            if (_labFocused)
+            {
+                _labFocused = false;
+                await input.SendFocusAsync(false, CancellationToken.None);
+            }
+        }
         catch (Exception ex) { FailLabInput(ex); }
+    }
+
+    private async Task ReleaseLabButtonAsync(EuroOfficeOsrLabInputChannel input)
+    {
+        if (!_labButtonHeld) return;
+        _labButtonHeld = false;
+        _capturedLabPointer?.Capture(null);
+        _capturedLabPointer = null;
+        await input.SendLeftButtonUpAsync(
+            _latestPointerX, _latestPointerY, CancellationToken.None);
     }
 
     private async void OnLabPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (_labInput is not { } input || !_preview.IsVisible) return;
+        if (_labInput is not { } input || !_preview.IsVisible ||
+            e.GetCurrentPoint(_preview).Properties.PointerUpdateKind !=
+                PointerUpdateKind.LeftButtonPressed ||
+            !TryNormalizedPosition(e.GetPosition(_preview), out double x, out double y))
+            return;
+        e.Handled = true;
         try
         {
-            await input.SendFocusAsync(true, CancellationToken.None);
-            _labFocused = true;
-            // The press event must NOT become a CEF mouse click.
-            e.Handled = true;
+            if (!_labFocused)
+            {
+                await input.SendFocusAsync(true, CancellationToken.None);
+                _labFocused = true;
+            }
+            if (!input.ClickLabApproved) return; // previous GD-31J.14 behavior
+            if (_labButtonHeld) return;
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            bool nearby = Math.Abs(x - _previousPressX) <= .015 &&
+                          Math.Abs(y - _previousPressY) <= .015;
+            double elapsed = _lastPressTimestamp == 0
+                ? double.PositiveInfinity
+                : (now - _lastPressTimestamp) * 1000.0 /
+                  System.Diagnostics.Stopwatch.Frequency;
+            int clickCount = nearby && elapsed <= 450 ? 2 : 1;
+            _previousPressX = x;
+            _previousPressY = y;
+            _lastPressTimestamp = now;
+            _latestPointerX = x;
+            _latestPointerY = y;
+            // Capture and mark held BEFORE async write, so quick press/release
+            // events cannot leave a CEF button down without a queued release.
+            _labButtonHeld = true;
+            _capturedLabPointer = e.Pointer;
+            e.Pointer.Capture(_preview);
+            await input.SendLeftButtonDownAsync(x, y, clickCount,
+                CancellationToken.None);
         }
+        catch (Exception ex) { FailLabInput(ex); }
+    }
+
+    private async void OnLabPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_labButtonHeld || _labInput is not { } input ||
+            e.GetCurrentPoint(_preview).Properties.PointerUpdateKind !=
+                PointerUpdateKind.LeftButtonReleased)
+            return;
+        e.Handled = true;
+        if (TryNormalizedPosition(e.GetPosition(_preview), out double x, out double y))
+        {
+            _latestPointerX = x;
+            _latestPointerY = y;
+        }
+        try { await ReleaseLabButtonAsync(input); }
+        catch (Exception ex) { FailLabInput(ex); }
+    }
+
+    private async void OnLabPointerCaptureLost(object? sender,
+        PointerCaptureLostEventArgs e)
+    {
+        if (!_labButtonHeld || _labInput is not { } input) return;
+        try { await ReleaseLabButtonAsync(input); }
         catch (Exception ex) { FailLabInput(ex); }
     }
 
     private async void OnLabPointerExited(object? sender, PointerEventArgs e)
     {
-        if (!_labFocused || _labInput is not { } input) return;
-        _labFocused = false;
-        try { await input.SendFocusAsync(false, CancellationToken.None); }
-        catch (Exception ex) { FailLabInput(ex); }
+        await SuspendLabInputAsync();
     }
 
     private async void OnLabPointerMoved(object? sender, PointerEventArgs e)
@@ -209,6 +288,8 @@ internal sealed class NativeOfficeDiagnosticPane : Border
             return; // <= 13 pointer moves/sec, avoids exhausting native rate cap
         if (!TryNormalizedPosition(e.GetPosition(_preview), out double x, out double y))
             return;
+        _latestPointerX = x;
+        _latestPointerY = y;
         _lastMoveTimestamp = now;
         try { await input.SendPointerMoveAsync(x, y, CancellationToken.None); }
         catch (Exception ex) { FailLabInput(ex); }
