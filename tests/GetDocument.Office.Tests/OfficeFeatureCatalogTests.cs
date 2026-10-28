@@ -28,6 +28,47 @@ public sealed class OfficeFeatureCatalogTests
     }
 
     [TestMethod]
+    public void OnlyLocalUnoProviderMayExposeCurrentToolbarFeatures()
+    {
+        var local = OfficeFeatureCatalog.ForProvider("calc", OfficeFeatureProvider.LibreOfficeUno);
+        Assert.AreEqual(OfficeFeatureCatalog.ForKind("calc").Count, local.Count);
+        Assert.IsTrue(local.Any(x => x.Id == "calc-pivot-sum"));
+
+        foreach (var provider in new[]
+                 {
+                     OfficeFeatureProvider.EuroOfficeDocumentServer,
+                     OfficeFeatureProvider.OnlyOfficeLegacy,
+                     OfficeFeatureProvider.CollaboraWopi,
+                     (OfficeFeatureProvider)999
+                 })
+        {
+            Assert.AreEqual(0, OfficeFeatureCatalog.ForProvider("writer", provider).Count);
+            Assert.AreEqual(0, OfficeFeatureCatalog.ForProvider("calc", provider).Count);
+            Assert.AreEqual(0, OfficeFeatureCatalog.ForProvider("impress", provider).Count);
+            Assert.ThrowsExactly<NotSupportedException>(() =>
+                OfficeFeatureCatalog.Require("calc", "calc-pivot-sum",
+                    readOnly: false, provider: provider));
+            Assert.ThrowsExactly<NotSupportedException>(() =>
+                OfficeFeatureCatalog.Require("writer", "writer-toc-insert",
+                    readOnly: false, provider: provider));
+        }
+    }
+
+    [TestMethod]
+    public void ARemoteProviderCannotBypassReadOnlyOrFeatureAllowlist()
+    {
+        Assert.ThrowsExactly<NotSupportedException>(() =>
+            OfficeFeatureCatalog.Require("calc", "calc-chart-column", readOnly: true,
+                provider: OfficeFeatureProvider.EuroOfficeDocumentServer));
+        Assert.ThrowsExactly<NotSupportedException>(() =>
+            OfficeFeatureCatalog.Require("calc", "arbitrary-command", readOnly: false,
+                provider: OfficeFeatureProvider.LibreOfficeUno));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            OfficeFeatureCatalog.Require("calc", "calc-chart-column", readOnly: true,
+                provider: OfficeFeatureProvider.LibreOfficeUno));
+    }
+
+    [TestMethod]
     public void ReadOnlyDocumentRejectsEveryContentChangingFeature()
     {
         foreach (OfficeFeatureDefinition feature in OfficeFeatureCatalog.All.Where(x => x.RequiresEdit))
