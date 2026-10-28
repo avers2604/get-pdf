@@ -75,13 +75,16 @@ public sealed class EuroOfficeImeLabCompositionTests
     public void RejectsInvalidUnicodeAndOversizedPreedit()
     {
         using var composition = new EuroOfficeImeLabComposition(Session, Tab, approved: true);
-        composition.Begin();
         foreach (string text in new[] {
             "", "a\nb", "a\tb", "\ud800", "a\udfff",
             "a\u202eb", "a\u200eb", "a\u0000b", new string('x', 17)
         })
+        {
+            composition.Begin();
             Assert.ThrowsExactly<ArgumentException>(() => composition.Update(text));
-        Assert.AreEqual(0, composition.BufferedCharacters);
+            Assert.IsFalse(composition.IsComposing);
+            Assert.AreEqual(0, composition.BufferedCharacters);
+        }
     }
 
     [TestMethod]
