@@ -33,6 +33,15 @@ class AcceptancePlanTests(unittest.TestCase):
             self.assertIn("--no-restore", step.command)
         self.assertNotIn("http", " ".join(" ".join(step.command) for step in steps).lower())
 
+    def test_native_avalonia_tabs_have_deferred_source_contract(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [s.name for s in steps]
+        self.assertIn("native-avalonia-tab-contract-tests", names)
+        self.assertLess(names.index("native-avalonia-tab-contract-tests"),
+                        names.index("solution-restore"))
+        contract = next(s for s in steps if s.name == "native-avalonia-tab-contract-tests")
+        self.assertIn("test_native_tab_shell_contract.py", contract.command)
+
     def test_qt_ipc_static_contract_is_checked_without_running_qt(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [item.name for item in steps]
