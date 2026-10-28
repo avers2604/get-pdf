@@ -96,7 +96,7 @@ internal sealed class ImageExportScratch : IDisposable
                         File.GetLastWriteTimeUtc(marker) > cutoff)
                         continue;
 
-                    TryDeleteOwnedDirectory(directory);
+                    TryDeleteOwnedDirectory(directory, cutoff);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
@@ -167,6 +167,12 @@ internal sealed class ImageExportScratch : IDisposable
                 }
             }
             if (!foundMarker) return;
+            // A stage modified after the retention cutoff could be a resumed
+            // writer or unrelated user content: preserve it rather than guess.
+            if (oldestAllowedUtc is { } cutoff &&
+                (File.GetLastWriteTimeUtc(marker) > cutoff ||
+                 (stagedFile is not null && File.GetLastWriteTimeUtc(stagedFile) > cutoff)))
+                return;
             if (stagedFile is not null) File.Delete(stagedFile);
         }
 
