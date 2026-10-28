@@ -19,9 +19,16 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private int _sequence;
     private bool _disposed;
+    private bool _focused;
+    private bool _leftDown;
+    private int _heldClickCount;
+    private double _lastPointerX;
+    private double _lastPointerY;
+    private readonly bool _clickLabApproved;
 
     public EuroOfficeOsrLabInputChannel(TextWriter output,
-        Guid sessionId, Guid tabId, bool laboratoryApproved)
+        Guid sessionId, Guid tabId, bool laboratoryApproved,
+        bool clickLabApproved = false)
     {
         if (!laboratoryApproved)
             throw new NotSupportedException(
@@ -32,7 +39,11 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
         _output = output;
         _session = sessionId.ToString("N");
         _tab = tabId.ToString("N");
+        _clickLabApproved = clickLabApproved;
     }
+
+    /// <summary>True only inside this managed channel, not proof of CEF ACK.</summary>
+    public bool ClickLabApproved => _clickLabApproved;
 
     public Task SendPointerMoveAsync(double normalizedX, double normalizedY,
         CancellationToken cancellationToken) =>
@@ -40,7 +51,9 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
         {
             ["x10000"] = Normalize(normalizedX),
             ["y10000"] = Normalize(normalizedY)
-        }, cancellationToken);
+        }, cancellationToken,
+           checkState: () => RequireFocus(),
+           commitState: () => { _lastPointerX = normalizedX; _lastPointerY = normalizedY; });
 
     public Task SendWheelAsync(double normalizedX, double normalizedY,
         int deltaX, int deltaY, CancellationToken cancellationToken)
@@ -57,14 +70,95 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
             ["deltaY"] = deltaY,
             ["x10000"] = x,
             ["y10000"] = y
-        }, cancellationToken);
+        }, cancellationToken, checkState: () => RequireFocus());
     }
 
     public Task SendFocusAsync(bool focused, CancellationToken cancellationToken) =>
         SendAsync("focus", new SortedDictionary<string, object>(StringComparer.Ordinal)
         {
             ["focused"] = focused
-        }, cancellationToken);
+        }, cancellationToken,
+           checkState: () =>
+           {
+               if (!focused && _leftDown)
+                   throw new InvalidOperationException(
+                       "Перед потерей фокуса сначала завершите перетаскивание.");
+           },
+           commitState: () => _focused = focused);
+
+    /// <summary>
+    /// Separate GD-31J.15 permission: a left down/up pair only. CEF OSR
+    /// must be on an approved disposable Wayland VM with synthetic files.
+    /// </summary>
+    public Task SendLeftButtonDownAsync(double normalizedX, double normalizedY,
+        int clickCount, CancellationToken cancellationToken)
+    {
+        if (!_clickLabApproved)
+            throw new NotSupportedException("Лабораторные клики не разрешены.");
+        int x = Normalize(normalizedX), y = Normalize(normalizedY);
+        if (clickCount is < 1 or > 2)
+            throw new ArgumentOutOfRangeException(nameof(clickCount));
+        return SendAsync("left-down", new SortedDictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["clickCount"] = clickCount,
+            ["x10000"] = x,
+            ["y10000"] = y
+        }, cancellationToken,
+        checkState: () =>
+        {
+            RequireFocus();
+            if (_leftDown)
+                throw new InvalidOperationException("Нельзя повторить нажатие без отпускания.");
+        },
+        commitState: () =>
+        {
+            _leftDown = true;
+            _heldClickCount = clickCount;
+            _lastPointerX = normalizedX;
+            _lastPointerY = normalizedY;
+        });
+    }
+
+    public Task SendLeftButtonUpAsync(double normalizedX, double normalizedY,
+        CancellationToken cancellationToken)
+    {
+        if (!_clickLabApproved)
+            throw new NotSupportedException("Лабораторные клики не разрешены.");
+        int x = Normalize(normalizedX), y = Normalize(normalizedY);
+        return SendAsync("left-up", new SortedDictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["x10000"] = x,
+            ["y10000"] = y
+        }, cancellationToken,
+        checkState: () =>
+        {
+            RequireFocus();
+            if (!_leftDown)
+                throw new InvalidOperationException("Отпускание без нажатия запрещено.");
+        },
+        commitState: () =>
+        {
+            _leftDown = false;
+            _heldClickCount = 0;
+            _lastPointerX = normalizedX;
+            _lastPointerY = normalizedY;
+        });
+    }
+
+    /// <summary>Release a drag before tab switching or pointer leave.</summary>
+    public Task ReleaseHeldButtonAsync(CancellationToken cancellationToken)
+    {
+        // Capturing the last point is safe because only a trusted lab UI
+        // can request release and SendLeftButtonUpAsync verifies the pair.
+        return !_leftDown ? Task.CompletedTask :
+            SendLeftButtonUpAsync(_lastPointerX, _lastPointerY, cancellationToken);
+    }
+
+    private void RequireFocus()
+    {
+        if (!_focused)
+            throw new InvalidOperationException("Для ввода требуется активный CEF focus.");
+    }
 
     public void SendKeyboardOrIme() =>
         throw new NotSupportedException("Клавиатура и IME запрещены в GD-31J.14.");
@@ -76,13 +170,15 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
         throw new NotSupportedException("Буфер обмена запрещён до отдельной ИБ-проверки.");
 
     private async Task SendAsync(string command, SortedDictionary<string, object> fields,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Action? checkState = null,
+        Action? commitState = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         await _gate.WaitAsync(cancellationToken);
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            checkState?.Invoke();
             if (_sequence >= MaximumMessages)
                 throw new InvalidOperationException("Лимит событий лабораторного CEF сеанса исчерпан.");
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -104,6 +200,7 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
                 await _output.WriteLineAsync(serialized.AsMemory(), timeout.Token);
                 await _output.FlushAsync(timeout.Token);
                 ++_sequence;
+                commitState?.Invoke();
             }
             catch
             {
