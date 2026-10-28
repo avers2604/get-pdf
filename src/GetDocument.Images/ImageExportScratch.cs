@@ -27,7 +27,8 @@ internal sealed class ImageExportScratch : IDisposable
     internal string DirectoryPath { get; }
     internal string StagingPath { get; }
 
-    internal static ImageExportScratch Create(string outputFolder, string extension)
+    internal static ImageExportScratch Create(string outputFolder, string extension,
+        string? protectedSource = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputFolder);
         string normalizedExtension = NormalizeExtension(extension);
@@ -36,7 +37,7 @@ internal sealed class ImageExportScratch : IDisposable
             (File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0)
             throw new IOException("Папка назначения недоступна или является ссылкой.");
 
-        CleanupAbandoned(parent, DefaultRetention);
+        CleanupAbandoned(parent, DefaultRetention, protectedSource);
         string directory = Path.Combine(parent,
             DirectoryPrefix + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -68,7 +69,8 @@ internal sealed class ImageExportScratch : IDisposable
         }
     }
 
-    internal static void CleanupAbandoned(string outputFolder, TimeSpan minAge)
+    internal static void CleanupAbandoned(string outputFolder, TimeSpan minAge,
+        string? protectedSource = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputFolder);
         if (minAge < TimeSpan.Zero)
@@ -80,13 +82,19 @@ internal sealed class ImageExportScratch : IDisposable
                 (File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0)
                 return;
             DateTime cutoff = DateTime.UtcNow - minAge;
+            string? protectedParent = protectedSource is null
+                ? null : Path.GetDirectoryName(Path.GetFullPath(protectedSource));
+            StringComparison pathComparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
             foreach (string directory in Directory.EnumerateDirectories(parent,
                          DirectoryPrefix + "*", SearchOption.TopDirectoryOnly))
             {
                 try
                 {
                     if (!HasOwnedName(Path.GetFileName(directory)) ||
-                        (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                        (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0 ||
+                        (protectedParent is not null &&
+                         string.Equals(directory, protectedParent, pathComparison)))
                         continue;
 
                     string marker = Path.Combine(directory, LeaseFileName);
@@ -125,7 +133,8 @@ internal sealed class ImageExportScratch : IDisposable
         name.Length == DirectoryPrefix.Length + 32 &&
         Guid.TryParseExact(name[DirectoryPrefix.Length..], "N", out _);
 
-    private static void TryDeleteOwnedDirectory(string directory)
+    private static void TryDeleteOwnedDirectory(string directory,
+        DateTime? oldestAllowedUtc = null)
     {
         if (!HasOwnedName(Path.GetFileName(directory)) ||
             (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
@@ -148,7 +157,7 @@ internal sealed class ImageExportScratch : IDisposable
             if (!actual.AsSpan().SequenceEqual(expected)) return;
 
             string[] entries = Directory.EnumerateFileSystemEntries(
-                directory, "*", SearchOption.TopDirectoryOnly).ToArray();
+                directory, "*", SearchOption.TopDirectoryOnly).Take(3).ToArray();
             if (entries.Length is < 1 or > 2) return;
             string? stagedFile = null;
             bool foundMarker = false;
