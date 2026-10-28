@@ -4,6 +4,11 @@ project(GetDocumentCefInitializationLab LANGUAGES CXX)
 # A strictly opt-in LAB program. Does not fetch/build upstream SDK libraries.
 option(GETDOC_GD31J3_ENABLE_CEF_LAB "Build the isolated CEF initialization probe" OFF)
 option(GETDOC_GD31J4_ENABLE_EMPTY_VIEW_LAB "Build one empty QCefView experiment; never open documents" OFF)
+# Synthetic fixtures ONLY. Requires GD-31J.4 plus an isolated offline lab.
+option(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB "Build the synthetic-only Office file opening experiment" OFF)
+if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB AND NOT GETDOC_GD31J4_ENABLE_EMPTY_VIEW_LAB)
+  message(FATAL_ERROR "GD-31J.6 requires opt-in GD-31J.4 empty editor view and its isolation gates.")
+endif()
 if(GETDOC_GD31J4_ENABLE_EMPTY_VIEW_LAB AND NOT GETDOC_GD31J3_ENABLE_CEF_LAB)
   message(FATAL_ERROR "GD-31J.4 requires explicitly enabling the isolated GD-31J.3 CEF lab.")
 endif()
@@ -90,4 +95,20 @@ if(GETDOC_GD31J4_ENABLE_EMPTY_VIEW_LAB)
       "${GETDOC_ASC_DOC_SCORE}" "${GETDOC_ASC_QT_SCORE}"
   )
   message(WARNING "GD-31J.4 EMPTY VIEW ONLY: do NOT open files, print, network or integrate into GET.")
+endif()
+
+# GD-31J.6 explicitly opt-in test-only executable. It can use a CEF runtime
+# without a sandbox; NEVER ship it or attach work/document storage to it.
+if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
+  add_executable(getdoc-eurooffice-cef-staged-open-lab cef_staged_open.cpp)
+  target_compile_features(getdoc-eurooffice-cef-staged-open-lab PRIVATE cxx_std_17)
+  target_include_directories(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+      "${_sdk}/include"
+      "${_qt_include}"
+  )
+  target_link_libraries(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+      Qt6::Core Qt6::Gui Qt6::Widgets Qt6::OpenGLWidgets
+      "${GETDOC_ASC_DOC_SCORE}" "${GETDOC_ASC_QT_SCORE}"
+  )
+  message(WARNING "GD-31J.6 synthetic test documents only, sandbox isolation required.")
 endif()
