@@ -99,9 +99,19 @@ public sealed class EuroOfficeOsrLabInputChannel : IAsyncDisposable
             string serialized = JsonSerializer.Serialize(request);
             if (serialized.Length >= 4096)
                 throw new InvalidDataException("Недопустимый размер команды CEF.");
-            await _output.WriteLineAsync(serialized.AsMemory(), timeout.Token);
-            await _output.FlushAsync(timeout.Token);
-            ++_sequence;
+            try
+            {
+                await _output.WriteLineAsync(serialized.AsMemory(), timeout.Token);
+                await _output.FlushAsync(timeout.Token);
+                ++_sequence;
+            }
+            catch
+            {
+                // A partial JSONL write cannot be safely retried with the
+                // same sequence: permanently revoke this input channel.
+                _disposed = true;
+                throw;
+            }
         }
         finally { _gate.Release(); }
     }
