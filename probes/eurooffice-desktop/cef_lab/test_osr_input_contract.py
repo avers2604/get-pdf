@@ -4,6 +4,7 @@ import unittest
 
 HERE=Path(__file__).resolve().parent
 NATIVE=(HERE/"cef_staged_open.cpp")
+PARSER=(HERE/"osr_input.cpp")
 CMAKE=(HERE/"CMakeLists.txt")
 
 class OsrPointerInputContract(unittest.TestCase):
