@@ -325,7 +325,7 @@ public sealed class EditorDocument
     /// <summary>Runs one of the explicit GET Office capabilities, never an arbitrary UNO operation.</summary>
     public Task ExecuteFeatureAsync(string featureId, IReadOnlyList<string>? options = null)
     {
-        OfficeFeatureCatalog.Require(Kind, featureId, ReadOnly);
+        OfficeFeatureCatalog.Require(Kind, featureId, ReadOnly, OfficeFeatureProvider.LibreOfficeUno);
         string[]? values = OfficeFeatureCatalog.ValidateOptions(featureId, options);
         return _editor.CallAsync(new { op = "feature", id = Id, feature = featureId, options = values },
             CancellationToken.None);
