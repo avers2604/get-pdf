@@ -82,6 +82,53 @@ public sealed class EuroOfficeNativeTabIpc : IAsyncDisposable
             EuroOfficeNativeTabIpcState.Closed,
             "close", "ack", "closed", null, cancellationToken);
 
+    /// <summary>
+    /// Request an original Qt-painter raster, NOT a CEF/editor frame.
+    /// No file, URL, native handle, OS surface or printer data is transferred.
+    /// </summary>
+    public async Task<EuroOfficeNativeDiagnosticFrame> RequestPreviewFrameAsync(
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(CancellationToken.None);
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_state != EuroOfficeNativeTabIpcState.Attached)
+                throw new InvalidOperationException("Нельзя получить кадр до подключения вкладки.");
+
+            try
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(5));
+                timeout.Token.ThrowIfCancellationRequested();
+                int sequence = ++_sequence;
+                var request = new SortedDictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["command"] = "request-frame",
+                    ["protocol"] = Protocol,
+                    ["sequence"] = sequence,
+                    ["sessionId"] = _session,
+                    ["tabId"] = _tab
+                };
+                await _output.WriteLineAsync(
+                    JsonSerializer.Serialize(request).AsMemory(), timeout.Token);
+                await _output.FlushAsync(timeout.Token);
+                string reply = await ReadBoundedLineAsync(timeout.Token,
+                    EuroOfficeNativeDiagnosticFrame.MaximumReplyCharacters);
+                return EuroOfficeNativeDiagnosticFrame.Parse(
+                    reply, Guid.ParseExact(_session, "N"),
+                    Guid.ParseExact(_tab, "N"), sequence);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException or
+                                       OperationCanceledException or ObjectDisposedException)
+            {
+                _state = EuroOfficeNativeTabIpcState.Failed;
+                throw;
+            }
+        }
+        finally { _gate.Release(); }
+    }
+
     public void AuthorizeSaveOrPrint() =>
         throw new NotSupportedException("IPC вкладки не разрешает работу с файлами и принтерами.");
 
@@ -143,11 +190,12 @@ public sealed class EuroOfficeNativeTabIpc : IAsyncDisposable
         }
     }
 
-    private async Task<string> ReadBoundedLineAsync(CancellationToken token)
+    private async Task<string> ReadBoundedLineAsync(CancellationToken token,
+        int maxChars = MaximumReplyChars)
     {
         var text = new StringBuilder(128);
         var buffer = new char[1];
-        for (int i = 0; i < MaximumReplyChars; i++)
+        for (int i = 0; i < maxChars; i++)
         {
             int read = await _input.ReadAsync(buffer.AsMemory(), token);
             if (read == 0)
