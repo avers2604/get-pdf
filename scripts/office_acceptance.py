@@ -63,7 +63,7 @@ def build_steps(root: Path, feed: Path, host: str) -> list[CommandStep]:
                     [sys.executable, "-m", "unittest", "discover",
                      "-s", "scripts/tests", "-p", "test_office_acceptance.py"]),
         CommandStep("solution-restore",
-                    ["dotnet", "restore", "GetDocument.slnx", "--source", str(feed)]),
+                    ["dotnet", "restore", "GetDocument.slnx", "--source", str(feed), "-p:NuGetAudit=false"]),
         CommandStep("solution-build",
                     ["dotnet", "build", "GetDocument.slnx", "-c", "Release", "--no-restore"]),
     ]
@@ -77,11 +77,11 @@ def build_steps(root: Path, feed: Path, host: str) -> list[CommandStep]:
         worker = "src/GetDocument.PrintWindows/GetDocument.PrintWindows.csproj"
         steps.extend([
             CommandStep("windows-print-worker-restore",
-                        ["dotnet", "restore", worker, "--source", str(feed)]),
+                        ["dotnet", "restore", worker, "--source", str(feed), "-p:NuGetAudit=false"]),
             CommandStep("windows-print-worker-build",
                         ["dotnet", "build", worker, "-c", "Release", "--no-restore"]),
             CommandStep("windows-legacy-solution-restore",
-                        ["dotnet", "restore", "GetPdf.slnx", "--source", str(feed)]),
+                        ["dotnet", "restore", "GetPdf.slnx", "--source", str(feed), "-p:NuGetAudit=false"]),
             CommandStep("windows-legacy-solution-build",
                         ["dotnet", "build", "GetPdf.slnx", "-c", "Release", "--no-restore"]),
             CommandStep("test-legacy-pdf",
@@ -260,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
             environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
             environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1"
             environment["DOTNET_NOLOGO"] = "1"
+            environment["DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE"] = "true"
 
             def invoke(step: CommandStep) -> int:
                 print("[GD-31I]", step.name, flush=True)
