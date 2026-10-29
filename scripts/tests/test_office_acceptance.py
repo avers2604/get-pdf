@@ -13,6 +13,16 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_synthetic_snapshot_journal_requires_offline_and_manual_orphan_review(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-synthetic-snapshot-journal-source-tests", names)
+        self.assertLess(names.index("cef-synthetic-snapshot-journal-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn(
+            "eurooffice-gd31j30-journal-crash-orphan-detection-no-cleanup-vm",
+            acceptance.MANUAL_GATES)
+
     def test_synthetic_reviewed_snapshot_requires_offline_and_manual_fs_gate(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
