@@ -5,7 +5,7 @@ This is static architecture inspection, NOT proof of working OS IME/CEF.
 from pathlib import Path
 import unittest
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 CEF = ROOT / "probes/eurooffice-desktop/cef_lab"
 OFFICE = ROOT / "src/GetDocument.Office/EuroOfficeDesktop"
 DESKTOP = ROOT / "src/GetDocument.Desktop"
