@@ -31,6 +31,15 @@ public static class EuroOfficeNativeBindingProbeLab
     {
         ProcessStartInfo info = CreateStartInfo(host, stagingDirectory,
             fixtureName, sessionId, tabId, labApproved);
+        string json = await RunRawLabAsync(info, cancellationToken);
+        return EuroOfficeNativeBindingReceipt.Parse(json, sessionId, tabId, fixtureName);
+    }
+
+    /// <summary>Shared strict local process lifecycle for the two synthetic lab receipt types.</summary>
+    internal static async Task<string> RunRawLabAsync(ProcessStartInfo info,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(info);
         using var process = new Process { StartInfo = info };
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(35));
@@ -44,7 +53,7 @@ public static class EuroOfficeNativeBindingProbeLab
             await process.WaitForExitAsync(deadline.Token);
             if (process.ExitCode != 0)
                 throw new InvalidDataException("EuroOffice Qt binding-стенд завершился с ошибкой.");
-            return EuroOfficeNativeBindingReceipt.Parse(json, sessionId, tabId, fixtureName);
+            return json;
         }
         finally
         {
