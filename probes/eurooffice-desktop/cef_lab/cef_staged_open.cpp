@@ -539,16 +539,17 @@ int main(int argc, char** argv) {
     }
 #endif
 
-#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
-    // EuroOffice's Linux CEF path uses CefDoMessageLoopWork(). A plain Qt
-    // app.exec() does not necessarily pump Chromium: schedule CEF work on the
-    // Qt owner thread, NEVER from OnPaint itself (reentrancy is unsafe).
+#if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) || defined(GETDOC_GD31J22_BINDING_LAB)
+    // Binding evidence also needs CEF's real external event loop, even
+    // without OSR frames. Only on the Qt owner thread.
     QTimer cefWorkPump;
-    if (osrLab || streamLab) {
+    if (osrLab || streamLab || bindingLab) {
         QObject::connect(&cefWorkPump, &QTimer::timeout, &app,
                          [&cef]() { cef.DoMessageLoopEvent(); });
         cefWorkPump.start(10);
     }
+#endif
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
 #if defined(__linux__)
     int framesProduced = 0;
     quint64 observedRevision = 0;
@@ -606,8 +607,10 @@ int main(int argc, char** argv) {
 #ifdef GETDOC_GD31J22_BINDING_LAB
     bindingPollTimer.stop();
 #endif
-#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
+#if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) || defined(GETDOC_GD31J22_BINDING_LAB)
     cefWorkPump.stop();
+#endif
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
 #if defined(__linux__)
     if (streamLab) {
         frameSampleTimer.stop();
