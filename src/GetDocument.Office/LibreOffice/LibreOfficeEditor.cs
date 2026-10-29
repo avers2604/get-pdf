@@ -357,7 +357,9 @@ public sealed class EditorDocument
         {
             JsonElement reply = default;
             await coordinator.SaveAsync(async () =>
-                reply = await _editor.CallAsync(new { op = "save", id = Id }, CancellationToken.None));
+            {
+                reply = await _editor.CallAsync(new { op = "save", id = Id }, CancellationToken.None);
+            });
             SetModified(reply);
         }
         finally { _copyAndSaveGate.Release(); }
