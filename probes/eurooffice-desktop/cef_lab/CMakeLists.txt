@@ -28,6 +28,12 @@ option(GETDOC_GD31J22_ENABLE_BINDING_LAB "Observe synthetic editor local-file bi
 option(GETDOC_GD31J23_ENABLE_CONVERSION_EVIDENCE_LAB "Inspect isolated Editor.bin candidate, no edit/save or OOXML readiness" OFF)
 # This is a SEPARATE manually overlaid SDK lab, NEVER the normal editor build.
 option(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB "Observe untrusted renderer content-ready notification only" OFF)
+# Independently gated native save experiment, working copy in QTemporaryDir
+# only. Output is an UNTRUSTED quarantine candidate, never user/WORM file.
+option(GETDOC_GD31J25_ENABLE_SYNTHETIC_SAVE_LAB "Native save only private synthetic working copy" OFF)
+if(GETDOC_GD31J25_ENABLE_SYNTHETIC_SAVE_LAB AND NOT GETDOC_GD31J24_ENABLE_READY_EVENT_LAB)
+  message(FATAL_ERROR "GD-31J.25 requires approved native content-ready lab.")
+endif()
 if(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB AND NOT GETDOC_GD31J23_ENABLE_CONVERSION_EVIDENCE_LAB)
   message(FATAL_ERROR "GD-31J.24 requires GD-31J.23 private candidate lab.")
 endif()
@@ -218,6 +224,11 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
         GETDOC_GD31J24_READY_EVENT_LAB=1)
     message(WARNING "GD-31J.24: untrusted renderer ready signal from manually patched pinned SDK, synthetic VM ONLY; no office edit/save rights.")
+  endif()
+  if(GETDOC_GD31J25_ENABLE_SYNTHETIC_SAVE_LAB)
+    target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+        GETDOC_GD31J25_SYNTHETIC_SAVE_LAB=1)
+    message(WARNING "GD-31J.25: saving ONLY disposable native synthetic work copy; quarantine output is not verified save or publish authority.")
   endif()
   if(GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE

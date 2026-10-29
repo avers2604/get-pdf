@@ -159,6 +159,23 @@ internal sealed class NativeOfficeDiagnosticPane : Border
               "Рабочий редактор и сохранение недоступны.";
     }
 
+    /// <summary>
+    /// A post-save OOXML ZIP pass is lab evidence only, not a production
+    /// revision, a valid MS Office compatibility round-trip or WORM write.
+    /// </summary>
+    public void SetNativeRoundTripReview(EuroOfficeNativeRoundTripLab.Review review)
+    {
+        ArgumentNullException.ThrowIfNull(review);
+        if (review.SaveCompleted || review.AuthorizedForPublication ||
+            review.DocumentVerified)
+            throw new InvalidDataException("Нативный тест не может разрешать публикацию документа.");
+        _connection.Text = review.CandidateValidatedAsOoxml
+            ? "EuroOffice: сохранена ИЗОЛИРОВАННАЯ тестовая копия и проверена структура OOXML. " +
+              "Кандидат в карантине; редактирование рабочих документов и публикация ЗАПРЕЩЕНЫ."
+            : "EuroOffice: нет проверенного сохранённого OOXML-кандидата. " +
+              "Эталонный файл не изменён, разрешения на запись нет.";
+    }
+
     public void SetTransportLost()
     {
         DetachOsrLabInput();

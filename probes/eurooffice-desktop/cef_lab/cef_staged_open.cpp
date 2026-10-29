@@ -342,6 +342,35 @@ bool SnapshotPrivateEditorBin(const QString& profileRoot,
 }
 #endif
 
+
+#ifdef GETDOC_GD31J25_SYNTHETIC_SAVE_LAB
+// Always bounded, never a user path, never a trusted save/OOXML receipt.
+constexpr qint64 kMaxSyntheticOfficeBytes = 128LL * 1024 * 1024;
+bool HashSyntheticFile(const QString& source, QString& sha, qint64& length) {
+    sha.clear();
+    length = 0;
+    const QFileInfo stat(source);
+    if (!stat.isFile() || !stat.isReadable() || stat.isSymLink() ||
+        stat.size() <= 0 || stat.size() > kMaxSyntheticOfficeBytes)
+        return false;
+    QFile file(source);
+    if (!file.open(QIODevice::ReadOnly)) return false;
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    while (!file.atEnd()) {
+        const QByteArray chunk = file.read(65536);
+        if (chunk.isEmpty()) return false;
+        length += chunk.size();
+        if (length > kMaxSyntheticOfficeBytes) return false;
+        hash.addData(chunk);
+    }
+    const QFileInfo after(source);
+    if (length != stat.size() || after.size() != stat.size() ||
+        after.lastModified() != stat.lastModified()) return false;
+    sha = QString::fromLatin1(hash.result().toHex());
+    return sha.size() == 64;
+}
+#endif
+
 bool PathIsLocalAndUnlinked(const QString& path) {
     if (!QDir::isAbsolutePath(path) || path.startsWith("//") ||
         path.startsWith("\\\\") || path.contains("://"))
@@ -485,8 +514,13 @@ int main(int argc, char** argv) {
 #endif
     const bool ordinaryLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-lab") == 0;
+    const bool saveLab = argc == 6 &&
+        std::strcmp(argv[1], "--open-staged-private-save-lab") == 0;
+#ifndef GETDOC_GD31J25_SYNTHETIC_SAVE_LAB
+    if (saveLab) return 2;
+#endif
     const bool readyLab = argc == 6 &&
-        std::strcmp(argv[1], "--open-staged-ready-event-lab") == 0;
+        (std::strcmp(argv[1], "--open-staged-ready-event-lab") == 0 || saveLab);
 #ifndef GETDOC_GD31J24_READY_EVENT_LAB
     if (readyLab) return 2;
 #endif
@@ -552,6 +586,30 @@ int main(int argc, char** argv) {
     QAscApplicationManager manager;
     if (!PrepareTemporaryProfile(manager, profile.path())) return 5;
 
+    // Never offer the immutable synthetic fixture to the native save pipeline.
+    // Even SDK automatic Save will only modify a disposable local work copy.
+    QString openedPath = path;
+#ifdef GETDOC_GD31J25_SYNTHETIC_SAVE_LAB
+    QString fixtureShaBefore;
+    QString fixtureShaAfter;
+    qint64 fixtureSize = 0;
+    QString privateWorkingPath;
+    QString workingShaBefore;
+    qint64 workingSizeBefore = 0;
+    if (saveLab) {
+        if (!HashSyntheticFile(path, fixtureShaBefore, fixtureSize) ||
+            !QDir(profile.path()).mkpath("work")) return 14;
+        privateWorkingPath = QDir(profile.path()).filePath(
+            "work/" + fixtureName);
+        if (QFileInfo::exists(privateWorkingPath) ||
+            !QFile::copy(path, privateWorkingPath) ||
+            !HashSyntheticFile(privateWorkingPath,
+                               workingShaBefore, workingSizeBefore) ||
+            workingShaBefore != fixtureShaBefore) return 14;
+        openedPath = privateWorkingPath;
+    }
+#endif
+
     CApplicationCEF::Prepare(argc, argv);
     CApplicationCEF cef;
     const int started = cef.Init_CEF(&manager, argc, argv);
@@ -585,13 +643,13 @@ int main(int argc, char** argv) {
 
     // Exact SDK API used in upstream CTabPanel::openLocalFile(...):
     // GetFileFormat(path) then OpenLocalFile(path, format, params).
-    int format = CCefViewEditor::GetFileFormat(path.toStdWString());
+    int format = CCefViewEditor::GetFileFormat(openedPath.toStdWString());
     if (format == 0) {
         manager.CloseApplication();
         return 8;
     }
     auto* editor = static_cast<CCefViewEditor*>(view->GetCefView());
-    editor->OpenLocalFile(path.toStdWString(), format, L"");
+    editor->OpenLocalFile(openedPath.toStdWString(), format, L"");
     const int viewId = editor->GetId();
     eventObserver.expectedViewId.store(viewId, std::memory_order_release);
     window.show();
@@ -610,9 +668,14 @@ int main(int argc, char** argv) {
     qint64 previousLength = 0;
     int evidenceSeenTwice = 0;
 #endif
+
+#ifdef GETDOC_GD31J25_SYNTHETIC_SAVE_LAB
+    bool saveRequested = false;
+    bool saveWasAcknowledged = false;
+#endif
     QTimer bindingPollTimer;
     if (bindingLab) {
-        const QString expected = QFileInfo(path).canonicalFilePath();
+        const QString expected = QFileInfo(openedPath).canonicalFilePath();
         QObject::connect(&bindingPollTimer, &QTimer::timeout, &app, [&, expected]() {
             if (!view || view->GetCefView() != editor ||
                 !view->cefViewLoaded.load(std::memory_order_acquire) ||
@@ -649,6 +712,28 @@ int main(int argc, char** argv) {
                     previousLength = 0;
                     evidenceSeenTwice = 0;
                 }
+            }
+#endif
+#ifdef GETDOC_GD31J25_SYNTHETIC_SAVE_LAB
+            if (saveLab && bindingSeen && conversionObserved &&
+                eventObserver.onContentReady.load(std::memory_order_acquire) &&
+                eventObserver.modified.load(std::memory_order_acquire)) {
+                if (!saveRequested &&
+                    !eventObserver.onSave.load(std::memory_order_acquire) &&
+                    !editor->IsSaveLocked()) {
+                    // Actual upstream SDK API: local SAVE generates CEF
+                    // document_save, conversion and a later OnSave event.
+                    // A SaveAs dialog is not needed: the source opened by
+                    // CEF is *already* a private disposable copy.
+                    saveRequested = true;
+                    auto* nativeSave = new NSEditorApi::CAscMenuEvent(
+                        ASC_MENU_EVENT_TYPE_CEF_SAVE);
+                    editor->Apply(nativeSave);
+                }
+                if (saveRequested &&
+                    eventObserver.onSave.load(std::memory_order_acquire) &&
+                    !eventObserver.saveCancelled.load(std::memory_order_acquire))
+                    saveWasAcknowledged = true;
             }
 #endif
         });
@@ -719,7 +804,7 @@ int main(int argc, char** argv) {
 
     // No success acknowledgement is available yet. Timeout merely limits the
     // trial and does NOT claim the document loaded or saved successfully.
-    QTimer::singleShot(15000, &app, &QCoreApplication::quit);
+    QTimer::singleShot(saveLab ? 25000 : 15000, &app, &QCoreApplication::quit);
     const int exitCode = app.exec();
 #ifdef GETDOC_GD31J22_BINDING_LAB
     bindingPollTimer.stop();
@@ -750,6 +835,84 @@ int main(int argc, char** argv) {
         manager.DestroyCefView(viewId, false);
     manager.SetEventListener(nullptr);
     manager.CloseApplication();
+
+#ifdef GETDOC_GD31J25_SYNTHETIC_SAVE_LAB
+    if (saveLab) {
+        // Only after CEF is destroyed, recheck the immutable source and
+        // disposable saved copy. Never publish an unvalidated OOXML file.
+        qint64 verifiedFixtureSize = 0;
+        qint64 workingSizeAfter = 0;
+        QString workingShaAfter;
+        const bool sourceWasReadable =
+            HashSyntheticFile(path, fixtureShaAfter, verifiedFixtureSize);
+        const bool candidateFromPrivateWork =
+            sourceWasReadable && fixtureShaAfter == fixtureShaBefore &&
+            verifiedFixtureSize == fixtureSize &&
+            HashSyntheticFile(privateWorkingPath,
+                              workingShaAfter, workingSizeAfter);
+        QString nativeCandidateName;
+        QString nativeCandidateSha;
+        qint64 nativeCandidateLength = 0;
+        bool candidateWritten = false;
+        if (candidateFromPrivateWork && bindingSeen && conversionObserved &&
+            eventObserver.onContentReady.load(std::memory_order_acquire) &&
+            eventObserver.modified.load(std::memory_order_acquire) &&
+            saveRequested && saveWasAcknowledged &&
+            eventObserver.onSave.load(std::memory_order_acquire) &&
+            !eventObserver.saveCancelled.load(std::memory_order_acquire) &&
+            workingShaAfter != workingShaBefore) {
+            nativeCandidateName =
+                "gd31j25-native-candidate-" + bindingSession + "." +
+                QFileInfo(fixtureName).suffix();
+            const QString candidatePath = QDir(staging).filePath(nativeCandidateName);
+            QString copiedDigest;
+            qint64 copiedBytes = 0;
+            // QFile::copy refuses an existing destination (no-overwrite).
+            // Never touch any WORM/user path; ONLY private synthetic staging.
+            if (!QFileInfo::exists(candidatePath) &&
+                PathIsLocalAndUnlinked(candidatePath) &&
+                QFile::copy(privateWorkingPath, candidatePath) &&
+                HashSyntheticFile(candidatePath, copiedDigest, copiedBytes) &&
+                copiedDigest == workingShaAfter && copiedBytes == workingSizeAfter) {
+                candidateWritten = true;
+                nativeCandidateSha = copiedDigest;
+                nativeCandidateLength = copiedBytes;
+            } else {
+                // No automatic delete: avoid deleting a concurrently replaced
+                // file. Any partial quarantine artifact is inspected manually.
+                nativeCandidateName.clear();
+            }
+        }
+        const QJsonObject evidence{
+            {"schema", "getdoc-synthetic-roundtrip-lab/1"},
+            {"sessionId", bindingSession},
+            {"tabId", bindingTab},
+            {"fixtureName", fixtureName},
+            {"sourceBeforeSha256", fixtureShaBefore},
+            {"sourceAfterSha256", fixtureShaAfter},
+            {"modifiedNotification",
+             eventObserver.modified.load(std::memory_order_acquire)},
+            {"saveNotification",
+             eventObserver.onSave.load(std::memory_order_acquire)},
+            {"saveCancelled",
+             eventObserver.saveCancelled.load(std::memory_order_acquire)},
+            {"candidateWritten", candidateWritten},
+            {"candidateName", candidateWritten ? nativeCandidateName : QString()},
+            {"candidateLength", static_cast<qint64>(
+                candidateWritten ? nativeCandidateLength : 0)},
+            {"candidateSha256", candidateWritten ? nativeCandidateSha : QString()},
+            {"documentVerified", false},
+            {"saveVerified", false},
+            {"pdfVerified", false},
+            {"printApproved", false},
+            {"laboratoryOnly", true}
+        };
+        const QByteArray json = QJsonDocument(evidence).toJson(QJsonDocument::Compact);
+        std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()), stdout);
+        std::fputc('\n', stdout);
+        return exitCode;
+    }
+#endif
 
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
     if (readyLab) {
