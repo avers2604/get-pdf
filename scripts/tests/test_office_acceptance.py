@@ -427,6 +427,14 @@ class AcceptancePlanTests(unittest.TestCase):
 
 
 class StepPlanIntegrityTests(unittest.TestCase):
+    def test_gd31j38_plan_contract_precedes_any_restore(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [item.name for item in steps]
+        self.assertIn("gd31j38-plan-inventory-source-contract-tests", names)
+        self.assertLess(names.index("gd31j38-plan-inventory-source-contract-tests"),
+                        names.index("solution-restore"))
+
+
     """Source-only tests for the plan validator; never launch any commands."""
 
     def _fixture(self, root: Path):
