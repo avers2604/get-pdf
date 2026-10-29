@@ -167,7 +167,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             }
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or
-                                   UnauthorizedAccessException or NotSupportedException)
+                                   UnauthorizedAccessException or NotSupportedException or InvalidDataException)
         {
             if (_disposed) return;
             ShowMessage("Не удалось открыть документ", ex.Message);
@@ -638,7 +638,8 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             ShowSaveConflictBanner();
             _status("Сохранение отменено: " + ex.Message);
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or
+                                   TimeoutException or InvalidDataException or UnauthorizedAccessException)
         {
             _status("Не удалось сохранить: " + ex.Message);
         }
