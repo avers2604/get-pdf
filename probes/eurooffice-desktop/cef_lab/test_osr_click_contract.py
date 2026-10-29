@@ -5,7 +5,7 @@ Static assertions, NOT a claim of successful Qt/CEF/.NET execution.
 from pathlib import Path
 import unittest
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 CEF = ROOT / "probes/eurooffice-desktop/cef_lab"
 OFFICE = ROOT / "src/GetDocument.Office/EuroOfficeDesktop"
 DESKTOP = ROOT / "src/GetDocument.Desktop"
@@ -28,7 +28,8 @@ class OsrClickSafetyContracts(unittest.TestCase):
         self.assertIn('GETDOC_GD31J15_CLICK_LAB=1', self.cmake)
         self.assertIn('#ifndef GETDOC_GD31J15_CLICK_LAB', self.entry)
         self.assertIn('--open-staged-wayland-click-lab', self.entry)
-        self.assertIn('OsrInputPump inputPump(streamSession, streamTab, clickLab)', self.entry)
+        self.assertIn('OsrInputPump inputPump(streamSession, streamTab, clickLab,', self.entry)
+        self.assertIn('keyboardLab, imeCommitLab);', self.entry)
 
     def test_native_clicks_are_paired_and_double_click_count_bounded(self):
         for needle in ('m_clicksApproved', 'm_leftDown', 'm_clickCount',
@@ -40,9 +41,14 @@ class OsrClickSafetyContracts(unittest.TestCase):
                        'constexpr int kCefLeftButton = 1 << 4',
                        'if (!enable && m_leftDown) return false;'):
             self.assertIn(needle, self.cpp)
-        for forbidden in ('SendKeyEvent(', 'QClipboard', 'QInputMethodEvent',
+        for forbidden in ('QClipboard', 'QInputMethodEvent',
                           'ExecuteJavaScript(', 'QFileDialog', 'QPrinter'):
             self.assertNotIn(forbidden, self.cpp)
+        # Later opt-in keyboard labs legitimately add SendKeyEvent to this file.
+        # Only the click handler itself must remain free of keyboard events.
+        click_only = self.cpp.split('command == "left-down"', 1)[1].split(
+            'command == "nav-key"', 1)[0]
+        self.assertNotIn('SendKeyEvent(', click_only)
 
     def test_channel_rejects_keyboard_clipboard_without_explicit_approval(self):
         for needle in ('clickLabApproved = false', 'SendLeftButtonDownAsync(',
