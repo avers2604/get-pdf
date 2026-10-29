@@ -70,7 +70,7 @@ def git(root: pathlib.Path, *args: str) -> str:
         return subprocess.check_output(
             ["git", "-C", str(root), *args],
             text=True, encoding="utf-8", stderr=subprocess.DEVNULL,
-            timeout=15).strip()
+            timeout=15)
     except (subprocess.SubprocessError, OSError, UnicodeError) as exc:
         raise OverlayError("No local pinned Git checkout; never fetch SDK online") from exc
 
@@ -82,9 +82,9 @@ def check_checkout(root: pathlib.Path, *, require_clean: bool) -> None:
     if marker.is_symlink() or not marker.is_file() or marker.read_text(
             encoding="utf-8") != SENTINEL_TEXT:
         raise OverlayError("No explicit disposable offline SDK lab approval marker")
-    if git(root, "rev-parse", "HEAD") != UPSTREAM_PIN:
+    if git(root, "rev-parse", "HEAD").strip() != UPSTREAM_PIN:
         raise OverlayError("Upstream SDK commit is not the reviewed pin")
-    changes = git(root, "status", "--porcelain", "--untracked-files=no")
+    changes = git(root, "status", "--porcelain", "--untracked-files=no").strip("\n")
     if require_clean and changes:
         raise OverlayError("Never patch an already modified SDK checkout")
     if not require_clean:
