@@ -830,9 +830,11 @@ int main(int argc, char** argv) {
             if (saveAsLab && !saveAsLifecycleAborted &&
                 bindingSeen && conversionObserved &&
                 eventObserver.onContentReady.load(std::memory_order_acquire) &&
-                eventObserver.modified.load(std::memory_order_acquire) &&
-                !editor->IsSaveLocked()) {
-                if (!saveAsTriggered) {
+                eventObserver.modified.load(std::memory_order_acquire)) {
+                // The file converter may lock after the request. Check that
+                // lock only BEFORE issuing the request, not while replying
+                // to the already outstanding typed Save As dialog.
+                if (!saveAsTriggered && !editor->IsSaveLocked()) {
                     saveAsTriggered = true;
                     eventObserver.acceptSaveAsDialog.store(true, std::memory_order_release);
                     // Pinned SDK CEF V8 LocalFileSave('saveas=true') triggers
