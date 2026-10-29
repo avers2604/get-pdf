@@ -222,16 +222,51 @@ public static class EuroOfficeSyntheticReviewedSnapshot
                 root.GetProperty("purpose").GetString() !=
                     "test-only-local-ooxml-no-corporate-documents")
                 throw new InvalidDataException("Манифест не разрешает синтетическую лабораторию.");
+            // All three synthetic inputs must be present and match the
+            // manifest, not merely the selected fixture. Previously the
+            // manifest could contain invented sibling hashes or a foreign
+            // key while reporting a valid selected DOCX snapshot.
             var files = root.GetProperty("files");
-            if (files.ValueKind != JsonValueKind.Object ||
-                files.EnumerateObject().Count() != 3)
+            if (files.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("Некорректный набор тестовых fixtures.");
-            var entry = files.GetProperty(fixture);
-            var length = new FileInfo(source).Length;
-            if (entry.GetProperty("size").GetInt64() != length ||
-                entry.GetProperty("sha256").GetString() != expectedSha ||
+            var expectedNames = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "gd31j6_writer.docx", "gd31j6_calc.xlsx",
+                "gd31j6_impress.pptx"
+            };
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            string baseDir = Path.GetDirectoryName(source)!;
+            foreach (JsonProperty property in files.EnumerateObject())
+            {
+                if (!expectedNames.Contains(property.Name) ||
+                    !seen.Add(property.Name) ||
+                    property.Value.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException("Посторонний или повторный тестовый fixture.");
+                JsonElement entry = property.Value;
+                var entryFields = new HashSet<string>(StringComparer.Ordinal);
+                foreach (JsonProperty field in entry.EnumerateObject())
+                    if (!entryFields.Add(field.Name) ||
+                        field.Name is not ("size" or "sha256"))
+                        throw new InvalidDataException("Лишнее поле синтетического манифеста.");
+                if (entryFields.Count != 2 ||
+                    entry.GetProperty("size").ValueKind != JsonValueKind.Number ||
+                    !entry.GetProperty("size").TryGetInt64(out long expectedLength) ||
+                    expectedLength is <= 0 or > MaxFileBytes ||
+                    entry.GetProperty("sha256").ValueKind != JsonValueKind.String)
+                    throw new InvalidDataException("Недопустимые размер/хеш fixture.");
+                string declaredHash = entry.GetProperty("sha256").GetString() ?? "";
+                if (declaredHash.Length != 64 ||
+                    !declaredHash.All(x => x is >= '0' and <= '9' or >= 'a' and <= 'f'))
+                    throw new InvalidDataException("Недопустимый SHA-256 fixture.");
+                string path = Path.Combine(baseDir, property.Name);
+                string actualHash = HashBounded(path, out long actualLength);
+                if (actualLength != expectedLength || actualHash != declaredHash ||
+                    property.Name == fixture && actualHash != expectedSha)
+                    throw new InvalidDataException("Манифест или синтетический fixture изменён.");
+            }
+            if (seen.Count != expectedNames.Count || !seen.Contains(fixture) ||
                 HashBounded(source, out _) != expectedSha)
-                throw new InvalidDataException("Исходный fixture не совпадает с манифестом.");
+                throw new InvalidDataException("Не хватает утверждённых тестовых fixtures.");
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException
                                    or InvalidOperationException)

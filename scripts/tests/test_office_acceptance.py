@@ -13,6 +13,17 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_full_synthetic_manifest_and_three_ooxml_fixtures_are_required(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-synthetic-three-fixture-manifest-integrity-source-tests", names)
+        self.assertLess(
+            names.index("cef-synthetic-three-fixture-manifest-integrity-source-tests"),
+            names.index("solution-restore"))
+        self.assertIn(
+            "eurooffice-gd31j35-docx-xlsx-pptx-manifest-and-roundtrip-manual-vm",
+            acceptance.MANUAL_GATES)
+
     def test_cef_late_duplicate_receipt_coherence_is_manual_e2e_gate(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
