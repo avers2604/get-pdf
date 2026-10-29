@@ -60,6 +60,16 @@ class NativeSaveAsV2SourceContracts(unittest.TestCase):
         self.assertIn('!eventObserver.rejectedSaveAsRequest.load(', gate)
         self.assertIn('!saveAsLifecycleAborted', gate)
 
+    def test_failure_code_parser_rejects_self_contradictory_native_state(self):
+        for phrase in (
+            'code == "not_started" &&',
+            'code == "target_not_assigned" && core.SaveAsTargetAccepted',
+            'code == "candidate_missing" && !core.SaveNotification',
+            'code == "invalid_dialog" &&',
+            'code == "duplicate_dialog" && dialogCount < 2'
+        ):
+            self.assertIn(phrase, self.parser)
+
     def test_no_production_saving_and_manual_e2e_gate(self):
         self.assertIn('AuthorizedForPublication => false',self.parser)
         self.assertIn('SaveCompleted => false',self.parser)
