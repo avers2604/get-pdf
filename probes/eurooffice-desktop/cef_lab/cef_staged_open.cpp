@@ -744,7 +744,7 @@ int main(int argc, char** argv) {
         };
         const QByteArray json = QJsonDocument(evidence).toJson(QJsonDocument::Compact);
         std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()), stdout);
-        std::fputc('\\n', stdout);
+        std::fputc('\n', stdout);
         return exitCode;
     }
 #endif
