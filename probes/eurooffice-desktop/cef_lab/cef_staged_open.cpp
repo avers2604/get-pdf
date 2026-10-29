@@ -937,6 +937,71 @@ int main(int argc, char** argv) {
     manager.SetEventListener(nullptr);
     manager.CloseApplication();
 
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+    if (saveAsLab) {
+        qint64 verifiedSourceBytes = 0;
+        qint64 savedBytes = 0;
+        QString savedDigest;
+        const bool sourceUntouched =
+            HashSyntheticFile(path, fixtureShaAfter, verifiedSourceBytes) &&
+            fixtureShaAfter == fixtureShaBefore &&
+            verifiedSourceBytes == fixtureSize;
+        const bool privateDestinationValid =
+            sourceUntouched && saveAsTargetAssigned &&
+            eventObserver.saveAsRequestSeen.load(std::memory_order_acquire) &&
+            eventObserver.saveAsRequestCount.load(std::memory_order_acquire) == 1 &&
+            !eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire) &&
+            eventObserver.onSave.load(std::memory_order_acquire) &&
+            !eventObserver.saveCancelled.load(std::memory_order_acquire) &&
+            HashSyntheticFile(privateSaveAsPath, savedDigest, savedBytes) &&
+            savedDigest != fixtureShaBefore;
+        bool candidateWritten = false;
+        QString candidateDigest;
+        qint64 candidateLength = 0;
+        const QString nativeCandidateName =
+            "gd31j26-saveas-candidate-" + bindingSession + "." + selectedFormat;
+        if (privateDestinationValid) {
+            const QString candidatePath = QDir(staging).filePath(nativeCandidateName);
+            // Refuse an existing output. Never delete, move or truncate user
+            // files. Even this destination is synthetic-only staging.
+            if (!QFileInfo::exists(candidatePath) &&
+                PathIsLocalAndUnlinked(candidatePath) &&
+                QFile::copy(privateSaveAsPath, candidatePath) &&
+                HashSyntheticFile(candidatePath, candidateDigest, candidateLength) &&
+                candidateDigest == savedDigest && candidateLength == savedBytes)
+                candidateWritten = true;
+        }
+        const QJsonObject evidence{
+            {"schema", "getdoc-native-saveas-private-lab/1"},
+            {"sessionId", bindingSession},
+            {"tabId", bindingTab},
+            {"fixtureName", fixtureName},
+            {"selectedFormat", selectedFormat},
+            {"sourceBeforeSha256", fixtureShaBefore},
+            {"sourceAfterSha256", fixtureShaAfter},
+            {"saveAsRequestSeen",
+                eventObserver.saveAsRequestSeen.load(std::memory_order_acquire) &&
+                eventObserver.saveAsRequestCount.load(std::memory_order_acquire) == 1 &&
+                !eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire)},
+            {"saveAsTargetAccepted", saveAsTargetAssigned},
+            {"saveNotification", eventObserver.onSave.load(std::memory_order_acquire)},
+            {"saveCancelled", eventObserver.saveCancelled.load(std::memory_order_acquire)},
+            {"candidateWritten", candidateWritten},
+            {"candidateName", candidateWritten ? nativeCandidateName : QString()},
+            {"candidateLength", static_cast<qint64>(candidateWritten ? candidateLength : 0)},
+            {"candidateSha256", candidateWritten ? candidateDigest : QString()},
+            {"documentVerified", false},
+            {"saveVerified", false},
+            {"pdfVerified", false},
+            {"printApproved", false},
+            {"laboratoryOnly", true}
+        };
+        const QByteArray json = QJsonDocument(evidence).toJson(QJsonDocument::Compact);
+        std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()), stdout);
+        std::fputc('\n', stdout);
+        return exitCode;
+    }
+#endif
 #ifdef GETDOC_GD31J25_SYNTHETIC_SAVE_LAB
     if (saveLab) {
         // Only after CEF is destroyed, recheck the immutable source and
