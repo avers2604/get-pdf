@@ -272,6 +272,54 @@ bool BindingGuid32(const QString& value) {
 }
 #endif
 
+#ifdef GETDOC_GD31J23_CONVERSION_EVIDENCE_LAB
+// A bounded private converter artifact is NOT successful OOXML import or
+// editable state. Read only our disposable synthetic VM profile, never user
+// paths, corporate shares or files supplied over IPC.
+constexpr qint64 kMaxConversionCandidateBytes = 8LL * 1024 * 1024;
+bool SnapshotPrivateEditorBin(const QString& profileRoot,
+                              const QString& reportedRecovery,
+                              qint64& bytes, QString& digest) {
+    bytes = 0;
+    digest.clear();
+    const QFileInfo recoveryRoot(QDir(profileRoot).filePath("recovery"));
+    const QFileInfo recoveryDir(reportedRecovery);
+    if (!recoveryRoot.isDir() || recoveryRoot.isSymLink() ||
+        !recoveryDir.isDir() || recoveryDir.isSymLink()) return false;
+    const QString base = recoveryRoot.canonicalFilePath();
+    const QString actual = recoveryDir.canonicalFilePath();
+    if (base.isEmpty() || actual.isEmpty()) return false;
+    const QString relative = QDir(base).relativeFilePath(actual);
+    // Each open is assigned exactly ONE private recovery child by the SDK.
+    if (relative.isEmpty() || relative == "." || relative == ".." ||
+        relative.startsWith("../") || relative.contains('/') ||
+        relative.contains('\\')) return false;
+    const QString path = QDir(actual).filePath("Editor.bin");
+    const QFileInfo candidate(path);
+    if (!candidate.isFile() || !candidate.isReadable() || candidate.isSymLink() ||
+        candidate.canonicalFilePath() != QDir(actual).filePath("Editor.bin") ||
+        candidate.size() <= 0 ||
+        candidate.size() > kMaxConversionCandidateBytes) return false;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) return false;
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    qint64 count = 0;
+    while (!file.atEnd()) {
+        const QByteArray chunk = file.read(64 * 1024);
+        if (chunk.isEmpty()) return false;
+        count += chunk.size();
+        if (count > kMaxConversionCandidateBytes) return false;
+        hash.addData(chunk);
+    }
+    QFileInfo after(path);
+    if (count != candidate.size() || after.size() != candidate.size() ||
+        after.lastModified() != candidate.lastModified()) return false;
+    bytes = count;
+    digest = QString::fromLatin1(hash.result().toHex());
+    return digest.size() == 64;
+}
+#endif
+
 bool PathIsLocalAndUnlinked(const QString& path) {
     if (!QDir::isAbsolutePath(path) || path.startsWith("//") ||
         path.startsWith("\\\\") || path.contains("://"))
@@ -415,8 +463,13 @@ int main(int argc, char** argv) {
 #endif
     const bool ordinaryLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-lab") == 0;
+    const bool conversionLab = argc == 6 &&
+        std::strcmp(argv[1], "--open-staged-conversion-evidence-lab") == 0;
+#ifndef GETDOC_GD31J23_CONVERSION_EVIDENCE_LAB
+    if (conversionLab) return 2;
+#endif
     const bool bindingLab = argc == 6 &&
-        std::strcmp(argv[1], "--open-staged-binding-lab") == 0;
+        (std::strcmp(argv[1], "--open-staged-binding-lab") == 0 || conversionLab);
 #ifndef GETDOC_GD31J22_BINDING_LAB
     if (bindingLab) return 2;
 #else
@@ -522,19 +575,55 @@ int main(int argc, char** argv) {
     // path once the independent CEF view callback has been observed.
     // All SDK calls execute on the Qt owner thread, never in OnPaint.
     bool bindingSeen = false;
+#ifdef GETDOC_GD31J23_CONVERSION_EVIDENCE_LAB
+    bool conversionObserved = false;
+    qint64 conversionSize = 0;
+    QString conversionSha;
+    QString previousSha;
+    qint64 previousLength = 0;
+    int evidenceSeenTwice = 0;
+#endif
     QTimer bindingPollTimer;
     if (bindingLab) {
         const QString expected = QFileInfo(path).canonicalFilePath();
         QObject::connect(&bindingPollTimer, &QTimer::timeout, &app, [&, expected]() {
             if (!view || view->GetCefView() != editor ||
                 !view->cefViewLoaded.load(std::memory_order_acquire) ||
-                expected.isEmpty() || bindingSeen) return;
-            const QString reported =
-                QString::fromStdWString(editor->GetLocalFilePath());
-            // Never emit a path, filename from CEF, token or document content.
-            const QString canonical = QFileInfo(reported).canonicalFilePath();
-            if (!canonical.isEmpty() && canonical == expected)
-                bindingSeen = true;
+                expected.isEmpty()) return;
+            if (!bindingSeen) {
+                const QString reported =
+                    QString::fromStdWString(editor->GetLocalFilePath());
+                // Never emit a path, filename from CEF, token or document content.
+                const QString canonical = QFileInfo(reported).canonicalFilePath();
+                if (!canonical.isEmpty() && canonical == expected)
+                    bindingSeen = true;
+            }
+#ifdef GETDOC_GD31J23_CONVERSION_EVIDENCE_LAB
+            if (bindingSeen && conversionLab && !conversionObserved) {
+                qint64 length = 0;
+                QString digest;
+                if (SnapshotPrivateEditorBin(profile.path(),
+                        QString::fromStdWString(editor->GetRecoveryDir()),
+                        length, digest)) {
+                    if (length == previousLength && digest == previousSha)
+                        ++evidenceSeenTwice;
+                    else {
+                        previousLength = length;
+                        previousSha = digest;
+                        evidenceSeenTwice = 1;
+                    }
+                    if (evidenceSeenTwice >= 2) {
+                        conversionObserved = true;
+                        conversionSize = length;
+                        conversionSha = digest;
+                    }
+                } else {
+                    previousSha.clear();
+                    previousLength = 0;
+                    evidenceSeenTwice = 0;
+                }
+            }
+#endif
         });
         bindingPollTimer.start(250);
     }
@@ -635,6 +724,30 @@ int main(int argc, char** argv) {
     manager.SetEventListener(nullptr);
     manager.CloseApplication();
 
+#ifdef GETDOC_GD31J23_CONVERSION_EVIDENCE_LAB
+    if (conversionLab) {
+        const QJsonObject evidence{
+            {"schema", "getdoc-native-conversion-candidate-lab/1"},
+            {"sessionId", bindingSession},
+            {"tabId", bindingTab},
+            {"fixtureName", fixtureName},
+            {"cefViewLoaded", viewCallback},
+            {"editorPathMatched", bindingSeen},
+            {"conversionArtifactObserved", conversionObserved},
+            {"editorBinaryLength", static_cast<qint64>(conversionObserved ? conversionSize : 0)},
+            {"editorBinarySha256", conversionObserved ? conversionSha : QString()},
+            {"documentVerified", false},
+            {"saveVerified", false},
+            {"pdfVerified", false},
+            {"printApproved", false},
+            {"laboratoryOnly", true}
+        };
+        const QByteArray json = QJsonDocument(evidence).toJson(QJsonDocument::Compact);
+        std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()), stdout);
+        std::fputc('\\n', stdout);
+        return exitCode;
+    }
+#endif
 #ifdef GETDOC_GD31J22_BINDING_LAB
     if (bindingLab) {
         const QJsonObject evidence{
