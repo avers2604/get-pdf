@@ -24,6 +24,22 @@ public static class EuroOfficeNativeSaveAsLifecycle
 
     public sealed record Result(State Status)
     {
+        public string Description => Status switch
+        {
+            State.DialogNotObserved => "не получен запрос пути",
+            State.TargetNotAccepted => "не назначен безопасный путь",
+            State.DuplicateDialog => "повторный запрос Save As",
+            State.TargetConflict => "конфликт имени сохранения",
+            State.SaveCancelled => "операция отменена",
+            State.SaveNotAcknowledged => "нет подтверждения от SDK",
+            State.CandidateMissing => "карантинная копия не сформирована",
+            State.CandidateInvalid => "карантинный OOXML не прошёл проверку",
+            State.Timeout => "истёк срок лабораторной операции",
+            State.SavedCandidateValidatedButUntrusted =>
+                "проверен только тестовый OOXML-кандидат; публикация запрещена",
+            _ => "неподтверждённый статус"
+        };
+
         public bool DocumentVerified => false;
         public bool SaveCompleted => false;
         public bool AuthorizedForPublication => false;
