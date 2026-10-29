@@ -13,6 +13,17 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_synthetic_fault_boundary_regressions_remain_offline_and_manual(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-synthetic-fault-checkpoint-source-tests", names)
+        self.assertLess(names.index("cef-synthetic-fault-checkpoint-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn("eurooffice-gd31j32-fault-boundary-exception-vm",
+                      acceptance.MANUAL_GATES)
+        self.assertIn("eurooffice-gd31j32-real-kill-powerloss-directory-fsync-vm",
+                      acceptance.MANUAL_GATES)
+
     def test_synthetic_recovery_report_is_manual_and_offline_only(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
