@@ -111,6 +111,27 @@ public sealed class EuroOfficeNativeSaveAsEventReceiptTests
     }
 
     [TestMethod]
+    public void RejectsFailureReasonThatContradictsObservedNativePhase()
+    {
+        // The v2 failure reason must not contradict what the host itself
+        // reported about the first valid dialog, assigned target or OnSave.
+        foreach (string forged in new[]
+        {
+            Envelope("not_started", candidate: false,
+                dialogCount: 1, saveCount: 0, dialogSeq: 1, saveSeq: 0),
+            Envelope("target_not_assigned", candidate: false,
+                dialogCount: 1, saveCount: 0, dialogSeq: 1, saveSeq: 0),
+            Envelope("candidate_missing", candidate: false,
+                dialogCount: 1, saveCount: 0, dialogSeq: 1, saveSeq: 0),
+            Envelope("invalid_dialog", candidate: false,
+                dialogCount: 1, saveCount: 0, dialogSeq: 1, saveSeq: 0)
+        })
+            Assert.ThrowsExactly<InvalidDataException>(() =>
+                EuroOfficeNativeSaveAsEventReceipt.Parse(
+                    forged, Session, Tab, Fixture, "docx"));
+    }
+
+    [TestMethod]
     public void RejectsForgedOrInconsistentOrderAndUnrecognizedMetadata()
     {
         string valid = Envelope();
