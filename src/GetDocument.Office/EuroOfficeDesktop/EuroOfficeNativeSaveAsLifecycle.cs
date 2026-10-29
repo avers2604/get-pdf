@@ -45,6 +45,35 @@ public static class EuroOfficeNativeSaveAsLifecycle
         public bool AuthorizedForPublication => false;
     }
 
+    /// <summary>
+    /// v2 native failureCode is the lab's explicit claim, independently
+    /// checked against callback counts and the nested fail-closed v1 receipt.
+    /// This is only diagnostic native failureCode, never durable save proof.
+    /// </summary>
+    public static Result Classify(
+        EuroOfficeNativeSaveAsEventReceipt events, bool candidateValidated)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        State state = events.FailureCode switch
+        {
+            "not_started" or "dialog_missing" => State.DialogNotObserved,
+            "invalid_dialog" or "target_not_assigned" => State.TargetNotAccepted,
+            "duplicate_dialog" => State.DuplicateDialog,
+            "target_conflict" => State.TargetConflict,
+            "cancelled" => State.SaveCancelled,
+            "timeout" => State.Timeout,
+            "save_not_acknowledged" => State.SaveNotAcknowledged,
+            "candidate_missing" => State.CandidateMissing,
+            "source_modified" or "private_output_invalid" => State.CandidateInvalid,
+            "candidate_untrusted" => candidateValidated &&
+                events.CorrelatedNativeCallbacks
+                    ? State.SavedCandidateValidatedButUntrusted
+                    : State.CandidateInvalid,
+            _ => throw new InvalidDataException("Неизвестный отказ нативного Save As.")
+        };
+        return new Result(state);
+    }
+
     public static Result Classify(
         EuroOfficeNativeSaveAsReceipt receipt,
         bool candidateValidated,
