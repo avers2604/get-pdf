@@ -13,6 +13,15 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_native_synthetic_private_save_never_skips_manual_roundtrip_gate(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-private-save-roundtrip-source-tests", names)
+        self.assertLess(names.index("cef-private-save-roundtrip-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn("eurooffice-synthetic-private-save-roundtrip-and-immutable-fixture-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_patched_native_ready_sdk_requires_two_offline_source_gates_and_manual_vm(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
