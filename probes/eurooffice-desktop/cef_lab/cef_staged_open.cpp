@@ -1045,10 +1045,15 @@ int main(int argc, char** argv) {
             {"selectedFormat", selectedFormat},
             {"sourceBeforeSha256", fixtureShaBefore},
             {"sourceAfterSha256", fixtureShaAfter},
+            // Preserve the evidence that the FIRST typed dialog was valid.
+            // Later duplicates/invalid callbacks are represented separately
+            // by v2 dialogCount/rejectedSaveAsRequest and failureCode. Erasing
+            // this fact after replying would create an impossible v1 receipt
+            // (saveAsTargetAccepted=true but saveAsRequestSeen=false) and
+            // suppress reliable failure diagnostics in the .NET parser.
+            // This is only observation, NEVER authorization for saving.
             {"saveAsRequestSeen",
-                eventObserver.saveAsRequestSeen.load(std::memory_order_acquire) &&
-                eventObserver.saveAsRequestCount.load(std::memory_order_acquire) == 1 &&
-                !eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire)},
+                eventObserver.saveAsRequestSeen.load(std::memory_order_acquire)},
             {"saveAsTargetAccepted", saveAsTargetAssigned},
             {"saveNotification", eventObserver.onSave.load(std::memory_order_acquire)},
             {"saveCancelled", eventObserver.saveCancelled.load(std::memory_order_acquire)},
