@@ -13,6 +13,15 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_synthetic_recovery_report_is_manual_and_offline_only(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-synthetic-recovery-report-source-tests", names)
+        self.assertLess(names.index("cef-synthetic-recovery-report-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn("eurooffice-gd31j31-private-redacted-recovery-report-manual-vm",
+                      acceptance.MANUAL_GATES)
+
     def test_synthetic_snapshot_journal_requires_offline_and_manual_orphan_review(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
