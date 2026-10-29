@@ -156,6 +156,26 @@ public sealed class EuroOfficeNativeSaveAsEventReceiptTests
     }
 
     [TestMethod]
+    public async Task BoundedV2TransportAndStrictParserAcceptSameNestedEnvelope()
+    {
+        // Reproduce the old stdout/parser mismatch without starting Qt.
+        // The original native host emits compact JSON; long whitespace here
+        // tests only the common transport/parser contract.
+        string padded = Envelope() + new string(' ', 2600);
+        Assert.IsTrue(padded.Length > 2048);
+        Assert.IsTrue(padded.Length <= 4096);
+        using var reader = new StringReader(padded + "\n");
+        string raw = await EuroOfficeNativeBindingProbeLab.ReadOnlyReceiptAsync(
+            reader, CancellationToken.None, maxChars: 4096);
+        var result = EuroOfficeNativeSaveAsEventReceipt.Parse(
+            raw, Session, Tab, Fixture, "docx");
+        Assert.AreEqual("candidate_untrusted", result.FailureCode);
+        Assert.IsTrue(result.CorrelatedNativeCallbacks);
+        Assert.IsFalse(result.SaveCompleted);
+        Assert.IsFalse(result.AuthorizedForPublication);
+    }
+
+    [TestMethod]
     public void RejectsLegacyReceiptInNewNativeRunPath()
     {
         Assert.ThrowsExactly<InvalidDataException>(() =>
