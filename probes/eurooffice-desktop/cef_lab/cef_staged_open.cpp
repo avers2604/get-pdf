@@ -800,6 +800,43 @@ int main(int argc, char** argv) {
                     saveWasAcknowledged = true;
             }
 #endif
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+            if (saveAsLab && bindingSeen && conversionObserved &&
+                eventObserver.onContentReady.load(std::memory_order_acquire) &&
+                eventObserver.modified.load(std::memory_order_acquire) &&
+                !editor->IsSaveLocked()) {
+                if (!saveAsTriggered) {
+                    saveAsTriggered = true;
+                    // Pinned SDK CEF V8 LocalFileSave('saveas=true') triggers
+                    // its typed LOCALFILE_SAVE event. Static JS only; no
+                    // arbitrary destination, user input, network or plugins.
+                    // Subframes only because editor UI is in an iframe.
+                    editor->ExecuteInAllFrames(
+                        "if(window.AscDesktopEditor && "
+                        "typeof window.AscDesktopEditor.LocalFileSave==='function')"
+                        "{window.AscDesktopEditor.LocalFileSave('saveas=true');}",
+                        false);
+                }
+                if (saveAsTriggered && !saveAsTargetAssigned &&
+                    eventObserver.saveAsRequestSeen.load(std::memory_order_acquire) &&
+                    eventObserver.saveAsRequestCount.load(std::memory_order_acquire) == 1 &&
+                    !eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire) &&
+                    !QFileInfo::exists(privateSaveAsPath) &&
+                    PathIsLocalAndUnlinked(privateSaveAsPath)) {
+                    auto* saveAsReply = new NSEditorApi::CAscMenuEvent(
+                        ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE_PATH);
+                    auto* data = new NSEditorApi::CAscLocalSaveFileDialog();
+                    data->put_Id(viewId);
+                    data->put_FileType(format);
+                    data->put_Path(privateSaveAsPath.toStdWString());
+                    saveAsReply->m_pData = data;
+                    saveAsTargetAssigned = true;
+                    // Qt owner thread: the pinned SDK dispatches this through
+                    // LocalFile_SaveStart(path, type), never into original.
+                    editor->Apply(saveAsReply);
+                }
+            }
+#endif
         });
         bindingPollTimer.start(250);
     }
@@ -868,7 +905,7 @@ int main(int argc, char** argv) {
 
     // No success acknowledgement is available yet. Timeout merely limits the
     // trial and does NOT claim the document loaded or saved successfully.
-    QTimer::singleShot(saveLab ? 25000 : 15000, &app, &QCoreApplication::quit);
+    QTimer::singleShot((saveLab || saveAsLab) ? 25000 : 15000, &app, &QCoreApplication::quit);
     const int exitCode = app.exec();
 #ifdef GETDOC_GD31J22_BINDING_LAB
     bindingPollTimer.stop();
