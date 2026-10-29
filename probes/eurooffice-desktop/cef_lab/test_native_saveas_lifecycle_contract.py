@@ -34,6 +34,10 @@ class SaveAsLifecycleContractTests(unittest.TestCase):
         self.assertIn('saveAsLifetimeTimeout',self.cpp)
         self.assertIn('saveAsTargetConflict',self.cpp)
         self.assertIn('!saveAsLifecycleAborted',self.cpp)
+        self.assertIn('if (!saveAsTriggered && !editor->IsSaveLocked())', self.cpp)
+        # Reply is allowed AFTER the initial SaveAs request even when the
+        # SDK's converter reports a transient save lock.
+        self.assertIn('if (saveAsTriggered && !saveAsTargetAssigned', self.cpp)
 
     def test_saveas_completion_never_grants_document_save_or_publication(self):
         self.assertIn('EuroOfficeNativeSaveAsLifecycle.Classify(',self.lab)
