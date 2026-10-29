@@ -75,6 +75,8 @@ public sealed class EuroOfficeNativeRoundTripLabTests
 
         public void WriteOoxml(string path, string text)
         {
+            // Only this disposable synthetic TEST fixture may be recreated.
+            if (File.Exists(path)) File.Delete(path);
             using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
             using (var types = new StreamWriter(zip.CreateEntry("[Content_Types].xml").Open()))
                 types.Write("<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"/>");
