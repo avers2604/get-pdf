@@ -427,6 +427,15 @@ class AcceptancePlanTests(unittest.TestCase):
 
 
 class StepPlanIntegrityTests(unittest.TestCase):
+    def test_build_replay_stays_manual_and_does_not_grant_release(self):
+        self.assertIn(
+            "eurooffice-gd31j38-offline-feed-windows-linux-build-replay-manual",
+            acceptance.MANUAL_GATES)
+        report = acceptance.new_report("a" * 40, "Linux", "GD-31J.38")
+        self.assertEqual("not-run", report["manualAcceptance"][
+            "eurooffice-gd31j38-offline-feed-windows-linux-build-replay-manual"])
+        self.assertFalse(report["releaseReady"])
+
     def test_gd31j38_plan_contract_precedes_any_restore(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [item.name for item in steps]
