@@ -426,6 +426,124 @@ class AcceptancePlanTests(unittest.TestCase):
         self.assertTrue(all(value == "not-run" for value in report["manualAcceptance"].values()))
 
 
+class StepPlanIntegrityTests(unittest.TestCase):
+    def test_build_replay_stays_manual_and_does_not_grant_release(self):
+        self.assertIn(
+            "eurooffice-gd31j38-offline-feed-windows-linux-build-replay-manual",
+            acceptance.MANUAL_GATES)
+        report = acceptance.new_report("a" * 40, "Linux", "GD-31J.38")
+        self.assertEqual("not-run", report["manualAcceptance"][
+            "eurooffice-gd31j38-offline-feed-windows-linux-build-replay-manual"])
+        self.assertFalse(report["releaseReady"])
+
+    def test_gd31j38_plan_contract_precedes_any_restore(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [item.name for item in steps]
+        self.assertIn("gd31j38-plan-inventory-source-contract-tests", names)
+        self.assertLess(names.index("gd31j38-plan-inventory-source-contract-tests"),
+                        names.index("solution-restore"))
+
+
+    """Source-only tests for the plan validator; never launch any commands."""
+
+    def _fixture(self, root: Path):
+        (root / "scripts/tests").mkdir(parents=True)
+        (root / "src/GetDocument.Office").mkdir(parents=True)
+        (root / "scripts/tests/test_fake.py").write_text("pass\n", encoding="utf-8")
+        (root / "GetDocument.slnx").write_text("<Solution />\n", encoding="utf-8")
+        (root / "src/GetDocument.Office/GetDocument.Office.csproj").write_text(
+            "<Project />\n", encoding="utf-8")
+        feed = root / "offline-feed"
+        feed.mkdir()
+        return [
+            acceptance.CommandStep("source-check", [
+                sys.executable, "-m", "unittest", "discover",
+                "-s", "scripts/tests", "-p", "test_fake.py"]),
+            acceptance.CommandStep("solution-restore", [
+                "dotnet", "restore", "GetDocument.slnx",
+                "--source", str(feed), "-p:NuGetAudit=false"]),
+            acceptance.CommandStep("solution-build", [
+                "dotnet", "build", "GetDocument.slnx", "-c", "Release",
+                "--no-restore"]),
+            acceptance.CommandStep("test-office", [
+                "dotnet", "test",
+                "src/GetDocument.Office/GetDocument.Office.csproj",
+                "-c", "Release", "--no-restore",
+                "--minimum-expected-tests", "1"],
+                project="src/GetDocument.Office/GetDocument.Office.csproj")
+        ]
+
+    def test_valid_local_only_steps_have_existing_targets_and_no_commands_are_run(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            steps = self._fixture(root)
+            self.assertEqual(
+                ["source-check", "solution-restore", "solution-build", "test-office"],
+                acceptance.validate_step_plan(root, steps))
+
+    def test_missing_contract_or_project_is_blocking_before_execution(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            steps = self._fixture(root)
+            (root / "scripts/tests/test_fake.py").unlink()
+            with self.assertRaises(FileNotFoundError):
+                acceptance.validate_step_plan(root, steps)
+            (root / "scripts/tests/test_fake.py").write_text("pass\n", encoding="utf-8")
+            (root / "src/GetDocument.Office/GetDocument.Office.csproj").unlink()
+            with self.assertRaises(FileNotFoundError):
+                acceptance.validate_step_plan(root, steps)
+
+    def test_rejects_duplicate_step_names_and_unapproved_commands(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            steps = self._fixture(root)
+            with self.assertRaises(ValueError):
+                acceptance.validate_step_plan(root, steps + [steps[0]])
+            with self.assertRaises(ValueError):
+                acceptance.validate_step_plan(root, [
+                    acceptance.CommandStep("bad", ["bash", "-c", "curl https://example.org"]),
+                    *steps
+                ])
+
+    def test_rejects_path_escape_or_network_source_even_when_target_exists(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            steps = self._fixture(root)
+            bad_source = acceptance.CommandStep(
+                "bad-source", [sys.executable, "-m", "unittest",
+                               "discover", "-s", "../outside", "-p", "test_fake.py"])
+            with self.assertRaises(ValueError):
+                acceptance.validate_step_plan(root, [bad_source, *steps])
+            remote = acceptance.CommandStep("solution-restore",
+                ["dotnet", "restore", "GetDocument.slnx",
+                 "--source", "https://nuget.org/v3/index.json", "-p:NuGetAudit=false"])
+            with self.assertRaises(ValueError):
+                acceptance.validate_step_plan(root, [steps[0],remote,*steps[2:]])
+
+    def test_rejects_missing_no_restore_and_tests_before_solution_build(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            steps = self._fixture(root)
+            wrong_build = acceptance.CommandStep("solution-build",
+                ["dotnet", "build", "GetDocument.slnx", "-c", "Release"])
+            with self.assertRaises(ValueError):
+                acceptance.validate_step_plan(root, [steps[0],steps[1],wrong_build,steps[3]])
+            with self.assertRaises(ValueError):
+                acceptance.validate_step_plan(root,
+                    [steps[0],steps[1],steps[3],steps[2]])
+
+    def test_all_registered_windows_linux_source_gates_are_checked_before_restore(self):
+        root = acceptance.REPO_ROOT
+        for host in ("Linux", "Windows"):
+            steps = acceptance.build_steps(root, Path("/approved/offline-nuget"), host)
+            self.assertEqual(len(steps),
+                len(acceptance.validate_step_plan(root, steps)))
+            names = [s.name for s in steps]
+            self.assertLess(names.index("eurooffice-stacked-contract-integrity-tests"),
+                            names.index("solution-restore"))
+            self.assertLess(names.index("cef-synthetic-terminal-manifest-contract-tests"),
+                            names.index("solution-restore"))
+
 class SourceChecksTests(unittest.TestCase):
     def test_python_whitelist_and_csharp_catalog_match_exactly(self):
         catalog = 'new("calc-one", "one", "calc", true),\nnew("writer-two", "two", "writer", true)'

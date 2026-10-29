@@ -56,6 +56,7 @@ MANUAL_GATES = (
     "eurooffice-gd31j35-docx-xlsx-pptx-manifest-and-roundtrip-manual-vm",
     "eurooffice-gd31j36-native-saveas-v2-stdout-2048-4096-manual-vm",
     "eurooffice-gd31j37-post-onsave-timeout-and-strict-manifest-vm",
+    "eurooffice-gd31j38-offline-feed-windows-linux-build-replay-manual",
     "eurooffice-cef-authenticated-caret-ime-candidates",
     "eurooffice-windows-x11-osr-or-uno-fallback",
     "eurooffice-server-2-5-10-user-coediting",
@@ -83,6 +84,10 @@ def build_steps(root: Path, feed: Path, host: str,
         CommandStep("runner-self-tests",
                     [sys.executable, "-m", "unittest", "discover",
                      "-s", "scripts/tests", "-p", "test_office_acceptance.py"]),
+        CommandStep("gd31j38-plan-inventory-source-contract-tests",
+                    [sys.executable, "-m", "unittest", "discover",
+                     "-s", "scripts/tests",
+                     "-p", "test_gd31j38_acceptance_plan_contract.py"]),
         CommandStep("office-native-save-receipt-contract-tests",
                     [sys.executable, "-m", "unittest", "discover",
                      "-s", "scripts/tests",
@@ -259,6 +264,108 @@ def build_steps(root: Path, feed: Path, host: str,
     return steps
 
 
+
+def validate_step_plan(root: Path, steps: list[CommandStep]) -> list[str]:
+    """Validate the ENTIRE offline command inventory without invoking commands.
+
+    This does not prove an SDK or package exists, and it cannot substitute for
+    disconnecting the lab network. It prevents typoed/missing tests or silent
+    insertion of shell/online commands from being treated as a verified plan.
+    """
+    base = root.resolve()
+    if not steps:
+        raise ValueError("Offline acceptance has no steps.")
+    seen: set[str] = set()
+
+    def local_file(relative: str) -> Path:
+        candidate = Path(relative)
+        if candidate.is_absolute() or not relative or "://" in relative:
+            raise ValueError("Acceptance target must be a relative file path.")
+        full = (base / candidate).resolve()
+        if not full.is_relative_to(base) or not full.is_file():
+            if not full.is_relative_to(base):
+                raise ValueError("Acceptance target escapes repository.")
+            raise FileNotFoundError("Missing declared local acceptance target: " + relative)
+        return full
+
+    for step in steps:
+        if not step.name or step.name in seen:
+            raise ValueError("Duplicate or unnamed acceptance step.")
+        seen.add(step.name)
+        cmd = step.command
+        if not cmd or not all(isinstance(x, str) and x for x in cmd):
+            raise ValueError("Empty acceptance command.")
+        if cmd[0] == sys.executable:
+            if len(cmd) == 8 and cmd[1:4] == ["-m", "unittest", "discover"] \
+                    and cmd[4] == "-s" and cmd[6] == "-p":
+                directory, pattern = cmd[5], cmd[7]
+                if pattern != Path(pattern).name or not pattern.startswith("test_") \
+                        or not pattern.endswith(".py") or any(c in pattern for c in "*?[]"):
+                    raise ValueError("Unapproved Python test pattern.")
+                local_file(str(Path(directory) / pattern))
+            elif len(cmd) == 3 and cmd[1] in (
+                "probes/eurooffice-desktop/test_qt_host.py",
+                "probes/eurooffice-desktop/test_qt_display.py",
+                "probes/eurooffice-desktop/test_qt_ipc.py",
+            ):
+                local_file(cmd[1])
+                if "://" in cmd[2]:
+                    raise ValueError("Qt host path must not be a URL.")
+            else:
+                raise ValueError("Unapproved Python command in acceptance plan.")
+            if step.project is not None:
+                raise ValueError("Python source tests must not supply a .NET project.")
+        elif cmd[0] == "dotnet":
+            if len(cmd) < 3 or cmd[1] not in ("restore", "build", "test"):
+                raise ValueError("Unapproved .NET command in acceptance plan.")
+            local_file(cmd[2])
+            if not cmd[2].endswith((".slnx", ".csproj")):
+                raise ValueError("Only local solution/project targets are accepted.")
+            operation = cmd[1]
+            if operation == "restore":
+                if len(cmd) != 6 or cmd[3] != "--source" or \
+                        cmd[5] != "-p:NuGetAudit=false":
+                    raise ValueError("Restore must use one explicit approved offline feed.")
+                feed = cmd[4]
+                if "://" in feed or feed.startswith("\\\\") or \
+                        (not Path(feed).is_absolute() and feed != "<approved-offline-feed>"):
+                    raise ValueError("Remote/implicit package source is forbidden.")
+                if step.project is not None:
+                    raise ValueError("Restore cannot be presented as a test project.")
+            elif operation == "build":
+                if cmd[3:] != ["-c", "Release", "--no-restore"] or \
+                        step.project is not None:
+                    raise ValueError("Build must reuse the approved offline restore.")
+            else:
+                if cmd[3:] != ["-c", "Release", "--no-restore",
+                               "--minimum-expected-tests", "1"] or \
+                        step.project != cmd[2] or not cmd[2].endswith(".csproj"):
+                    raise ValueError("Test step must use offline MTP and a matching project.")
+        else:
+            raise ValueError("Only fixed Python and .NET commands are approved.")
+
+    names = [item.name for item in steps]
+    if "solution-restore" not in seen or "solution-build" not in seen:
+        raise ValueError("Required restore/build barriers are absent.")
+    restore = names.index("solution-restore")
+    build = names.index("solution-build")
+    if restore >= build:
+        raise ValueError("Build cannot precede approved restore.")
+    for i, step in enumerate(steps):
+        if step.command[:2] == ["dotnet", "test"] and i <= build:
+            raise ValueError("Automated .NET tests must follow the solution build.")
+        if step.command[:2] == ["dotnet", "build"]:
+            if not any(previous.command[:2] == ["dotnet", "restore"] and
+                       previous.command[2] == step.command[2]
+                       for previous in steps[:i]):
+                raise ValueError("Project build has no earlier local restore.")
+        if step.command[:2] == ["dotnet", "test"]:
+            if not any(previous.command[:2] == ["dotnet", "restore"]
+                       for previous in steps[:i]):
+                raise ValueError("Project test has no preceding local restore.")
+    return names
+
+
 def run_steps(steps: list[CommandStep], invoke) -> tuple[list[dict], bool]:
     """Stop on the FIRST failing step. Never claim unexecuted steps passed."""
     if not steps:
@@ -319,8 +426,17 @@ def source_preflight(root: Path) -> dict:
     for project in TEST_PROJECTS.values():
         if not (root / project).is_file():
             raise FileNotFoundError("Required test project is missing: " + project)
+    # Both host plans are checked even on a single-OS workstation. This
+    # includes every deferred Python probe and Windows-only project target.
+    linux_steps = validate_step_plan(
+        root, build_steps(root, Path("<approved-offline-feed>"), "Linux"))
+    windows_steps = validate_step_plan(
+        root, build_steps(root, Path("<approved-offline-feed>"), "Windows"))
     return {"microsoftTestingPlatform": True, "pythonBridgeSyntax": True,
-            "localFeatureCatalogMatch": True, "featureCount": len(ids)}
+            "localFeatureCatalogMatch": True, "featureCount": len(ids),
+            "offlineStepTargetsVerified": True,
+            "linuxPlanStepCount": len(linux_steps),
+            "windowsPlanStepCount": len(windows_steps)}
 
 
 def new_report(revision: str, host: str, stage: str) -> dict:
@@ -415,11 +531,13 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError("Compiled local Qt host binary was not found.")
 
         if args.plan:
+            planned = build_steps(root, Path("<approved-offline-feed>"), host,
+                                  qt_host_binary=qt_binary)
+            validate_step_plan(root, planned)
             report["status"] = "plan-only"
             report["steps"] = [
                 {"name": item.name, "status": "not-run", "command": item.command}
-                for item in build_steps(root, Path("<approved-offline-feed>"), host,
-                                        qt_host_binary=qt_binary)
+                for item in planned
             ]
             result_code = 0
         else:
@@ -428,8 +546,9 @@ def main(argv: list[str] | None = None) -> int:
             feed = args.feed.expanduser().resolve()
             if not feed.is_dir():
                 raise RuntimeError("Approved local NuGet feed directory does not exist.")
-            report["dotnetSdk"] = ensure_dotnet10()
             steps = build_steps(root, feed, host, qt_host_binary=qt_binary)
+            validate_step_plan(root, steps)
+            report["dotnetSdk"] = ensure_dotnet10()
             environment = os.environ.copy()
             environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
             environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1"
