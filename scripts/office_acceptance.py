@@ -44,6 +44,7 @@ MANUAL_GATES = (
     "eurooffice-server-2-5-10-user-coediting",
     "corporate-sso-acl-and-worm-cas",
     "smb-conflicts-and-emergency-recovery",
+    "office-native-save-conflict-and-no-overwrite-copy",
     "physical-get-print-wizard-a4-a3",
     "ms-office-file-compatibility-check",
     "licensing-signing-and-offline-installer",

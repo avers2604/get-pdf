@@ -60,18 +60,27 @@ public sealed class LibreOfficeEditor : IDisposable
         string source = Path.GetFullPath(path);
         if (!File.Exists(source)) throw new FileNotFoundException("Документ не найден.", source);
         await EnsureStartedAsync(cancellationToken);
+        // Capture immediately before the native load, then confirm that the file
+        // did not change while LibreOffice was reading it.
+        var guard = await OfficeFileRevisionGuard.CreateAsync(source, cancellationToken);
         string id = Guid.NewGuid().ToString("N")[..12];
         var document = new EditorDocument(this, id, "getdoc-editor-" + id);
         _documents[id] = document;
+        bool opened = false;
         try
         {
             var reply = await CallAsync(new { op = "open", id, path = source, marker = document.Marker }, cancellationToken);
+            opened = true;
             document.Kind = reply.GetProperty("kind").GetString() ?? "writer";
             document.ReadOnly = reply.TryGetProperty("readonly", out var ro) && ro.GetBoolean();
+            await guard.EnsureUnchangedAsync(cancellationToken);
+            document.InstallSaveCoordinator(new OfficeRevisionSaveCoordinator(guard));
             return document;
         }
         catch
         {
+            // A file replaced during native load is NOT a valid editable tab.
+            if (opened) await document.CloseAsync();
             _documents.TryRemove(id, out _);
             throw;
         }
@@ -268,7 +277,12 @@ public sealed class LibreOfficeEditor : IDisposable
 public sealed class EditorDocument
 {
     private readonly LibreOfficeEditor _editor;
+    private readonly SemaphoreSlim _copyAndSaveGate = new(1, 1);
+    private OfficeRevisionSaveCoordinator? _saveCoordinator;
     private bool _closed;
+
+    internal void InstallSaveCoordinator(OfficeRevisionSaveCoordinator coordinator) =>
+        _saveCoordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
 
     internal EditorDocument(LibreOfficeEditor editor, string id, string marker)
     {
@@ -333,16 +347,42 @@ public sealed class EditorDocument
 
     public async Task SaveAsync()
     {
-        var reply = await _editor.CallAsync(new { op = "save", id = Id }, CancellationToken.None);
-        SetModified(reply);
+        if (_closed) throw new InvalidOperationException("Документ уже закрыт.");
+        if (ReadOnly) throw new InvalidOperationException(
+            "Файл открыт только для чтения. Сохраните отдельную копию.");
+        var coordinator = _saveCoordinator ?? throw new InvalidOperationException(
+            "Контроль версии исходного документа не инициализирован.");
+        await _copyAndSaveGate.WaitAsync();
+        try
+        {
+            JsonElement reply = default;
+            await coordinator.SaveAsync(async () =>
+            {
+                reply = await _editor.CallAsync(new { op = "save", id = Id }, CancellationToken.None);
+            });
+            SetModified(reply);
+        }
+        finally { _copyAndSaveGate.Release(); }
     }
 
     /// <summary>Saves a copy in the format of <paramref name="path"/>'s extension; the document stays bound to its file.</summary>
     public async Task SaveAsAsync(string path)
     {
-        var reply = await _editor.CallAsync(new { op = "saveas", id = Id, path = Path.GetFullPath(path), filter = FilterFor(path) },
-            CancellationToken.None);
-        SetModified(reply);
+        if (_closed) throw new InvalidOperationException("Документ уже закрыт.");
+        string filter = FilterFor(path);
+        await _copyAndSaveGate.WaitAsync();
+        try
+        {
+            JsonElement reply = default;
+            await OfficeCopyPublisher.PublishAsync(path, async staging =>
+            {
+                reply = await _editor.CallAsync(
+                    new { op = "saveas", id = Id, path = staging, filter },
+                    CancellationToken.None);
+            });
+            SetModified(reply);
+        }
+        finally { _copyAndSaveGate.Release(); }
     }
 
     /// <summary>Exports an OOXML recovery snapshot without marking the original document as saved.</summary>
@@ -352,7 +392,8 @@ public sealed class EditorDocument
 
     /// <summary>Writes the document as it is now (unsaved edits included) to a PDF.</summary>
     public Task ExportPdfAsync(string path) =>
-        _editor.CallAsync(new { op = "pdf", id = Id, path = Path.GetFullPath(path) }, CancellationToken.None);
+        OfficeCopyPublisher.PublishAsync(path, staging =>
+            _editor.CallAsync(new { op = "pdf", id = Id, path = staging }, CancellationToken.None));
 
     public async Task CloseAsync()
     {
