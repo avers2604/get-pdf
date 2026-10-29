@@ -13,6 +13,16 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_synthetic_reviewed_snapshot_requires_offline_and_manual_fs_gate(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-synthetic-reviewed-snapshot-source-tests", names)
+        self.assertLess(names.index("cef-synthetic-reviewed-snapshot-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn(
+            "eurooffice-gd31j29-synthetic-reviewed-no-replace-hardlink-durability-vm",
+            acceptance.MANUAL_GATES)
+
     def test_native_saveas_v2_failure_evidence_is_required_before_manual_release(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
