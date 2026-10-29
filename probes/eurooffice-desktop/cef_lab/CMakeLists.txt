@@ -21,6 +21,15 @@ option(GETDOC_GD31J16_ENABLE_KEYBOARD_LAB "Enable synthetic-only Wayland CEF nav
 # IME preedit never leaves the GET shell. Only explicitly committed BMP
 # strings are encoded as bounded numeric codepoints in the synthetic lab.
 option(GETDOC_GD31J17_ENABLE_IME_COMMIT_LAB "Enable synthetic Wayland final IME commit experiment without clipboard" OFF)
+# Separate Linux/Wayland opt-in: observe pinned SDK GetLocalFilePath only.
+# No document import guarantee, editing, save, clipboard or launch privileges.
+option(GETDOC_GD31J22_ENABLE_BINDING_LAB "Observe synthetic editor local-file binding via pinned SDK, no production rights" OFF)
+if(GETDOC_GD31J22_ENABLE_BINDING_LAB AND NOT GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
+  message(FATAL_ERROR "GD-31J.22 needs the approved synthetic GD-31J.6 file-open lab.")
+endif()
+if(GETDOC_GD31J22_ENABLE_BINDING_LAB AND NOT (UNIX AND NOT APPLE))
+  message(FATAL_ERROR "GD-31J.22 synthetic binding telemetry is Linux/Wayland-only.")
+endif()
 if(GETDOC_GD31J17_ENABLE_IME_COMMIT_LAB AND NOT GETDOC_GD31J16_ENABLE_KEYBOARD_LAB)
   message(FATAL_ERROR "GD-31J.17 needs the approved GD-31J.16 keyboard laboratory.")
 endif()
@@ -146,6 +155,11 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
       Qt6::Core Qt6::Gui Qt6::Widgets Qt6::OpenGLWidgets
       "${GETDOC_ASC_DOC_SCORE}" "${GETDOC_ASC_QT_SCORE}"
   )
+  if(GETDOC_GD31J22_ENABLE_BINDING_LAB)
+    target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+        GETDOC_GD31J22_BINDING_LAB=1)
+    message(WARNING "GD-31J.22 synthetic GetLocalFilePath evidence only; not confirmed OOXML import or editing.")
+  endif()
   if(GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
         GETDOC_GD31J12_WAYLAND_OSR_CAPTURE=1)
