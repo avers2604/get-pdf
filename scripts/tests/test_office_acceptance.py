@@ -13,6 +13,15 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_converter_candidate_contract_requires_manual_synthetic_cef_e2e(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-native-conversion-evidence-source-tests", names)
+        self.assertLess(names.index("cef-native-conversion-evidence-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn("eurooffice-native-converter-private-artifact-candidate-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_cef_binding_receipt_source_gate_precedes_offline_restore(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]

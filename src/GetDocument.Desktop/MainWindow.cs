@@ -703,6 +703,95 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>
+    /// GD-31J.23: candidate Editor.bin observed under a private synthetic
+    /// EuroOffice profile. No claim of complete OOXML import, edit or save.
+    /// </summary>
+    internal void ReportNativeConversionCandidate(Guid tabId, Guid sessionId,
+        EuroOfficeNativeConversionCandidate evidence)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(evidence);
+        var state = _nativeWorkspaceTabs.Get(tabId);
+        if (!_nativeOsrLabTabs.Contains(tabId) ||
+            state.SessionId != sessionId ||
+            state.Status is EuroOfficeNativeDocumentStatus.Failed or
+                EuroOfficeNativeDocumentStatus.Closed ||
+            evidence.DocumentVerified || evidence.SaveCompleted ||
+            evidence.PrintApproved || evidence.ApprovedForProduction ||
+            !_nativeTabViews.TryGetValue(tabId, out var tab) ||
+            tab.Content is not NativeOfficeDiagnosticPane pane)
+            throw new InvalidDataException("Чужое или неподтверждённое событие native conversion.");
+        pane.SetNativeConversionCandidate(evidence);
+        _status.Text = evidence.ConversionArtifactObserved
+            ? "EuroOffice SDK: наблюдается кандидат конвертации тестового файла; редактор не аттестован."
+            : "EuroOffice SDK: результат конвертации тестового файла не подтверждён. Сохранение недоступно.";
+    }
+
+    /// <summary>
+    /// Explicit isolated diagnostic invocation only. The actual process
+    /// must stop and be reaped before any receipt is displayed.
+    /// </summary>
+    internal async Task StartNativeConversionEvidenceLabAsync(
+        EuroOfficeNativeLabHostPolicy approvedHost,
+        string stagingRoot, string syntheticFixture,
+        Guid tabId, Guid sessionId, bool labApproved,
+        CancellationToken cancellationToken)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        if (!labApproved)
+            throw new NotSupportedException("Диагностика конвертера допустима только в отдельной лаборатории.");
+        if (_nativeTabViews.ContainsKey(tabId) ||
+            _nativeOsrLabStreams.ContainsKey(tabId) ||
+            _nativeOsrLabTabs.Contains(tabId))
+            throw new InvalidOperationException("Идентификатор лабораторной вкладки уже занят.");
+        // Verify SHA-approved host, synthetic manifest and platform BEFORE
+        // creating a visible diagnostic tab or starting a native process.
+        _ = EuroOfficeNativeConversionProbeLab.CreateStartInfo(
+            approvedHost, stagingRoot, syntheticFixture, sessionId, tabId, labApproved);
+        var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _nativeOsrLabStreams.Add(tabId, lifetime);
+        _nativeOsrLabTabs.Add(tabId);
+        bool registered = false;
+        try
+        {
+            AddNativeDiagnosticTab(tabId, sessionId, syntheticFixture,
+                "EuroOffice SDK — кандидат конвертации");
+            registered = true;
+            EuroOfficeNativeConversionCandidate evidence =
+                await EuroOfficeNativeConversionProbeLab.RunAsync(
+                    approvedHost, stagingRoot, syntheticFixture,
+                    sessionId, tabId, labApproved, lifetime.Token);
+            if (lifetime.IsCancellationRequested) return;
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (!lifetime.IsCancellationRequested &&
+                    _nativeTabViews.ContainsKey(tabId))
+                    ReportNativeConversionCandidate(tabId, sessionId, evidence);
+            });
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            // User closed only THIS lab tab; process host is killed/reaped by
+            // EuroOfficeNativeConversionProbeLab before UI cleanup.
+        }
+        catch
+        {
+            if (registered && _nativeTabViews.ContainsKey(tabId))
+                ReportNativeDiagnosticCrash(tabId, sessionId);
+            throw;
+        }
+        finally
+        {
+            _nativeOsrLabStreams.Remove(tabId);
+            if (!registered)
+                _nativeOsrLabTabs.Remove(tabId);
+            else if (lifetime.IsCancellationRequested && _nativeTabViews.ContainsKey(tabId))
+                CloseNativeDiagnosticTab(tabId, sessionId);
+            lifetime.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Real CEF OnPaint LAB preview, not a verified DOCX/XLSX/PPTX rendering.
     /// Only frames from the registered synthetic Wayland lab process are shown.
     /// </summary>
