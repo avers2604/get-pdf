@@ -6,7 +6,7 @@ no fake caret derived from mouse/OnPaint activates the OS IME.
 from pathlib import Path
 import unittest
 
-ROOT=Path(__file__).resolve().parents[2]
+ROOT=Path(__file__).resolve().parents[3]
 OFFICE=ROOT/"src/GetDocument.Office/EuroOfficeDesktop"
 DESKTOP=ROOT/"src/GetDocument.Desktop"
 

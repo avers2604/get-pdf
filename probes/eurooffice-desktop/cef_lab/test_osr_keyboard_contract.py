@@ -5,7 +5,7 @@ This checks structural restrictions, NOT functional correctness or isolation.
 from pathlib import Path
 import unittest
 
-ROOT=Path(__file__).resolve().parents[2]
+ROOT=Path(__file__).resolve().parents[3]
 CEF=ROOT/"probes/eurooffice-desktop/cef_lab"
 OFFICE=ROOT/"src/GetDocument.Office/EuroOfficeDesktop"
 DESKTOP=ROOT/"src/GetDocument.Desktop"
@@ -28,7 +28,8 @@ class CefKeyboardLabContract(unittest.TestCase):
         self.assertIn('GETDOC_GD31J16_KEYBOARD_LAB=1', self.cmake)
         self.assertIn('#ifndef GETDOC_GD31J16_KEYBOARD_LAB', self.entry)
         self.assertIn('--open-staged-wayland-keyboard-lab', self.entry)
-        self.assertIn('inputPump(streamSession, streamTab, clickLab, keyboardLab)', self.entry)
+        self.assertIn('inputPump(streamSession, streamTab, clickLab,', self.entry)
+        self.assertIn('keyboardLab, imeCommitLab);', self.entry)
 
     def test_native_cannot_accept_arbitrary_text_or_system_shortcuts(self):
         for needle in ('ApprovedNavigationVk(', '"ArrowLeft"', '"PageDown"',
