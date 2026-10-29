@@ -72,6 +72,32 @@ public sealed class EuroOfficeSyntheticManifestIntegrityTests
     }
 
     [TestMethod]
+    public void DuplicateOrUnknownManifestRootFieldsMustFailBeforeAnyJournal()
+    {
+        using var lab = new EuroOfficeSyntheticReviewedSnapshotTests.SyntheticLab();
+        lab.Create();
+        var review = lab.GetReview();
+        string pristine = File.ReadAllText(lab.Manifest);
+        foreach (string forged in new[]
+        {
+            pristine.Replace("\"schema\":", "\"schema\":\"attacker\",\"schema\":",
+                StringComparison.Ordinal),
+            pristine.Replace("\"purpose\":", "\"purpose\":\"untrusted\",\"purpose\":",
+                StringComparison.Ordinal),
+            pristine.Replace("\"files\":", "\"files\":{},\"files\":",
+                StringComparison.Ordinal),
+            pristine.Replace("\"purpose\":", "\"unknown\":\"untrusted\",\"purpose\":",
+                StringComparison.Ordinal)
+        })
+        {
+            File.WriteAllText(lab.Manifest, forged);
+            Assert.ThrowsExactly<InvalidDataException>(() =>
+                EuroOfficeSyntheticReviewedSnapshot.Commit(lab.Root, review, true));
+            Assert.AreEqual(0, Directory.GetFiles(lab.Reviewed).Length);
+        }
+    }
+
+    [TestMethod]
     public void IncorrectHashOrSizeForNonSelectedManifestEntryCannotBeIgnored()
     {
         using var lab = new EuroOfficeSyntheticReviewedSnapshotTests.SyntheticLab();

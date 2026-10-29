@@ -132,6 +132,30 @@ public sealed class EuroOfficeNativeSaveAsEventReceiptTests
     }
 
     [TestMethod]
+    public void TimeoutAfterObservedOnSaveRemainsAValidFailureNotASave()
+    {
+        // Native C++ computes timeout independently of OnSave: the SDK may
+        // acknowledge the operation before the quarantine copy times out.
+        // Previously v2 parser rejected precisely this native combination.
+        var obj = System.Text.Json.Nodes.JsonNode.Parse(
+            Envelope("timeout", candidate: false))!;
+        obj["phase"] = "on_save_observed";
+        obj["onSaveCount"] = 1;
+        obj["onSaveSequence"] = 2;
+        obj["receipt"]!["saveNotification"] = true;
+        var receipt = EuroOfficeNativeSaveAsEventReceipt.Parse(
+            obj.ToJsonString(), Session, Tab, Fixture, "docx");
+        Assert.AreEqual("timeout", receipt.FailureCode);
+        Assert.AreEqual("on_save_observed", receipt.Phase);
+        Assert.AreEqual(1, receipt.OnSaveCount);
+        Assert.IsFalse(receipt.Core.CandidateWritten);
+        Assert.AreEqual(EuroOfficeNativeSaveAsLifecycle.State.Timeout,
+            EuroOfficeNativeSaveAsLifecycle.Classify(receipt, candidateValidated: false).Status);
+        Assert.IsFalse(receipt.SaveCompleted);
+        Assert.IsFalse(receipt.AuthorizedForPublication);
+    }
+
+    [TestMethod]
     public void RejectsForgedOrInconsistentOrderAndUnrecognizedMetadata()
     {
         string valid = Envelope();

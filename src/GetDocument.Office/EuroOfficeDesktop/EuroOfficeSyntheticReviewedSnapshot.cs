@@ -218,6 +218,20 @@ public static class EuroOfficeSyntheticReviewedSnapshot
                 MaxDepth = 6
             });
             var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("Манифест должен быть JSON-объектом.");
+            // Duplicate root properties are not visible to GetProperty,
+            // which returns the last occurrence. Reject duplicates, foreign
+            // metadata and wrong top-level shape before reading any fixture.
+            var rootNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (JsonProperty property in root.EnumerateObject())
+                if (!rootNames.Add(property.Name) ||
+                    property.Name is not ("schema" or "purpose" or "files"))
+                    throw new InvalidDataException("Постороннее или повторное поле манифеста.");
+            if (rootNames.Count != 3 ||
+                root.GetProperty("schema").ValueKind != JsonValueKind.String ||
+                root.GetProperty("purpose").ValueKind != JsonValueKind.String)
+                throw new InvalidDataException("Неполный заголовок тестового манифеста.");
             if (root.GetProperty("schema").GetString() != "gd31j6-office-fixtures/1" ||
                 root.GetProperty("purpose").GetString() !=
                     "test-only-local-ooxml-no-corporate-documents")

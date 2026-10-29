@@ -90,6 +90,30 @@ public sealed class EuroOfficeNativeSaveAsLabTests
     }
 
     [TestMethod]
+    public void PostOnSaveTimeoutRetainsFailureThroughCandidateReviewWithoutWriting()
+    {
+        using var lab = new SyntheticLab();
+        lab.Write(lab.Source, "Synthetic original");
+        var core = lab.Receipt(false) with
+        {
+            SaveAsRequestSeen = true,
+            SaveAsTargetAccepted = true,
+            SaveNotification = true
+        };
+        var events = new EuroOfficeNativeSaveAsEventReceipt(
+            core, "timeout", "on_save_observed", 1, 1, 1, 2);
+        var review = EuroOfficeNativeSaveAsLab.ReviewCandidate(
+            lab.Path, Fixture, core, events);
+        Assert.IsFalse(review.CandidateValidatedAsOoxml);
+        Assert.IsNull(review.Candidate);
+        Assert.AreEqual(EuroOfficeNativeSaveAsLifecycle.State.Timeout,
+            review.Lifecycle.Status);
+        Assert.IsFalse(review.SaveCompleted);
+        Assert.IsFalse(review.AuthorizedForPublication);
+        Assert.IsFalse(File.Exists(lab.CandidatePath));
+    }
+
+    [TestMethod]
     public void RejectsFabricatedSuccessfulSaveAsWithoutTypedRequest()
     {
         using var lab = new SyntheticLab();

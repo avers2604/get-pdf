@@ -13,6 +13,15 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_terminal_timeout_and_manifest_root_are_checked_offline(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-synthetic-terminal-manifest-contract-tests", names)
+        self.assertLess(names.index("cef-synthetic-terminal-manifest-contract-tests"),
+                        names.index("solution-restore"))
+        self.assertIn("eurooffice-gd31j37-post-onsave-timeout-and-strict-manifest-vm",
+                      acceptance.MANUAL_GATES)
+
     def test_v2_stdout_limit_matches_parser_and_legacy_is_preserved(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]

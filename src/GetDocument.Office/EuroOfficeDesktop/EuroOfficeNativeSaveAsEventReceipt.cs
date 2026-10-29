@@ -129,7 +129,11 @@ public sealed record EuroOfficeNativeSaveAsEventReceipt(
                 code == "dialog_missing" && dialogCount != 0 ||
                 code == "cancelled" && !core.SaveCancelled ||
                 code == "save_not_acknowledged" && onSaveCount != 0 ||
-                code == "timeout" && onSaveCount != 0)
+                // Native Qt may reach its deadline AFTER observing OnSave
+                // but BEFORE producing a verified private candidate. A
+                // timeout with OnSave is not a completed save: leave
+                // CandidateWritten=false and preserve the exact failure.
+                code == "timeout" && phase == "not_started")
                 throw new InvalidDataException("Противоречивый native failureCode.");
 
             return new EuroOfficeNativeSaveAsEventReceipt(
