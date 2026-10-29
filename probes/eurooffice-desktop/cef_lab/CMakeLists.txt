@@ -26,6 +26,12 @@ option(GETDOC_GD31J17_ENABLE_IME_COMMIT_LAB "Enable synthetic Wayland final IME 
 option(GETDOC_GD31J22_ENABLE_BINDING_LAB "Observe synthetic editor local-file binding via pinned SDK, no production rights" OFF)
 # Separate synthetic-only artifact candidate gate, NOT a document ready signal.
 option(GETDOC_GD31J23_ENABLE_CONVERSION_EVIDENCE_LAB "Inspect isolated Editor.bin candidate, no edit/save or OOXML readiness" OFF)
+# This is a SEPARATE manually overlaid SDK lab, NEVER the normal editor build.
+option(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB "Observe untrusted renderer content-ready notification only" OFF)
+if(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB AND NOT GETDOC_GD31J23_ENABLE_CONVERSION_EVIDENCE_LAB)
+  message(FATAL_ERROR "GD-31J.24 requires GD-31J.23 private candidate lab.")
+endif()
+
 if(GETDOC_GD31J23_ENABLE_CONVERSION_EVIDENCE_LAB AND NOT GETDOC_GD31J22_ENABLE_BINDING_LAB)
   message(FATAL_ERROR "GD-31J.23 requires independently approved GD-31J.22 binding lab.")
 endif()
@@ -106,7 +112,18 @@ foreach(_entry
     COMMAND "${GIT_EXECUTABLE}" -C "${_dir}" status --porcelain --untracked-files=no
     RESULT_VARIABLE _status_rc OUTPUT_VARIABLE _dirty
     OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-  if(NOT _status_rc EQUAL 0 OR NOT "${_dirty}" STREQUAL "")
+  if(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB AND _name STREQUAL "desktop-sdk")
+    # This exception is permitted ONLY for the exact reviewed two-file overlay
+    # in a separately acknowledged, disposable SDK checkout. No blanket dirty.
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    execute_process(
+      COMMAND "${Python3_EXECUTABLE}" -I
+        "${CMAKE_CURRENT_SOURCE_DIR}/ready_bridge_overlay.py" --verify "${_dir}"
+      RESULT_VARIABLE _bridge_rc OUTPUT_QUIET ERROR_VARIABLE _bridge_error)
+    if(NOT _status_rc EQUAL 0 OR NOT _bridge_rc EQUAL 0)
+      message(FATAL_ERROR "GD-31J.24 patched SDK failed exact overlay verification: ${_bridge_error}")
+    endif()
+  elseif(NOT _status_rc EQUAL 0 OR NOT "${_dirty}" STREQUAL "")
     message(FATAL_ERROR "${_name} has modified tracked files. Refusing CEF lab.")
   endif()
 endforeach()
@@ -118,6 +135,28 @@ find_library(GETDOC_ASC_DOC_SCORE NAMES ascdocumentscore
     PATHS "${EUROOFFICE_RUNTIME_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
 find_library(GETDOC_ASC_QT_SCORE NAMES qtascdocumentscore
     PATHS "${EUROOFFICE_RUNTIME_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+if(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB)
+  # Ensure operators deliberately pin BOTH native runtime libraries rebuilt
+  # for the approved lab fork. A file hash is NOT an attestation of build
+  # provenance: a separate manual runtime linkage review is still required.
+  foreach(_pin_name ASC_DOCUMENTSCORE ASC_QT_SCORE)
+    set(_pin_var "GETDOC_GD31J24_APPROVED_${_pin_name}_SHA256")
+    if(NOT DEFINED ${_pin_var} OR NOT "${${_pin_var}}" MATCHES "^[0-9a-fA-F]{64}$")
+      message(FATAL_ERROR "GD-31J.24 requires approved exact SHA-256 in ${_pin_var}")
+    endif()
+    if(_pin_name STREQUAL "ASC_DOCUMENTSCORE")
+      set(_lib "${GETDOC_ASC_DOC_SCORE}")
+    else()
+      set(_lib "${GETDOC_ASC_QT_SCORE}")
+    endif()
+    file(SHA256 "${_lib}" _actual_sdk_hash)
+    string(TOLOWER "${_actual_sdk_hash}" _actual_sdk_hash)
+    string(TOLOWER "${${_pin_var}}" _expected_sdk_hash)
+    if(NOT _actual_sdk_hash STREQUAL _expected_sdk_hash)
+      message(FATAL_ERROR "GD-31J.24 runtime SHA does not match approved pin: ${_pin_name}")
+    endif()
+  endforeach()
+endif()
 
 add_executable(getdoc-eurooffice-cef-init-lab cef_init_smoke.cpp)
 target_compile_features(getdoc-eurooffice-cef-init-lab PRIVATE cxx_std_17)
@@ -170,6 +209,11 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
         GETDOC_GD31J23_CONVERSION_EVIDENCE_LAB=1)
     message(WARNING "GD-31J.23 isolated Editor.bin candidate only; never a ready/save receipt.")
+  endif()
+  if(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB)
+    target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+        GETDOC_GD31J24_READY_EVENT_LAB=1)
+    message(WARNING "GD-31J.24: untrusted renderer ready signal from manually patched pinned SDK, synthetic VM ONLY; no office edit/save rights.")
   endif()
   if(GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
