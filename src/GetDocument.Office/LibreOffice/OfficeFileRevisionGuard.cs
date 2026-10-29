@@ -79,6 +79,39 @@ public sealed class OfficeFileRevisionGuard
     private sealed record FileRevision(long Length, DateTime ModifiedUtc, string Sha256);
 }
 
+/// <summary>
+/// Serializes saves for one document and runs its revision check BEFORE any
+/// write callback. A store() failure leaves the old baseline unchanged.
+/// This does not make remote SMB writes atomic: server CAS is a separate gate.
+/// </summary>
+public sealed class OfficeRevisionSaveCoordinator
+{
+    private readonly OfficeFileRevisionGuard _guard;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    public OfficeRevisionSaveCoordinator(OfficeFileRevisionGuard guard)
+    {
+        _guard = guard ?? throw new ArgumentNullException(nameof(guard));
+    }
+
+    public async Task SaveAsync(Func<Task> nativeStore,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(nativeStore);
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await _guard.EnsureUnchangedAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await nativeStore();
+            // A native store can return before its new snapshot is readable;
+            // failure here must NOT be mistaken for a successful verified save.
+            await _guard.AcceptSavedAsync(cancellationToken);
+        }
+        finally { _gate.Release(); }
+    }
+}
+
 /// <summary>Recoverable save conflict: retain edits and offer a separate copy.</summary>
 public sealed class OfficeFileConflictException : IOException
 {
