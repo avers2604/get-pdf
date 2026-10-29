@@ -12,11 +12,15 @@ public static class EuroOfficeNativeSaveAsLab
 {
     public sealed record Review(
         EuroOfficeNativeSaveAsReceipt Receipt,
-        EuroOfficeNativeArtifactCandidate? Candidate)
+        EuroOfficeNativeArtifactCandidate? Candidate,
+        EuroOfficeNativeSaveAsEventReceipt? NativeEvidence = null)
     {
         public bool CandidateValidatedAsOoxml => Candidate is not null;
         public EuroOfficeNativeSaveAsLifecycle.Result Lifecycle =>
-            EuroOfficeNativeSaveAsLifecycle.Classify(Receipt, Candidate is not null);
+            NativeEvidence is null
+                ? EuroOfficeNativeSaveAsLifecycle.Classify(Receipt, Candidate is not null)
+                : EuroOfficeNativeSaveAsLifecycle.Classify(
+                    NativeEvidence, Candidate is not null);
         public bool DocumentVerified => false;
         public bool SaveCompleted => false;
         public bool AuthorizedForPublication => false;
@@ -58,18 +62,25 @@ public static class EuroOfficeNativeSaveAsLab
         string before = HashBoundedFile(source);
         string raw = await EuroOfficeNativeBindingProbeLab.RunRawLabAsync(
             info, cancellationToken);
-        var receipt = EuroOfficeNativeSaveAsReceipt.Parse(
+        // The native process MUST speak the exact new nested v2 schema.
+        // Legacy /1 receipt remains parseable for older unit tests, but is
+        // forbidden as evidence from the real native lifecycle runner.
+        var events = EuroOfficeNativeSaveAsEventReceipt.Parse(
             raw, sessionId, tabId, fixtureName, selectedFormat);
+        var receipt = events.Core;
         if (!SameSha(before, receipt.SourceBeforeSha256))
             throw new InvalidDataException("Тестовый OOXML источник изменён за время CEF Save As.");
-        return ReviewCandidate(stagingDirectory, fixtureName, receipt);
+        return ReviewCandidate(stagingDirectory, fixtureName, receipt, events);
     }
 
     public static Review ReviewCandidate(
         string stagingDirectory, string fixtureName,
-        EuroOfficeNativeSaveAsReceipt receipt)
+        EuroOfficeNativeSaveAsReceipt receipt,
+        EuroOfficeNativeSaveAsEventReceipt? events = null)
     {
         ArgumentNullException.ThrowIfNull(receipt);
+        if (events is not null && events.Core != receipt)
+            throw new InvalidDataException("Чужая последовательность CEF событий.");
         if (string.IsNullOrWhiteSpace(stagingDirectory) ||
             !Path.IsPathFullyQualified(stagingDirectory) ||
             stagingDirectory.Contains("://", StringComparison.Ordinal) ||
@@ -91,7 +102,7 @@ public static class EuroOfficeNativeSaveAsLab
                 receipt.CandidateLength != 0 ||
                 receipt.CandidateSha256.Length != 0)
                 throw new InvalidDataException("Невозможное отсутствие Save As результата.");
-            return new Review(receipt, null);
+            return new Review(receipt, null, events);
         }
         if (!receipt.SaveAsRequestSeen || !receipt.SaveAsTargetAccepted ||
             !receipt.SaveNotification || receipt.SaveCancelled ||
@@ -106,7 +117,7 @@ public static class EuroOfficeNativeSaveAsLab
             !SameSha(inspected.Sha256, receipt.CandidateSha256) ||
             SameSha(inspected.Sha256, before))
             throw new InvalidDataException("ООXML Save As-кандидат не прошёл структурную SHA-проверку.");
-        return new Review(receipt, inspected);
+        return new Review(receipt, inspected, events);
     }
 
     private static string HashBoundedFile(string path)

@@ -13,6 +13,15 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_native_saveas_v2_failure_evidence_is_required_before_manual_release(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-native-saveas-v2-event-receipt-source-tests", names)
+        self.assertLess(names.index("cef-native-saveas-v2-event-receipt-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn("eurooffice-saveas-v2-native-event-order-failure-codes-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_native_saveas_lifecycle_guards_are_required_in_offline_acceptance(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
