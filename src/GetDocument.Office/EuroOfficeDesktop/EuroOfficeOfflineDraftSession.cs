@@ -57,13 +57,15 @@ public sealed class EuroOfficeOfflineDraftSession
         string originalHash = await FileHashAsync(source, cancellationToken);
         Guid id = Guid.NewGuid();
         string sessionDirectory = Path.Combine(root, "getdoc-eurooffice-" + id.ToString("N"));
-        Directory.CreateDirectory(sessionDirectory);
+        // Create private from the first instant on POSIX; chmod after
+        // creating a world-readable directory would leave a disclosure race.
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            Directory.CreateDirectory(sessionDirectory,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        else
+            Directory.CreateDirectory(sessionDirectory);
         try
         {
-            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                File.SetUnixFileMode(sessionDirectory,
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-
             string workingPath = Path.Combine(sessionDirectory, "working" + extension);
             await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read,
                              FileShare.Read, 65536, FileOptions.SequentialScan))
