@@ -526,7 +526,8 @@ int main(int argc, char** argv) {
     if (bindingLab) {
         const QString expected = QFileInfo(path).canonicalFilePath();
         QObject::connect(&bindingPollTimer, &QTimer::timeout, &app, [&, expected]() {
-            if (!view || !view->cefViewLoaded.load(std::memory_order_acquire) ||
+            if (!view || view->GetCefView() != editor ||
+                !view->cefViewLoaded.load(std::memory_order_acquire) ||
                 expected.isEmpty() || bindingSeen) return;
             const QString reported =
                 QString::fromStdWString(editor->GetLocalFilePath());
