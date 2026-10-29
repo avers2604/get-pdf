@@ -13,6 +13,16 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_cef_late_duplicate_receipt_coherence_is_manual_e2e_gate(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-native-saveas-v2-event-receipt-source-tests", names)
+        self.assertLess(names.index("cef-native-saveas-v2-event-receipt-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn(
+            "eurooffice-gd31j34-cef-duplicate-after-target-v2-receipt-manual-vm",
+            acceptance.MANUAL_GATES)
+
     def test_net10_native_hardlink_compatibility_is_required_before_restore(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
