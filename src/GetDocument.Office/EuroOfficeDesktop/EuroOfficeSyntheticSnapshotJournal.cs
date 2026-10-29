@@ -128,6 +128,35 @@ public static class EuroOfficeSyntheticSnapshotJournal
     }
 
     /// <summary>
+    /// Extra defensive read-only check immediately before creating the
+    /// reviewed directory entry. It narrows but cannot eliminate hostile
+    /// same-directory TOCTOU; only a private sandbox provides isolation.
+    /// </summary>
+    internal static void RequireLastStage(Attempt attempt, string expectedStage)
+    {
+        ArgumentNullException.ThrowIfNull(attempt);
+        if (expectedStage != "pending_flushed")
+            throw new InvalidDataException("Перед фиксацией ожидается только flushed стадия.");
+        string root = Path.GetDirectoryName(Path.GetDirectoryName(attempt.JournalPath)!)!;
+        ValidateRoot(root, out string reviewed);
+        string exact = Path.Combine(reviewed,
+            JournalPrefix + attempt.AttemptId.ToString("N") + ".jsonl");
+        if (Path.GetFullPath(attempt.JournalPath) != exact)
+            throw new InvalidDataException("Некорректное имя тестового журнала.");
+        var entries = ReadJournal(exact);
+        Entry last = entries[^1];
+        if (last.Stage != expectedStage || last.Sequence != 2 ||
+            last.AttemptId != attempt.AttemptId ||
+            last.SessionId != attempt.SessionId ||
+            last.Format != attempt.Format ||
+            last.Sha256 != attempt.Sha256 ||
+            last.Length != attempt.Length ||
+            last.PendingName != attempt.PendingName ||
+            last.FinalName != attempt.FinalName)
+            throw new InvalidDataException("Журнал изменился до фиксации новой редакции.");
+    }
+
+    /// <summary>
     /// Inspect only pre-existing, fixed "reviewed" folder (no recursion).
     /// Never deletes, renames, opens for write or auto-retries pending files.
     /// Unmatched, incomplete or forged names are NOT trusted for cleanup.
