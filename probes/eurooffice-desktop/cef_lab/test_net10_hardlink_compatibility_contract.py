@@ -48,6 +48,8 @@ class Net10HardLinkCompatibilityContract(unittest.TestCase):
             'MissingOrSamePathAndWrongDirectoryAreRejectedBeforeNativeCall',
             'ExistingFileAndDirectoryCannotBeReplaced',
             'SourceSymlinkIsRejectedInsteadOfCreatingLinkToLink',
+            'RejectsSymlinkedAncestorWithoutTouchingAnyOriginalFile',
+            'DanglingDestinationSymlinkCannotBeReplaced',
         ):
             self.assertIn(token,self.regressions)
 
