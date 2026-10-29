@@ -141,6 +141,24 @@ internal sealed class NativeOfficeDiagnosticPane : Border
               "Редактирование и сохранение недоступны.";
     }
 
+    /// <summary>
+    /// Explicit patched-SDK renderer notification correlated with private
+    /// synthetic conversion artifact; still no validated OOXML or edit/save.
+    /// </summary>
+    public void SetNativeReadyCandidate(EuroOfficeNativeReadyCandidate evidence)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+        if (evidence.DocumentVerified || evidence.EditReady ||
+            evidence.SaveCompleted || evidence.PdfReady ||
+            evidence.ApprovedForProduction)
+            throw new InvalidDataException("Нельзя повышать права по CEF ready событию.");
+        _connection.Text = evidence.ReadyAndConversionCorrelated
+            ? "EuroOffice: тестовый сигнал ContentReady связан с результатом конвертера. " +
+              "Это только лабораторное наблюдение; импорт OOXML, редактирование и сохранение НЕ подтверждены."
+            : "EuroOffice: полный набор лабораторных признаков загрузки НЕ получен. " +
+              "Рабочий редактор и сохранение недоступны.";
+    }
+
     public void SetTransportLost()
     {
         DetachOsrLabInput();
