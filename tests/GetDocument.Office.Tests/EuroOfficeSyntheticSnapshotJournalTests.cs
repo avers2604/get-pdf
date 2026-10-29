@@ -81,6 +81,22 @@ public sealed class EuroOfficeSyntheticSnapshotJournalTests
     }
 
     [TestMethod]
+    public void MalformedTypesInJournalAreReportedWithoutAbortingInspection()
+    {
+        using var lab = new JournalLab();
+        var attempt = EuroOfficeSyntheticSnapshotJournal.Begin(
+            lab.Root, Session, "docx", ExpectedHash, 42, Guid.NewGuid());
+        // An externally corrupted journal is a suspicious observation, not
+        // a basis for deletion or a trusted completed record.
+        File.WriteAllText(attempt.JournalPath, "{\"schema\":123}\n");
+        var findings = EuroOfficeSyntheticSnapshotJournal.Inspect(lab.Root, true);
+        Assert.AreEqual(1, findings.Count);
+        Assert.AreEqual(EuroOfficeSyntheticSnapshotJournal.Observation.MalformedJournal,
+            findings[0].State);
+        Assert.IsTrue(File.Exists(attempt.JournalPath));
+    }
+
+    [TestMethod]
     public void JournalMustFollowSingleForwardOnlyStateMachine()
     {
         using var lab = new JournalLab();
