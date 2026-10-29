@@ -67,6 +67,57 @@ public sealed class OfficeFileRevisionGuardTests
             () => guard.EnsureUnchangedAsync());
     }
 
+    [TestMethod]
+    public async Task StaleOriginalNeverCallsTheUnoSaveCallback()
+    {
+        using var fixture = new Fixture();
+        var guard = await OfficeFileRevisionGuard.CreateAsync(fixture.Source);
+        var save = new OfficeRevisionSaveCoordinator(guard);
+        await File.WriteAllTextAsync(fixture.Source, "COLLEAGUE DATA");
+        int invocations = 0;
+        await Assert.ThrowsExactlyAsync<OfficeFileConflictException>(
+            () => save.SaveAsync(() =>
+            {
+                invocations++;
+                return Task.CompletedTask;
+            }));
+        Assert.AreEqual(0, invocations);
+        Assert.AreEqual("COLLEAGUE DATA", await File.ReadAllTextAsync(fixture.Source));
+    }
+
+    [TestMethod]
+    public async Task FailedNativeStoreDoesNotRefreshExpectedRevision()
+    {
+        using var fixture = new Fixture();
+        var guard = await OfficeFileRevisionGuard.CreateAsync(fixture.Source);
+        var save = new OfficeRevisionSaveCoordinator(guard);
+        await Assert.ThrowsExactlyAsync<IOException>(() => save.SaveAsync(async () =>
+        {
+            // A failing native write may have partially changed the file.
+            await File.WriteAllTextAsync(fixture.Source, "PARTIAL!");
+            throw new IOException("Simulated UNO store failure");
+        }));
+        int invocations = 0;
+        await Assert.ThrowsExactlyAsync<OfficeFileConflictException>(
+            () => save.SaveAsync(() =>
+            {
+                invocations++;
+                return Task.CompletedTask;
+            }));
+        Assert.AreEqual(0, invocations);
+    }
+
+    [TestMethod]
+    public async Task SuccessfulNativeSaveAdvancesExpectedRevision()
+    {
+        using var fixture = new Fixture();
+        var guard = await OfficeFileRevisionGuard.CreateAsync(fixture.Source);
+        var save = new OfficeRevisionSaveCoordinator(guard);
+        await save.SaveAsync(() => File.WriteAllTextAsync(fixture.Source, "SAVED ONCE"));
+        await save.SaveAsync(() => File.WriteAllTextAsync(fixture.Source, "SAVED TWICE"));
+        Assert.AreEqual("SAVED TWICE", await File.ReadAllTextAsync(fixture.Source));
+    }
+
     private sealed class Fixture : IDisposable
     {
         public string Root { get; } = Path.Combine(Path.GetTempPath(),
