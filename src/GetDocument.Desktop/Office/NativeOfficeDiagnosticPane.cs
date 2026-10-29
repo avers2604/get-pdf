@@ -186,11 +186,9 @@ internal sealed class NativeOfficeDiagnosticPane : Border
         if (evidence.DocumentVerified || evidence.SaveCompleted ||
             evidence.AuthorizedForPublication)
             throw new InvalidDataException("Нельзя выдавать права сохранения по SDK лаборатории.");
-        _connection.Text = evidence.CandidateValidatedAsOoxml
-            ? "EuroOffice: типизированное «Сохранить как» создало тестовый OOXML-кандидат " +
-              "в карантине. Совместимость MS Office и сохранение рабочих файлов НЕ подтверждены."
-            : "EuroOffice: лабораторное «Сохранить как» не подтвердило корректный OOXML. " +
-              "Пользовательские файлы и WORM недоступны.";
+        _connection.Text = "EuroOffice — лабораторное Save As: " +
+            evidence.Lifecycle.Description +
+            ". Пользовательские документы, WORM и публикация недоступны.";
     }
 
     public void SetTransportLost()
