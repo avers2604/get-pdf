@@ -82,6 +82,57 @@ public sealed class EuroOfficeNativeHardLinkNoReplaceTests
         Assert.IsFalse(File.Exists(dest));
     }
 
+    [TestMethod]
+    public void RejectsSymlinkedAncestorWithoutTouchingAnyOriginalFile()
+    {
+        using var fixture = new Fixture();
+        string realFolder = Path.Combine(fixture.Root, "real");
+        Directory.CreateDirectory(realFolder);
+        string input = Path.Combine(realFolder, "pending.tmp");
+        File.WriteAllText(input, "immutable fixture");
+        string linkFolder = Path.Combine(fixture.Root, "link");
+        try
+        {
+            Directory.CreateSymbolicLink(linkFolder, realFolder);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException
+                                   or PlatformNotSupportedException)
+        {
+            Assert.Inconclusive("Нет доступа для символьных ссылок на этом стенде.");
+            return;
+        }
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            EuroOfficeNativeHardLinkNoReplace.Create(
+                Path.Combine(linkFolder, "reviewed.docx"),
+                Path.Combine(linkFolder, "pending.tmp")));
+        Assert.AreEqual("immutable fixture", File.ReadAllText(input));
+        Assert.IsFalse(File.Exists(Path.Combine(realFolder, "reviewed.docx")));
+    }
+
+    [TestMethod]
+    public void DanglingDestinationSymlinkCannotBeReplaced()
+    {
+        using var fixture = new Fixture();
+        string input = Path.Combine(fixture.Root, "pending.tmp");
+        string target = Path.Combine(fixture.Root, "missing-target.txt");
+        string link = Path.Combine(fixture.Root, "reviewed.docx");
+        File.WriteAllText(input, "synthetic data");
+        try
+        {
+            File.CreateSymbolicLink(link, target);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException
+                                   or PlatformNotSupportedException)
+        {
+            Assert.Inconclusive("Недоступно создание символьных ссылок.");
+            return;
+        }
+        Assert.ThrowsExactly<IOException>(() =>
+            EuroOfficeNativeHardLinkNoReplace.Create(link, input));
+        Assert.IsNotNull(new FileInfo(link).LinkTarget);
+        Assert.IsFalse(File.Exists(target));
+    }
+
     private sealed class Fixture : IDisposable
     {
         public string Root { get; } = Path.Combine(
