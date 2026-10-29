@@ -19,6 +19,8 @@ public sealed class OfficeFileRevisionGuard
         _accepted = accepted;
     }
 
+    public string ExpectedSha256 => _accepted.Sha256;
+
     public static async Task<OfficeFileRevisionGuard> CreateAsync(
         string path, CancellationToken cancellationToken = default)
     {
@@ -54,9 +56,16 @@ public sealed class OfficeFileRevisionGuard
     /// Call ONLY after a successful engine save. Never refresh the baseline on
     /// an error or a rejected save; that would silently accept a colleague's edit.
     /// </summary>
-    public async Task AcceptSavedAsync(CancellationToken cancellationToken = default)
+    public async Task AcceptSavedAsync(string nativeReceiptSha256,
+        CancellationToken cancellationToken = default)
     {
-        _accepted = await ReadRevisionAsync(_path, cancellationToken);
+        if (nativeReceiptSha256 is not { Length: 64 } ||
+            !nativeReceiptSha256.All(Uri.IsHexDigit))
+            throw new InvalidDataException("Нативный редактор не предоставил корректную SHA-256 квитанцию.");
+        FileRevision current = await ReadRevisionAsync(_path, cancellationToken);
+        if (!string.Equals(current.Sha256, nativeReceiptSha256, StringComparison.OrdinalIgnoreCase))
+            throw new OfficeFileConflictException();
+        _accepted = current;
     }
 
     private static async Task<FileRevision> ReadRevisionAsync(
@@ -94,7 +103,7 @@ public sealed class OfficeRevisionSaveCoordinator
         _guard = guard ?? throw new ArgumentNullException(nameof(guard));
     }
 
-    public async Task SaveAsync(Func<Task> nativeStore,
+    public async Task SaveAsync(Func<string, Task<string>> nativeStore,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(nativeStore);
@@ -103,10 +112,11 @@ public sealed class OfficeRevisionSaveCoordinator
         {
             await _guard.EnsureUnchangedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            await nativeStore();
-            // A native store can return before its new snapshot is readable;
-            // failure here must NOT be mistaken for a successful verified save.
-            await _guard.AcceptSavedAsync(cancellationToken);
+            string nativeReceipt = await nativeStore(_guard.ExpectedSha256);
+            // Require the digest of bytes observed by the native bridge AFTER
+            // store(). A subsequent replacement between store and local read
+            // cannot be accepted as a successful verified save.
+            await _guard.AcceptSavedAsync(nativeReceipt, cancellationToken);
         }
         finally { _gate.Release(); }
     }
