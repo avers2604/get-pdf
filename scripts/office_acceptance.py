@@ -52,6 +52,7 @@ MANUAL_GATES = (
     "eurooffice-gd31j32-fault-boundary-exception-vm",
     "eurooffice-gd31j32-real-kill-powerloss-directory-fsync-vm",
     "eurooffice-gd31j33-net10-windows-linux-hardlink-build-and-no-replace-vm",
+    "eurooffice-gd31j34-cef-duplicate-after-target-v2-receipt-manual-vm",
     "eurooffice-cef-authenticated-caret-ime-candidates",
     "eurooffice-windows-x11-osr-or-uno-fallback",
     "eurooffice-server-2-5-10-user-coediting",
