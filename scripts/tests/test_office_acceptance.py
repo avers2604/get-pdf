@@ -13,6 +13,15 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_cef_binding_receipt_source_gate_precedes_offline_restore(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-native-binding-source-contract-tests", names)
+        self.assertLess(names.index("cef-native-binding-source-contract-tests"),
+                        names.index("solution-restore"))
+        self.assertIn("eurooffice-native-sdk-fixture-binding-and-import-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_native_save_receipt_contract_is_in_local_offline_preflight(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Windows")
         names = [step.name for step in steps]
