@@ -42,6 +42,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     private readonly DispatcherTimer _recoveryTimer = new() { Interval = TimeSpan.FromSeconds(60) };
     private readonly SemaphoreSlim _persistence = new(1, 1);
     private readonly Border _recoveryBanner = new() { IsVisible = false };
+    private readonly Border _saveConflictBanner = new() { IsVisible = false };
     private bool _checkpointing;
     private ComboBox? _font;
     private ComboBox? _size;
@@ -80,6 +81,8 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
         Children.Add(header);
         DockPanel.SetDock(_recoveryBanner, Dock.Top);
         Children.Add(_recoveryBanner);
+        DockPanel.SetDock(_saveConflictBanner, Dock.Top);
+        Children.Add(_saveConflictBanner);
 
         var body = new Grid();
         _host.IsVisible = false;
@@ -630,11 +633,46 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
             }
             _status($"Сохранено: {Path.GetFileName(_path)} · {DateTime.Now:HH:mm}");
         }
+        catch (OfficeFileConflictException ex)
+        {
+            ShowSaveConflictBanner();
+            _status("Сохранение отменено: " + ex.Message);
+        }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException)
         {
             _status("Не удалось сохранить: " + ex.Message);
         }
         finally { _persistence.Release(); }
+    }
+
+    private void ShowSaveConflictBanner()
+    {
+        if (_disposed) return;
+        var bar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            Margin = new Thickness(16, 6)
+        };
+        bar.Children.Add(new TextBlock
+        {
+            Text = "Файл изменён на диске или в сетевой папке. Исходник не перезаписан; " +
+                   "сохраните свою редакцию отдельной копией.",
+            VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 620
+        });
+        var copy = new Button { Content = "Сохранить копию…", MinHeight = 32 };
+        copy.Classes.Add("primary");
+        copy.Click += (_, _) => _ = SaveCopyAsync();
+        bar.Children.Add(copy);
+        var hide = new Button { Content = "Скрыть", MinHeight = 32 };
+        hide.Classes.Add("ghost");
+        hide.Click += (_, _) => _saveConflictBanner.IsVisible = false;
+        bar.Children.Add(hide);
+        _saveConflictBanner.Child = bar;
+        _saveConflictBanner.Classes.Add("header");
+        _saveConflictBanner.IsVisible = true;
     }
 
     private async Task CheckpointAsync()
