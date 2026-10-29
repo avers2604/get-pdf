@@ -109,6 +109,8 @@ public sealed class LibreOfficeEditor : IDisposable
             var reply = await waiter.Task.WaitAsync(deadline.Token);
             if (reply.GetProperty("ok").GetBoolean()) return reply;
             string error = reply.TryGetProperty("error", out var e) ? e.GetString() ?? "" : "";
+            if (error.Contains("GETDOC_SAVE_CONFLICT", StringComparison.Ordinal))
+                throw new OfficeFileConflictException();
             throw new InvalidOperationException(Describe(error));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -356,9 +358,15 @@ public sealed class EditorDocument
         try
         {
             JsonElement reply = default;
-            await coordinator.SaveAsync(async () =>
+            await coordinator.SaveAsync(async expected =>
             {
-                reply = await _editor.CallAsync(new { op = "save", id = Id }, CancellationToken.None);
+                reply = await _editor.CallAsync(
+                    new { op = "save", id = Id, expectedSha256 = expected },
+                    CancellationToken.None);
+                if (!reply.TryGetProperty("sha256", out var receipt) ||
+                    receipt.ValueKind != JsonValueKind.String)
+                    throw new InvalidDataException("Редактор не подтвердил SHA-256 сохранённого файла.");
+                return receipt.GetString() ?? string.Empty;
             });
             SetModified(reply);
         }
