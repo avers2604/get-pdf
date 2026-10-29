@@ -13,6 +13,15 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_guarded_native_saveas_needs_source_and_manual_offline_vm(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-guarded-native-saveas-source-tests", names)
+        self.assertLess(names.index("cef-guarded-native-saveas-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn("eurooffice-guarded-sameformat-saveas-event-and-private-path-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_native_synthetic_private_save_never_skips_manual_roundtrip_gate(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
