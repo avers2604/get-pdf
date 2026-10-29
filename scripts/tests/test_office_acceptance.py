@@ -13,6 +13,16 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_native_save_receipt_contract_is_in_local_offline_preflight(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Windows")
+        names = [step.name for step in steps]
+        self.assertIn("office-native-save-receipt-contract-tests", names)
+        self.assertLess(names.index("office-native-save-receipt-contract-tests"),
+                        names.index("solution-restore"))
+        step = next(s for s in steps
+                    if s.name == "office-native-save-receipt-contract-tests")
+        self.assertIn("test_lo_save_receipt_contract.py", step.command)
+
     def test_native_optimistic_save_and_no_overwrite_copy_require_manual_gate(self):
         self.assertIn("office-native-save-conflict-and-no-overwrite-copy",
                       acceptance.MANUAL_GATES)

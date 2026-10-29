@@ -6,6 +6,7 @@
 #   stdout: {"re": n, "ok": true, ...} | {"re": n, "ok": false, "error": "..."}
 #           {"event": "state"|"modified"|"command"|"closed", "id": ..., ...}   (any time)
 # Documents never run macros. When stdin closes the bridge closes every document and LibreOffice.
+import hashlib
 import json
 import os
 import sys
@@ -72,6 +73,23 @@ def emit(message):
     with _out:
         sys.stdout.write(json.dumps(message, ensure_ascii=False) + "\n")
         sys.stdout.flush()
+
+
+
+def getdoc_file_sha256(path):
+    """Bounded SHA-256 of the current disk file, no external service or UNO call."""
+    digest = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as handle:
+        while True:
+            block = handle.read(1024 * 1024)
+            if not block:
+                break
+            size += len(block)
+            if size > 256 * 1024 * 1024:
+                raise RuntimeError("GETDOC_SAVE_CONFLICT: original file too large")
+            digest.update(block)
+    return digest.hexdigest().upper()
 
 
 def prop(name, value):
@@ -292,10 +310,11 @@ class Interactions(unohelper.Base, XInteractionHandler):
 
 
 class Document:
-    def __init__(self, doc, frame, kind):
+    def __init__(self, doc, frame, kind, source_path):
         self.doc = doc
         self.frame = frame
         self.kind = kind
+        self.source_path = source_path
         self.listeners = []
 
 
@@ -375,7 +394,7 @@ class Bridge:
         controller = doc.getCurrentController()
         frame = controller.getFrame()
         kind = kind_of(doc)
-        entry = Document(doc, frame, kind)
+        entry = Document(doc, frame, kind, request["path"])
         self.docs[doc_id] = entry
         hide_chrome(frame)
         guard = ChromeGuard(frame)
@@ -682,8 +701,17 @@ class Bridge:
 
     def op_save(self, request):
         entry = self.document(request)
+        expected = request.get("expectedSha256")
+        if not isinstance(expected, str) or len(expected) != 64 or any(
+                char not in "0123456789ABCDEF" for char in expected):
+            raise RuntimeError("GETDOC_SAVE_RECEIPT_INVALID")
+        # This check is performed in the native UNO process immediately before
+        # store(); it reduces, but does not eliminate, the SMB TOCTOU window.
+        if getdoc_file_sha256(entry.source_path) != expected:
+            raise RuntimeError("GETDOC_SAVE_CONFLICT")
         entry.doc.store()
-        return {"modified": bool(entry.doc.isModified())}
+        return {"modified": bool(entry.doc.isModified()),
+                "sha256": getdoc_file_sha256(entry.source_path)}
 
     def op_saveas(self, request):
         # A copy: the tab keeps editing the original file.
