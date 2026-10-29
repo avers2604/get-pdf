@@ -37,9 +37,10 @@ public static class EuroOfficeNativeBindingProbeLab
 
     /// <summary>Shared strict local process lifecycle for the two synthetic lab receipt types.</summary>
     internal static async Task<string> RunRawLabAsync(ProcessStartInfo info,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, int maxReceiptChars = 2048)
     {
         ArgumentNullException.ThrowIfNull(info);
+        RequireBoundedReceiptLimit(maxReceiptChars);
         using var process = new Process { StartInfo = info };
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(35));
@@ -49,7 +50,8 @@ public static class EuroOfficeNativeBindingProbeLab
             started = process.Start();
             if (!started)
                 throw new IOException("EuroOffice Qt binding-стенд не запустился.");
-            string json = await ReadOnlyReceiptAsync(process.StandardOutput, deadline.Token);
+            string json = await ReadOnlyReceiptAsync(
+                process.StandardOutput, deadline.Token, maxReceiptChars);
             await process.WaitForExitAsync(deadline.Token);
             if (process.ExitCode != 0)
                 throw new InvalidDataException("EuroOffice Qt binding-стенд завершился с ошибкой.");
@@ -78,10 +80,10 @@ public static class EuroOfficeNativeBindingProbeLab
     /// despite this bounded transport.
     /// </summary>
     internal static async Task<string> ReadOnlyReceiptAsync(
-        TextReader reader, CancellationToken cancellationToken)
+        TextReader reader, CancellationToken cancellationToken, int maxChars = 2048)
     {
         ArgumentNullException.ThrowIfNull(reader);
-        const int maxChars = 2048;
+        RequireBoundedReceiptLimit(maxChars);
         var buffer = new char[1];
         var receipt = new StringBuilder();
         bool ended = false;
@@ -103,5 +105,17 @@ public static class EuroOfficeNativeBindingProbeLab
         if (!ended)
             throw new InvalidDataException("CEF завершился без полной binding-квитанции.");
         return receipt.ToString();
+    }
+
+    /// <summary>
+    /// Only the two protocol-specific ceilings are permitted: historical
+    /// binding v1 max 2048 and nested SaveAs v2 max 4096 characters.
+    /// Unknown callers cannot silently disable the stdout size gate.
+    /// </summary>
+    private static void RequireBoundedReceiptLimit(int maxChars)
+    {
+        if (maxChars is not (2048 or 4096))
+            throw new ArgumentOutOfRangeException(nameof(maxChars),
+                "Only explicit v1/v2 synthetic receipt bounds are permitted.");
     }
 }
