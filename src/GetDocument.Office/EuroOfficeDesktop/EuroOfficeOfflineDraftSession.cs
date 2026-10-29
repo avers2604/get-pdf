@@ -45,7 +45,13 @@ public sealed class EuroOfficeOfflineDraftSession
         CancellationToken cancellationToken = default)
     {
         string source = FullPath(originalPath);
+        // A draft may contain unsaved confidential edits. Never stage it to
+        // an explicit UNC/network share, including Windows extended UNC.
+        if (IsExplicitNetworkPath(privateStagingRoot))
+            throw new NotSupportedException("Черновики EuroOffice нельзя размещать в сетевом каталоге.");
         string root = FullPath(privateStagingRoot);
+        if (IsExplicitNetworkPath(root))
+            throw new NotSupportedException("Черновики EuroOffice нельзя размещать в сетевом каталоге.");
         string extension = SupportedExtension(source);
 
         if (!Directory.Exists(root))
@@ -197,6 +203,12 @@ public sealed class EuroOfficeOfflineDraftSession
             _saveGate.Release();
         }
     }
+
+    private static bool IsExplicitNetworkPath(string? path) =>
+        path is not null &&
+        (path.StartsWith(@"\\", StringComparison.Ordinal) ||
+         path.StartsWith("//", StringComparison.Ordinal) ||
+         path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase));
 
     private static string FullPath(string value)
     {
