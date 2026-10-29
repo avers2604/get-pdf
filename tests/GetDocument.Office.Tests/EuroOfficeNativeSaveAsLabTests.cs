@@ -67,6 +67,29 @@ public sealed class EuroOfficeNativeSaveAsLabTests
     }
 
     [TestMethod]
+    public void LateDuplicateAfterAcceptedPathReturnsExactDiagnosticWithoutOutput()
+    {
+        using var lab = new SyntheticLab();
+        lab.Write(lab.Source, "Original synthetic fixture");
+        var core = lab.Receipt(false) with
+        {
+            SaveAsRequestSeen = true,
+            SaveAsTargetAccepted = true
+        };
+        var events = new EuroOfficeNativeSaveAsEventReceipt(
+            core, "duplicate_dialog", "target_assigned", 2, 0, 1, 0);
+        var review = EuroOfficeNativeSaveAsLab.ReviewCandidate(
+            lab.Path, Fixture, core, events);
+        Assert.IsNull(review.Candidate);
+        Assert.IsFalse(review.CandidateValidatedAsOoxml);
+        Assert.AreEqual(EuroOfficeNativeSaveAsLifecycle.State.DuplicateDialog,
+            review.Lifecycle.Status);
+        Assert.IsFalse(review.SaveCompleted);
+        Assert.IsFalse(review.AuthorizedForPublication);
+        Assert.IsFalse(File.Exists(lab.CandidatePath));
+    }
+
+    [TestMethod]
     public void RejectsFabricatedSuccessfulSaveAsWithoutTypedRequest()
     {
         using var lab = new SyntheticLab();
