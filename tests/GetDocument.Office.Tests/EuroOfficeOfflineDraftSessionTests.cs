@@ -32,6 +32,7 @@ public sealed class EuroOfficeOfflineDraftSessionTests
         using var root = new TemporaryRoot();
         string original = Path.Combine(root.Path, "original.xlsx");
         CreateOoxml(original, "xl/workbook.xml", "<workbook>before</workbook>");
+        byte[] sourceBefore = await File.ReadAllBytesAsync(original);
         var draft = await EuroOfficeOfflineDraftSession.CreateAsync(
             original, root.Staging);
         CreateOoxml(draft.WorkingPath, "xl/workbook.xml",
@@ -44,7 +45,7 @@ public sealed class EuroOfficeOfflineDraftSessionTests
             await File.ReadAllBytesAsync(draft.WorkingPath),
             await File.ReadAllBytesAsync(target));
         Assert.IsTrue(File.Exists(draft.WorkingPath)); // recovery remains
-        Assert.IsFalse(File.ReadAllText(original).Contains("changed by native editor"));
+        CollectionAssert.AreEqual(sourceBefore, await File.ReadAllBytesAsync(original));
     }
 
     [TestMethod]
@@ -115,6 +116,28 @@ public sealed class EuroOfficeOfflineDraftSessionTests
             "../untrusted.txt");
         await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
             EuroOfficeOfflineDraftSession.CreateAsync(unsafePackage, root.Staging));
+    }
+
+    [TestMethod]
+    public async Task AcceptsWellFormedExplicitDirectoryEntries()
+    {
+        using var root = new TemporaryRoot();
+        string original = Path.Combine(root.Path, "with-directory.docx");
+        using (var stream = new FileStream(original, FileMode.CreateNew, FileAccess.Write))
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create))
+        {
+            zip.CreateEntry("word/");
+            foreach (string part in new[]
+            {
+                "[Content_Types].xml", "_rels/.rels", "word/document.xml"
+            })
+            {
+                using var writer = new StreamWriter(zip.CreateEntry(part).Open());
+                writer.Write("<part/>");
+            }
+        }
+        var draft = await EuroOfficeOfflineDraftSession.CreateAsync(original, root.Staging);
+        Assert.IsTrue(File.Exists(draft.WorkingPath));
     }
 
     private static void CreateOoxml(string target, string mainEntry,
