@@ -39,7 +39,7 @@ class SyntheticSnapshotFaultSourceContracts(unittest.TestCase):
             'AfterPendingFileFlushed);',
             'EuroOfficeSyntheticSnapshotJournal.Append(attempt, "pending_flushed")',
             'AfterPendingJournalFlushed);',
-            'File.CreateHardLink(destination, pending)',
+            'EuroOfficeNativeHardLinkNoReplace.Create(destination, pending)',
             'AfterHardLinkCreated);',
             'EuroOfficeSyntheticSnapshotJournal.Append(attempt, "linked")',
             'AfterLinkedJournalFlushed);',
@@ -58,7 +58,7 @@ class SyntheticSnapshotFaultSourceContracts(unittest.TestCase):
         self.assertIn('HashBounded(pending, out long preLinkLength)',src)
         self.assertIn('EuroOfficeSyntheticSnapshotJournal.RequireLastStage(attempt, "pending_flushed")',src)
         self.assertLess(src.index('RequireLastStage(attempt, "pending_flushed")'),
-                        src.index('File.CreateHardLink(destination, pending)'))
+                        src.index('EuroOfficeNativeHardLinkNoReplace.Create(destination, pending)'))
         self.assertIn('internal static void RequireLastStage(', self.journal)
         self.assertIn('output.Flush(flushToDisk: true)',src)
         self.assertIn('public bool DurableAcrossPowerLoss => false',src)
