@@ -55,6 +55,11 @@ class SyntheticSnapshotFaultSourceContracts(unittest.TestCase):
             "Crash checkpoints must be strictly ordered in real CommitCore.")
         self.assertIn('FileMode.CreateNew',src)
         self.assertIn('FileOptions.WriteThrough',src)
+        self.assertIn('HashBounded(pending, out long preLinkLength)',src)
+        self.assertIn('EuroOfficeSyntheticSnapshotJournal.RequireLastStage(attempt, "pending_flushed")',src)
+        self.assertLess(src.index('RequireLastStage(attempt, "pending_flushed")'),
+                        src.index('File.CreateHardLink(destination, pending)'))
+        self.assertIn('internal static void RequireLastStage(', self.journal)
         self.assertIn('output.Flush(flushToDisk: true)',src)
         self.assertIn('public bool DurableAcrossPowerLoss => false',src)
 
@@ -75,7 +80,9 @@ class SyntheticSnapshotFaultSourceContracts(unittest.TestCase):
             "Assert.IsFalse(report.CleanupAuthorized)",
             "Assert.IsFalse(report.DurabilityProven)",
             "DisabledLabCannotReachFaultHookOrWriteAnyJournal",
-            "NullHookOrUnapprovedRevokedEvidenceCannotGainWriteAuthority"
+            "NullHookOrUnapprovedRevokedEvidenceCannotGainWriteAuthority",
+            "MutatingPendingBetweenJournalFlushAndHardLinkMustNotCreateFinalName",
+            "MutatingJournalBetweenPendingFlushAndLinkMustNotCreateFinalName"
         ):
             self.assertIn(stage,self.tests)
         self.assertIn('public bool TrustedForDeletion => false',self.journal)
