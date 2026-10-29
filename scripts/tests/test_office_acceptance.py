@@ -13,6 +13,16 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_v2_stdout_limit_matches_parser_and_legacy_is_preserved(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-saveas-v2-transport-bound-source-tests", names)
+        self.assertLess(names.index("cef-saveas-v2-transport-bound-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn(
+            "eurooffice-gd31j36-native-saveas-v2-stdout-2048-4096-manual-vm",
+            acceptance.MANUAL_GATES)
+
     def test_full_synthetic_manifest_and_three_ooxml_fixtures_are_required(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
