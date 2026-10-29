@@ -42,6 +42,24 @@ class NativeSaveAsV2SourceContracts(unittest.TestCase):
         self.assertIn('firstDialogSequence.load(std::memory_order_acquire)',self.cpp)
         self.assertIn('saveAsLifecycleAborted',self.cpp)
 
+    def test_initial_typed_dialog_evidence_survives_duplicate_for_diagnostics(self):
+        # Duplicate callbacks must poison the candidate gate, not erase the
+        # *already observed* first valid typed dialog after a path was sent.
+        # Otherwise the nested v1 receipt is contradictory and the strict
+        # .NET v2 parser loses the precise duplicate_dialog failure.
+        native = self.cpp
+        start = native.index('const QJsonObject evidence{')
+        end = native.index('const QJsonObject receiptV2{', start)
+        receipt = native[start:end]
+        self.assertIn('{"saveAsRequestSeen",\n                eventObserver.saveAsRequestSeen.load(std::memory_order_acquire)}', receipt)
+        self.assertIn('{"saveAsTargetAccepted", saveAsTargetAssigned}', receipt)
+        self.assertIn('dialogCount > 1 ? "duplicate_dialog"', receipt)
+        self.assertIn('{"dialogCount", dialogCount}', native)
+        gate = native[native.index('const bool privateDestinationValid =', start - 2500):start]
+        self.assertIn('saveAsRequestCount.load(std::memory_order_acquire) == 1', gate)
+        self.assertIn('!eventObserver.rejectedSaveAsRequest.load(', gate)
+        self.assertIn('!saveAsLifecycleAborted', gate)
+
     def test_no_production_saving_and_manual_e2e_gate(self):
         self.assertIn('AuthorizedForPublication => false',self.parser)
         self.assertIn('SaveCompleted => false',self.parser)
