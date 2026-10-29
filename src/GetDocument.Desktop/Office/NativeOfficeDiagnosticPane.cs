@@ -123,6 +123,24 @@ internal sealed class NativeOfficeDiagnosticPane : Border
               "Открытие документа и сохранение запрещены.";
     }
 
+    /// <summary>
+    /// Reports a private synthetic conversion *candidate*. Editor.bin belongs
+    /// to the disposable lab profile; it is not an OOXML import or save ACK.
+    /// </summary>
+    public void SetNativeConversionCandidate(EuroOfficeNativeConversionCandidate evidence)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+        if (evidence.DocumentVerified || evidence.EditReady ||
+            evidence.SaveCompleted || evidence.PdfReady ||
+            evidence.ApprovedForProduction)
+            throw new InvalidDataException("Конвертер не даёт прав на редактирование или запись.");
+        _connection.Text = evidence.ConversionArtifactObserved
+            ? "EuroOffice: найден стабильный результат конвертера в изолированном профиле. " +
+              "Редактирование DOCX/XLSX/PPTX, корректность импорта и сохранение НЕ подтверждены."
+            : "EuroOffice: результат конвертации тестового файла не подтверждён. " +
+              "Редактирование и сохранение недоступны.";
+    }
+
     public void SetTransportLost()
     {
         DetachOsrLabInput();
