@@ -36,9 +36,13 @@ internal static class EuroOfficeNativeHardLinkNoReplace
             throw new InvalidDataException("UNC/SMB не разрешены.");
         if (!File.Exists(input))
             throw new FileNotFoundException("Локальная временная копия отсутствует.", input);
-        if ((File.GetAttributes(input) & FileAttributes.ReparsePoint) != 0 ||
-            (File.GetAttributes(inputFolder) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidDataException("Ссылки на источник или каталог запрещены.");
+        // Reuse the same ancestor-wide reparse/symlink guard as synthetic
+        // staging instead of checking only the immediate parent. Path checks
+        // still require an isolated exclusive lab account to avoid TOCTOU.
+        EuroOfficeSyntheticReviewedSnapshot.RequireRegularPath(
+            inputFolder, expectDirectory: true);
+        EuroOfficeSyntheticReviewedSnapshot.RequireRegularPath(
+            input, expectDirectory: false);
         if (File.Exists(output) || Directory.Exists(output))
             throw new IOException("Конфликт синтетического конечного имени.");
         // This pre-check is informative. The native create-new operation is
