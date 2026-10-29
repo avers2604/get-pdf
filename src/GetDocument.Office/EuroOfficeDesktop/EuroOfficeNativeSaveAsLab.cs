@@ -60,8 +60,10 @@ public static class EuroOfficeNativeSaveAsLab
         // A second, independent local SHA before native execution. Host
         // reports do not confer authenticity or permission to save.
         string before = HashBoundedFile(source);
+        // The nested Save As event v2 contract permits up to 4096 chars.
+        // Legacy binding v1 keeps the old 2048-char stdout ceiling.
         string raw = await EuroOfficeNativeBindingProbeLab.RunRawLabAsync(
-            info, cancellationToken);
+            info, cancellationToken, maxReceiptChars: 4096);
         // The native process MUST speak the exact new nested v2 schema.
         // Legacy /1 receipt remains parseable for older unit tests, but is
         // forbidden as evidence from the real native lifecycle runner.
