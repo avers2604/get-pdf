@@ -149,6 +149,11 @@ public:
     std::atomic<bool> rejectedSaveAsRequest{false};
     std::atomic<int> saveAsRequestCount{0};
     std::atomic<int> expectedSaveAsFormat{-1};
+    // Only the real SDK callbacks from the pinned expected view are sequenced.
+    std::atomic<int> saveAsEventSerial{0};
+    std::atomic<int> firstDialogSequence{0};
+    std::atomic<int> firstOnSaveSequence{0};
+    std::atomic<int> onSaveCount{0};
 #endif
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
     // The patched SDK emits this event only from its renderer bridge. It is
@@ -175,7 +180,12 @@ public:
             switch (event->m_nType) {
 #ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
             case ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE: {
-                saveAsRequestCount.fetch_add(1, std::memory_order_acq_rel);
+                const int eventIndex =
+                    saveAsEventSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
+                const int count =
+                    saveAsRequestCount.fetch_add(1, std::memory_order_acq_rel) + 1;
+                if (count == 1)
+                    firstDialogSequence.store(eventIndex, std::memory_order_release);
                 if (!acceptSaveAsDialog.load(std::memory_order_acquire) ||
                     !event->m_pData) {
                     rejectedSaveAsRequest.store(true, std::memory_order_release);
@@ -205,6 +215,17 @@ public:
                 modified.store(true, std::memory_order_release);
                 break;
             case ASC_MENU_EVENT_TYPE_CEF_ONSAVE:
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+                if (acceptSaveAsDialog.load(std::memory_order_acquire) ||
+                    saveAsRequestCount.load(std::memory_order_acquire) > 0) {
+                    const int eventIndex =
+                        saveAsEventSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
+                    const int count =
+                        onSaveCount.fetch_add(1, std::memory_order_acq_rel) + 1;
+                    if (count == 1)
+                        firstOnSaveSequence.store(eventIndex, std::memory_order_release);
+                }
+#endif
                 onSave.store(true, std::memory_order_release);
                 if (event->m_pData) {
                     auto* data = static_cast<NSEditorApi::CAscDocumentOnSaveData*>(event->m_pData);
@@ -991,6 +1012,10 @@ int main(int argc, char** argv) {
             eventObserver.saveAsRequestCount.load(std::memory_order_acquire) == 1 &&
             !eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire) &&
             eventObserver.onSave.load(std::memory_order_acquire) &&
+            eventObserver.onSaveCount.load(std::memory_order_acquire) == 1 &&
+            eventObserver.firstDialogSequence.load(std::memory_order_acquire) > 0 &&
+            eventObserver.firstOnSaveSequence.load(std::memory_order_acquire) >
+                eventObserver.firstDialogSequence.load(std::memory_order_acquire) &&
             !eventObserver.saveCancelled.load(std::memory_order_acquire) &&
             HashSyntheticFile(privateSaveAsPath, savedDigest, savedBytes) &&
             savedDigest != fixtureShaBefore;
@@ -1037,7 +1062,52 @@ int main(int argc, char** argv) {
             {"printApproved", false},
             {"laboratoryOnly", true}
         };
-        const QByteArray json = QJsonDocument(evidence).toJson(QJsonDocument::Compact);
+        // Terminal diagnostic codes, not proof of durable/compatible save.
+        // No absolute paths, document bytes, passwords or source contents.
+        const int dialogCount =
+            eventObserver.saveAsRequestCount.load(std::memory_order_acquire);
+        const int onSaveCount =
+            eventObserver.onSaveCount.load(std::memory_order_acquire);
+        const int firstDialog =
+            eventObserver.firstDialogSequence.load(std::memory_order_acquire);
+        const int firstSave =
+            eventObserver.firstOnSaveSequence.load(std::memory_order_acquire);
+        const QString nativePhase =
+            candidateWritten ? "quarantined" :
+            onSaveCount > 0 ? "on_save_observed" :
+            saveAsTargetAssigned ? "target_assigned" :
+            dialogCount > 0 ? "dialog_observed" :
+            saveAsTriggered ? "request_sent" : "not_started";
+        const QString failureCode =
+            candidateWritten ? "candidate_untrusted" :
+            dialogCount > 1 ? "duplicate_dialog" :
+            eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire)
+                ? "invalid_dialog" :
+            saveAsTargetConflict ? "target_conflict" :
+            eventObserver.saveCancelled.load(std::memory_order_acquire)
+                ? "cancelled" :
+            !saveAsTriggered ? "not_started" :
+            saveAsLifetimeTimeout ? "timeout" :
+            dialogCount == 0 ? "dialog_missing" :
+            !saveAsTargetAssigned ? "target_not_assigned" :
+            onSaveCount == 0 ? "save_not_acknowledged" :
+            !sourceUntouched ? "source_modified" :
+            !privateDestinationValid ? "private_output_invalid" :
+            "candidate_missing";
+        const QJsonObject receiptV2{
+            {"schema", "getdoc-native-saveas-event-lab/2"},
+            {"sessionId", bindingSession},
+            {"tabId", bindingTab},
+            {"fixtureName", fixtureName},
+            {"failureCode", failureCode},
+            {"phase", nativePhase},
+            {"dialogCount", dialogCount},
+            {"onSaveCount", onSaveCount},
+            {"dialogSequence", firstDialog},
+            {"onSaveSequence", firstSave},
+            {"receipt", evidence}
+        };
+        const QByteArray json = QJsonDocument(receiptV2).toJson(QJsonDocument::Compact);
         std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()), stdout);
         std::fputc('\n', stdout);
         return exitCode;
