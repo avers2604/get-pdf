@@ -101,8 +101,12 @@ public static class EuroOfficeSyntheticReviewedSnapshot
         // across filesystems when creating the final directory entry.
         // On crash/failure, leave unverified .tmp for MANUAL inspection,
         // never sweep arbitrary user or pre-existing files.
-        string pending = Path.Combine(reviewed,
-            ".gd31j29-pending-" + Guid.NewGuid().ToString("N") + ".tmp");
+        // Journal is created BEFORE the first pending byte. An unexpected
+        // exception/crash leaves evidence; nothing attempts auto-deletion.
+        var attempt = EuroOfficeSyntheticSnapshotJournal.Begin(
+            root, native.Core.SessionId, native.Core.SelectedFormat,
+            actual.Sha256, actual.Length, Guid.NewGuid());
+        string pending = Path.Combine(reviewed, attempt.PendingName);
         using (var input = new FileStream(
             quarantine, FileMode.Open, FileAccess.Read, FileShare.Read))
         using (var output = new FileStream(
@@ -120,6 +124,7 @@ public static class EuroOfficeSyntheticReviewedSnapshot
             HashBounded(quarantine, out _) != actual.Sha256 ||
             HashBounded(source, out _) != native.Core.SourceBeforeSha256)
             throw new InvalidDataException("Синтетическая новая редакция изменилась во время записи.");
+        EuroOfficeSyntheticSnapshotJournal.Append(attempt, "pending_flushed");
         RequireRegularPath(reviewed, expectDirectory: true);
         if (File.Exists(destination) || Directory.Exists(destination))
             throw new IOException("Конфликт: синтетическая новая редакция уже появилась.");
@@ -128,6 +133,7 @@ public static class EuroOfficeSyntheticReviewedSnapshot
         // operation with NO replace-existing fallback. Filesystems lacking
         // hard-link support fail closed. This does NOT fsync directory metadata.
         File.CreateHardLink(destination, pending);
+        EuroOfficeSyntheticSnapshotJournal.Append(attempt, "linked");
         // We remove ONLY our uniquely created private pending link, NEVER the
         // source/quarantine/reviewed output. If it fails, throw; operator can
         // inspect both links in an offline VM.
@@ -138,6 +144,7 @@ public static class EuroOfficeSyntheticReviewedSnapshot
             HashBounded(quarantine, out _) != actual.Sha256)
             throw new InvalidDataException("Повторная проверка новой синтетической редакции не пройдена.");
 
+        EuroOfficeSyntheticSnapshotJournal.Append(attempt, "completed");
         return new Receipt(finalName, actual.Sha256, actual.Length);
     }
 
@@ -189,7 +196,7 @@ public static class EuroOfficeSyntheticReviewedSnapshot
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
-    private static void RequireRegularPath(string path, bool expectDirectory)
+    internal static void RequireRegularPath(string path, bool expectDirectory)
     {
         // No symlink or Windows reparse-point, including any existing
         // ancestor; requires a private lab account with exclusive staging.
