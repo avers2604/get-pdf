@@ -261,9 +261,13 @@ public sealed class EuroOfficeOfflineDraftSession
             foreach (var part in zip.Entries)
             {
                 string name = part.FullName.Replace('\\', '/');
-                if (name.Length == 0 || name.StartsWith('/') ||
-                    name.Split('/').Any(segment => segment is "." or ".." or "") ||
-                    name.Contains(':') || !names.Add(name))
+                // Explicit ZIP directory entries are valid OOXML; trailing
+                // slash is allowed only for directories, never path traversal.
+                bool isDirectory = name.EndsWith('/');
+                string normalized = isDirectory ? name[..^1] : name;
+                if (normalized.Length == 0 || normalized.StartsWith('/') ||
+                    normalized.Split('/').Any(segment => segment is "." or ".." or "") ||
+                    normalized.Contains(':') || !names.Add(normalized))
                     throw new InvalidDataException("Недопустимый путь или дублирование части OOXML.");
                 if (name.EndsWith("/vbaProject.bin", StringComparison.OrdinalIgnoreCase) ||
                     name.Equals("vbaProject.bin", StringComparison.OrdinalIgnoreCase))
