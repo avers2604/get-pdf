@@ -262,6 +262,16 @@ bool IsAllowedName(const QString& name) {
            name == "gd31j6_impress.pptx";
 }
 
+#ifdef GETDOC_GD31J22_BINDING_LAB
+bool BindingGuid32(const QString& value) {
+    if (value.size() != 32 || value == QString(32, QChar('0'))) return false;
+    for (const QChar ch : value)
+        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')))
+            return false;
+    return true;
+}
+#endif
+
 bool PathIsLocalAndUnlinked(const QString& path) {
     if (!QDir::isAbsolutePath(path) || path.startsWith("//") ||
         path.startsWith("\\\\") || path.contains("://"))
@@ -405,7 +415,18 @@ int main(int argc, char** argv) {
 #endif
     const bool ordinaryLab = argc == 4 &&
         std::strcmp(argv[1], "--open-staged-lab") == 0;
-    if (!ordinaryLab && !osrLab && !streamLab) return 2;
+    const bool bindingLab = argc == 6 &&
+        std::strcmp(argv[1], "--open-staged-binding-lab") == 0;
+#ifndef GETDOC_GD31J22_BINDING_LAB
+    if (bindingLab) return 2;
+#else
+    if (bindingLab && qgetenv("QT_QPA_PLATFORM") != "wayland") return 9;
+    const QString bindingSession = bindingLab ? QString::fromLatin1(argv[4]) : QString();
+    const QString bindingTab = bindingLab ? QString::fromLatin1(argv[5]) : QString();
+    if (bindingLab && (!BindingGuid32(bindingSession) || !BindingGuid32(bindingTab)))
+        return 2;
+#endif
+    if (!ordinaryLab && !osrLab && !streamLab && !bindingLab) return 2;
 #ifndef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
     if (osrLab || streamLab) return 2;
 #else
@@ -440,6 +461,9 @@ int main(int argc, char** argv) {
     }
 
     QApplication app(argc, argv);
+#ifdef GETDOC_GD31J22_BINDING_LAB
+    if (bindingLab && app.platformName() != "wayland") return 9;
+#endif
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
     if ((osrLab || streamLab) && app.platformName() != "wayland") return 9;
 #endif
@@ -492,16 +516,41 @@ int main(int argc, char** argv) {
     eventObserver.expectedViewId.store(viewId, std::memory_order_release);
     window.show();
 
-#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
-    // EuroOffice's Linux CEF path uses CefDoMessageLoopWork(). A plain Qt
-    // app.exec() does not necessarily pump Chromium: schedule CEF work on the
-    // Qt owner thread, NEVER from OnPaint itself (reentrancy is unsafe).
+#ifdef GETDOC_GD31J22_BINDING_LAB
+    // This is NOT a document-import completion callback. It only confirms
+    // that the REAL pinned native editor reports the expected local fixture
+    // path once the independent CEF view callback has been observed.
+    // All SDK calls execute on the Qt owner thread, never in OnPaint.
+    bool bindingSeen = false;
+    QTimer bindingPollTimer;
+    if (bindingLab) {
+        const QString expected = QFileInfo(path).canonicalFilePath();
+        QObject::connect(&bindingPollTimer, &QTimer::timeout, &app, [&, expected]() {
+            if (!view || view->GetCefView() != editor ||
+                !view->cefViewLoaded.load(std::memory_order_acquire) ||
+                expected.isEmpty() || bindingSeen) return;
+            const QString reported =
+                QString::fromStdWString(editor->GetLocalFilePath());
+            // Never emit a path, filename from CEF, token or document content.
+            const QString canonical = QFileInfo(reported).canonicalFilePath();
+            if (!canonical.isEmpty() && canonical == expected)
+                bindingSeen = true;
+        });
+        bindingPollTimer.start(250);
+    }
+#endif
+
+#if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) || defined(GETDOC_GD31J22_BINDING_LAB)
+    // Binding evidence also needs CEF's real external event loop, even
+    // without OSR frames. Only on the Qt owner thread.
     QTimer cefWorkPump;
-    if (osrLab || streamLab) {
+    if (osrLab || streamLab || bindingLab) {
         QObject::connect(&cefWorkPump, &QTimer::timeout, &app,
                          [&cef]() { cef.DoMessageLoopEvent(); });
         cefWorkPump.start(10);
     }
+#endif
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
 #if defined(__linux__)
     int framesProduced = 0;
     quint64 observedRevision = 0;
@@ -556,8 +605,13 @@ int main(int argc, char** argv) {
     // trial and does NOT claim the document loaded or saved successfully.
     QTimer::singleShot(15000, &app, &QCoreApplication::quit);
     const int exitCode = app.exec();
-#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
+#ifdef GETDOC_GD31J22_BINDING_LAB
+    bindingPollTimer.stop();
+#endif
+#if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) || defined(GETDOC_GD31J22_BINDING_LAB)
     cefWorkPump.stop();
+#endif
+#ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
 #if defined(__linux__)
     if (streamLab) {
         frameSampleTimer.stop();
@@ -580,6 +634,29 @@ int main(int argc, char** argv) {
         manager.DestroyCefView(viewId, false);
     manager.SetEventListener(nullptr);
     manager.CloseApplication();
+
+#ifdef GETDOC_GD31J22_BINDING_LAB
+    if (bindingLab) {
+        const QJsonObject evidence{
+            {"schema", "getdoc-native-binding-lab/1"},
+            {"sessionId", bindingSession},
+            {"tabId", bindingTab},
+            {"fixtureName", fixtureName},
+            {"cefViewLoaded", viewCallback},
+            {"editorPathMatched", bindingSeen},
+            {"bindingObserved", bindingSeen && viewCallback},
+            {"documentVerified", false},
+            {"saveVerified", false},
+            {"pdfVerified", false},
+            {"printApproved", false},
+            {"laboratoryOnly", true}
+        };
+        const QByteArray json = QJsonDocument(evidence).toJson(QJsonDocument::Compact);
+        std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()), stdout);
+        std::fputc('\n', stdout);
+        return exitCode;
+    }
+#endif
 
 #if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) && defined(__linux__)
     if (streamLab) {

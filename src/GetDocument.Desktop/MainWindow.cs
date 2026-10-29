@@ -613,6 +613,96 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>
+    /// A CEF view callback plus the pinned SDK's GetLocalFilePath only proves
+    /// a SYNTHETIC laboratory file binding, NOT successful OOXML import.
+    /// </summary>
+    internal void ReportNativeBindingEvidence(Guid tabId, Guid sessionId,
+        EuroOfficeNativeBindingReceipt evidence)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(evidence);
+        var state = _nativeWorkspaceTabs.Get(tabId);
+        if (!_nativeOsrLabTabs.Contains(tabId) ||
+            state.SessionId != sessionId ||
+            state.Status is EuroOfficeNativeDocumentStatus.Failed or
+                EuroOfficeNativeDocumentStatus.Closed ||
+            evidence.DocumentVerified || evidence.SaveCompleted ||
+            evidence.PrintApproved || evidence.ApprovedForProduction ||
+            !_nativeTabViews.TryGetValue(tabId, out var tab) ||
+            tab.Content is not NativeOfficeDiagnosticPane pane)
+            throw new InvalidDataException("Чужое или неподтверждённое событие native binding.");
+        pane.SetNativeBindingEvidence(evidence);
+        _status.Text = evidence.BindingObserved
+            ? "EuroOffice SDK: подтверждена только привязка синтетического файла; редактор не аттестован."
+            : "EuroOffice SDK: привязка тестового файла не подтверждена. Сохранение недоступно.";
+    }
+
+    /// <summary>
+    /// Dedicated GD-31J.22 Linux/Wayland native binding experiment. The
+    /// ordinary launcher has no route to this method. It cannot open real
+    /// documents or expose editor input, save, print and clipboard.
+    /// </summary>
+    internal async Task StartNativeBindingLabAsync(
+        EuroOfficeNativeLabHostPolicy approvedHost,
+        string stagingRoot, string syntheticFixture,
+        Guid tabId, Guid sessionId, bool labApproved,
+        CancellationToken cancellationToken)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        if (!labApproved)
+            throw new NotSupportedException("Нативная привязка допустима только в отдельной лаборатории.");
+        if (_nativeTabViews.ContainsKey(tabId) ||
+            _nativeOsrLabStreams.ContainsKey(tabId) ||
+            _nativeOsrLabTabs.Contains(tabId))
+            throw new InvalidOperationException("Идентификатор лабораторной вкладки уже занят.");
+        // Verify SHA-approved host, synthetic manifest and platform BEFORE
+        // creating a visible diagnostic tab or starting a native process.
+        _ = EuroOfficeNativeBindingProbeLab.CreateStartInfo(
+            approvedHost, stagingRoot, syntheticFixture, sessionId, tabId, labApproved);
+        var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _nativeOsrLabStreams.Add(tabId, lifetime);
+        _nativeOsrLabTabs.Add(tabId);
+        bool registered = false;
+        try
+        {
+            AddNativeDiagnosticTab(tabId, sessionId, syntheticFixture,
+                "EuroOffice SDK — привязка синтетического файла");
+            registered = true;
+            EuroOfficeNativeBindingReceipt evidence =
+                await EuroOfficeNativeBindingProbeLab.RunAsync(
+                    approvedHost, stagingRoot, syntheticFixture,
+                    sessionId, tabId, labApproved, lifetime.Token);
+            if (lifetime.IsCancellationRequested) return;
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (!lifetime.IsCancellationRequested &&
+                    _nativeTabViews.ContainsKey(tabId))
+                    ReportNativeBindingEvidence(tabId, sessionId, evidence);
+            });
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            // User closed only THIS lab tab; process host is killed/reaped by
+            // EuroOfficeNativeBindingProbeLab before UI cleanup.
+        }
+        catch
+        {
+            if (registered && _nativeTabViews.ContainsKey(tabId))
+                ReportNativeDiagnosticCrash(tabId, sessionId);
+            throw;
+        }
+        finally
+        {
+            _nativeOsrLabStreams.Remove(tabId);
+            if (!registered)
+                _nativeOsrLabTabs.Remove(tabId);
+            else if (lifetime.IsCancellationRequested && _nativeTabViews.ContainsKey(tabId))
+                CloseNativeDiagnosticTab(tabId, sessionId);
+            lifetime.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Real CEF OnPaint LAB preview, not a verified DOCX/XLSX/PPTX rendering.
     /// Only frames from the registered synthetic Wayland lab process are shown.
     /// </summary>
