@@ -10,6 +10,20 @@ namespace GetDocument.Office.EuroOfficeDesktop;
 /// This is NOT a crash-durability, signature, filesystem sandbox, Office
 /// round-trip or production-save certification. See docs for remaining TOCTOU.
 /// </summary>
+// Only visible to explicitly designated test assemblies via InternalsVisibleTo.
+// This cannot be selected by the normal launcher, CLI or production users.
+internal enum EuroOfficeSyntheticSnapshotFaultCheckpoint
+{
+    AfterIntentPersisted,
+    AfterPendingFileFlushed,
+    AfterPendingJournalFlushed,
+    AfterHardLinkCreated,
+    AfterLinkedJournalFlushed,
+    AfterPendingLinkRemoved,
+    AfterFinalHashVerified,
+    AfterCompletedJournalFlushed
+}
+
 public static class EuroOfficeSyntheticReviewedSnapshot
 {
     private const long MaxFileBytes = 128L * 1024 * 1024;
@@ -39,7 +53,30 @@ public static class EuroOfficeSyntheticReviewedSnapshot
     public static Receipt Commit(
         string stagingRoot,
         EuroOfficeNativeSaveAsLab.Review review,
+        bool labApproved = false) =>
+        CommitCore(stagingRoot, review, labApproved, faultProbe: null);
+
+    /// <summary>
+    /// TEST-ONLY controlled exception seam for the eight synthetic write
+    /// boundaries. This method never kills a process and does not simulate
+    /// OS page cache, power loss or directory durability. It is internal,
+    /// requires the same explicit lab approval, and cannot bypass evidence.
+    /// </summary>
+    internal static Receipt CommitWithFaultProbe(
+        string stagingRoot, EuroOfficeNativeSaveAsLab.Review review,
+        Action<EuroOfficeSyntheticSnapshotFaultCheckpoint> faultProbe,
         bool labApproved = false)
+    {
+        if (!labApproved)
+            throw new NotSupportedException("Лабораторная фиксация не разрешена.");
+        ArgumentNullException.ThrowIfNull(faultProbe);
+        return CommitCore(stagingRoot, review, labApproved, faultProbe);
+    }
+
+    private static Receipt CommitCore(
+        string stagingRoot, EuroOfficeNativeSaveAsLab.Review review,
+        bool labApproved,
+        Action<EuroOfficeSyntheticSnapshotFaultCheckpoint>? faultProbe)
     {
         if (!labApproved)
             throw new NotSupportedException("Лабораторная публикация не разрешена.");
@@ -106,6 +143,7 @@ public static class EuroOfficeSyntheticReviewedSnapshot
         var attempt = EuroOfficeSyntheticSnapshotJournal.Begin(
             root, native.Core.SessionId, native.Core.SelectedFormat,
             actual.Sha256, actual.Length, Guid.NewGuid());
+        faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterIntentPersisted);
         string pending = Path.Combine(reviewed, attempt.PendingName);
         using (var input = new FileStream(
             quarantine, FileMode.Open, FileAccess.Read, FileShare.Read))
@@ -118,6 +156,7 @@ public static class EuroOfficeSyntheticReviewedSnapshot
             input.CopyTo(output, bufferSize: 65536);
             output.Flush(flushToDisk: true);
         }
+        faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterPendingFileFlushed);
         // Check what was written, instead of trusting copy completion.
         string pendingHash = HashBounded(pending, out long pendingLength);
         if (pendingHash != actual.Sha256 || pendingLength != actual.Length ||
@@ -125,6 +164,17 @@ public static class EuroOfficeSyntheticReviewedSnapshot
             HashBounded(source, out _) != native.Core.SourceBeforeSha256)
             throw new InvalidDataException("Синтетическая новая редакция изменилась во время записи.");
         EuroOfficeSyntheticSnapshotJournal.Append(attempt, "pending_flushed");
+        faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterPendingJournalFlushed);
+        // The snapshot may be altered by a concurrent writer *after* the
+        // original pending hash check or journal append. Recheck both
+        // immediately before the hardlink. This narrows (not closes) TOCTOU;
+        // a private VM/account and no shared mounts remain mandatory.
+        if (HashBounded(pending, out long preLinkLength) != actual.Sha256 ||
+            preLinkLength != actual.Length ||
+            HashBounded(quarantine, out _) != actual.Sha256 ||
+            HashBounded(source, out _) != native.Core.SourceBeforeSha256)
+            throw new InvalidDataException("Подмена файла перед фиксацией синтетической редакции.");
+        EuroOfficeSyntheticSnapshotJournal.RequireLastStage(attempt, "pending_flushed");
         RequireRegularPath(reviewed, expectDirectory: true);
         if (File.Exists(destination) || Directory.Exists(destination))
             throw new IOException("Конфликт: синтетическая новая редакция уже появилась.");
@@ -133,18 +183,23 @@ public static class EuroOfficeSyntheticReviewedSnapshot
         // operation with NO replace-existing fallback. Filesystems lacking
         // hard-link support fail closed. This does NOT fsync directory metadata.
         File.CreateHardLink(destination, pending);
+        faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterHardLinkCreated);
         EuroOfficeSyntheticSnapshotJournal.Append(attempt, "linked");
+        faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterLinkedJournalFlushed);
         // We remove ONLY our uniquely created private pending link, NEVER the
         // source/quarantine/reviewed output. If it fails, throw; operator can
         // inspect both links in an offline VM.
         File.Delete(pending);
+        faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterPendingLinkRemoved);
         if (HashBounded(destination, out long committedLength) != actual.Sha256 ||
             committedLength != actual.Length ||
             HashBounded(source, out _) != native.Core.SourceBeforeSha256 ||
             HashBounded(quarantine, out _) != actual.Sha256)
             throw new InvalidDataException("Повторная проверка новой синтетической редакции не пройдена.");
 
+        faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterFinalHashVerified);
         EuroOfficeSyntheticSnapshotJournal.Append(attempt, "completed");
+        faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterCompletedJournalFlushed);
         return new Receipt(finalName, actual.Sha256, actual.Length);
     }
 

@@ -125,7 +125,7 @@ public sealed class EuroOfficeSyntheticReviewedSnapshotTests
             EuroOfficeSyntheticReviewedSnapshot.Commit(lab.Root, review, true));
     }
 
-    private sealed class SyntheticLab : IDisposable
+    internal sealed class SyntheticLab : IDisposable
     {
         public string Root { get; } = Path.Combine(
             Path.GetTempPath(), "gd31j29-synth-" + Guid.NewGuid().ToString("N"));
