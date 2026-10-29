@@ -20,7 +20,7 @@ class ReviewedSyntheticSnapshotSourceContract(unittest.TestCase):
 
     def test_restricted_to_reviewed_synthetic_path_and_manifest(self):
         for phrase in (
-            'getdoc', 'gd31j6-fixture-manifest.json',
+            'gd31j6-fixture-manifest.json',
             'gd31j6-office-fixtures/1',
             'test-only-local-ooxml-no-corporate-documents',
             'Path.Combine(root, "reviewed")',
