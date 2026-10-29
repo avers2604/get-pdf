@@ -109,6 +109,35 @@ public sealed class EuroOfficeNativeDocumentWorkflowTests
     }
 
     [TestMethod]
+    public async Task WorkflowCanPrepareApprovedStagedSaveButNeverConfirmsNativeSave()
+    {
+        using var fixture = new SyntheticFixture();
+        var flow = NewWorkflow();
+        Guid session = Guid.NewGuid();
+        Guid tab = Guid.NewGuid();
+        string candidate = Path.Combine(fixture.Root, "candidate.docx");
+        string target = Path.Combine(fixture.Root, "final.docx");
+        Assert.ThrowsExactly<NotSupportedException>(() =>
+            flow.PrepareLocalStagedSave(fixture.Root, fixture.Source,
+                candidate, target, session, tab,
+                editableWorkingCopy: true, labApproved: false));
+        var transaction = flow.PrepareLocalStagedSave(fixture.Root, fixture.Source,
+            candidate, target, session, tab,
+            editableWorkingCopy: true, labApproved: true);
+        Assert.IsFalse(flow.SaveCompleted);
+        Assert.IsFalse(flow.DocumentVerified);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            flow.CreateRevisionIntent(fixture.Root, fixture.Source, fixture.Revision,
+                editableWorkingCopy: true));
+        // The transaction holds no native file bytes and produces no output
+        // until an independently produced, validated candidate arrives.
+        Assert.IsFalse(File.Exists(candidate));
+        Assert.IsFalse(File.Exists(target));
+        await Task.CompletedTask;
+        GC.KeepAlive(transaction);
+    }
+
+    [TestMethod]
     public void RepeatedIntentCannotOverwriteEarlierDestination()
     {
         using var fixture = new SyntheticFixture();
