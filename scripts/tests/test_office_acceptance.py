@@ -13,6 +13,11 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_native_optimistic_save_and_no_overwrite_copy_require_manual_gate(self):
+        self.assertIn("office-native-save-conflict-and-no-overwrite-copy",
+                      acceptance.MANUAL_GATES)
+
+
     def test_only_local_feed_used_and_all_suites_enforced(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/approved/feed"), "Windows")
         restore = next(step for step in steps if step.name == "solution-restore")
