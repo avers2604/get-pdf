@@ -139,6 +139,31 @@ public sealed class EuroOfficeNativeDocumentWorkflow
         }
     }
 
+    /// <summary>
+    /// Prepare a one-shot, synthetic-only Save As transaction. No native
+    /// editing command is sent and no WORM/CAS state can be modified here.
+    /// The candidate must be produced separately and remain untrusted.
+    /// </summary>
+    public EuroOfficeStagedSaveTransaction PrepareLocalStagedSave(
+        string stagedRoot, string source, string expectedNativeCandidate,
+        string newLocalRevision, Guid sessionId, Guid tabId,
+        bool editableWorkingCopy, bool labApproved = false)
+    {
+        lock (_sync)
+        {
+            EnsureOpen();
+            if (!editableWorkingCopy)
+                throw new InvalidOperationException("WORM-оригинал не допускается к Save As.");
+            if (_revisionIntentCreated)
+                throw new InvalidOperationException("Запрос новой редакции уже сформирован.");
+            var prepared = EuroOfficeStagedSaveTransaction.Prepare(
+                stagedRoot, source, expectedNativeCandidate, newLocalRevision,
+                sessionId, tabId, labApproved);
+            _revisionIntentCreated = true;
+            return prepared; // never alters SaveCompleted / DocumentVerified
+        }
+    }
+
     public string CreatePdfIntent(string stagedRoot, string source, string destination)
     {
         lock (_sync)
