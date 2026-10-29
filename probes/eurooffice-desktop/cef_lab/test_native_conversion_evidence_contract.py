@@ -46,7 +46,7 @@ class ConversionEvidenceSourceTests(unittest.TestCase):
         self.assertIn('EditReady => false', self.receipt)
         self.assertIn('SaveCompleted => false', self.receipt)
         self.assertIn('ExpectedFields', self.receipt)
-        self.assertIn('fields.Add(', self.receipt.replace('seen.Add(', 'fields.Add('))
+        self.assertIn('seen.Add(property.Name)', self.receipt)
 
 
 if __name__ == "__main__":
