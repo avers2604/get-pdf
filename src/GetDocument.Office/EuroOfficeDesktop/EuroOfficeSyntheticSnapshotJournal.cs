@@ -181,7 +181,8 @@ public static class EuroOfficeSyntheticSnapshotJournal
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException
                                        or JsonException or UnauthorizedAccessException
-                                       or ArgumentException)
+                                       or ArgumentException or FormatException
+                                       or InvalidOperationException)
             {
                 // Unknown/corrupt/linked record is a SUSPICIOUS entry only.
                 reports.Add(new Report(null, "", "", "",
