@@ -135,9 +135,14 @@ public static class EuroOfficeSyntheticSnapshotJournal
         var knownPending = new HashSet<string>(StringComparer.Ordinal);
         var journals = new List<string>();
         var pending = new List<string>();
+        int scanned = 0;
         foreach (string item in Directory.EnumerateFileSystemEntries(
             reviewed, "*", SearchOption.TopDirectoryOnly))
         {
+            // The lab observer refuses a directory dominated by unrelated
+            // objects rather than doing an unbounded scan of shared files.
+            if (++scanned > 2048)
+                throw new InvalidDataException("Превышен лимит просмотра каталога лаборатории.");
             string name = Path.GetFileName(item);
             if (name.StartsWith(JournalPrefix, StringComparison.Ordinal))
                 journals.Add(item);
