@@ -60,7 +60,7 @@ public sealed class OfficeFileRevisionGuardTests
         await Assert.ThrowsExactlyAsync<OfficeFileConflictException>(
             () => guard.EnsureUnchangedAsync());
         // Production callers only invoke this AFTER the UNO store() succeeds.
-        await guard.AcceptSavedAsync();
+        await guard.AcceptSavedAsync(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(fixture.Source))));
         await guard.EnsureUnchangedAsync();
         await File.WriteAllTextAsync(fixture.Source, "COLLEAGUE DATA");
         await Assert.ThrowsExactlyAsync<OfficeFileConflictException>(
@@ -76,10 +76,10 @@ public sealed class OfficeFileRevisionGuardTests
         await File.WriteAllTextAsync(fixture.Source, "COLLEAGUE DATA");
         int invocations = 0;
         await Assert.ThrowsExactlyAsync<OfficeFileConflictException>(
-            () => save.SaveAsync(() =>
+            () => save.SaveAsync(_ =>
             {
                 invocations++;
-                return Task.CompletedTask;
+                return Task.FromResult(string.Empty);
             }));
         Assert.AreEqual(0, invocations);
         Assert.AreEqual("COLLEAGUE DATA", await File.ReadAllTextAsync(fixture.Source));
@@ -91,7 +91,7 @@ public sealed class OfficeFileRevisionGuardTests
         using var fixture = new Fixture();
         var guard = await OfficeFileRevisionGuard.CreateAsync(fixture.Source);
         var save = new OfficeRevisionSaveCoordinator(guard);
-        await Assert.ThrowsExactlyAsync<IOException>(() => save.SaveAsync(async () =>
+        await Assert.ThrowsExactlyAsync<IOException>(() => save.SaveAsync(async _ =>
         {
             // A failing native write may have partially changed the file.
             await File.WriteAllTextAsync(fixture.Source, "PARTIAL!");
@@ -99,10 +99,10 @@ public sealed class OfficeFileRevisionGuardTests
         }));
         int invocations = 0;
         await Assert.ThrowsExactlyAsync<OfficeFileConflictException>(
-            () => save.SaveAsync(() =>
+            () => save.SaveAsync(_ =>
             {
                 invocations++;
-                return Task.CompletedTask;
+                return Task.FromResult(string.Empty);
             }));
         Assert.AreEqual(0, invocations);
     }
@@ -113,9 +113,44 @@ public sealed class OfficeFileRevisionGuardTests
         using var fixture = new Fixture();
         var guard = await OfficeFileRevisionGuard.CreateAsync(fixture.Source);
         var save = new OfficeRevisionSaveCoordinator(guard);
-        await save.SaveAsync(() => File.WriteAllTextAsync(fixture.Source, "SAVED ONCE"));
-        await save.SaveAsync(() => File.WriteAllTextAsync(fixture.Source, "SAVED TWICE"));
+        await save.SaveAsync(async _ =>
+        {
+            await File.WriteAllTextAsync(fixture.Source, "SAVED ONCE");
+            return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(fixture.Source)));
+        });
+        await save.SaveAsync(async _ =>
+        {
+            await File.WriteAllTextAsync(fixture.Source, "SAVED TWICE");
+            return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(fixture.Source)));
+        });
         Assert.AreEqual("SAVED TWICE", await File.ReadAllTextAsync(fixture.Source));
+    }
+
+    [TestMethod]
+    public async Task RejectsNativeReceiptForDifferentFileEvenAfterStoreReturnedSuccess()
+    {
+        using var fixture = new Fixture();
+        var guard = await OfficeFileRevisionGuard.CreateAsync(fixture.Source);
+        var save = new OfficeRevisionSaveCoordinator(guard);
+        await Assert.ThrowsExactlyAsync<OfficeFileConflictException>(
+            () => save.SaveAsync(async expected =>
+            {
+                Assert.AreEqual(64, expected.Length);
+                await File.WriteAllTextAsync(fixture.Source, "SAVED WITH RACE");
+                return new string('A', 64); // valid shape, wrong content
+            }));
+        await Assert.ThrowsExactlyAsync<OfficeFileConflictException>(
+            () => guard.EnsureUnchangedAsync());
+    }
+
+    [TestMethod]
+    public async Task RejectsMissingNativeReceiptRatherThanAcceptingStaleData()
+    {
+        using var fixture = new Fixture();
+        var guard = await OfficeFileRevisionGuard.CreateAsync(fixture.Source);
+        var save = new OfficeRevisionSaveCoordinator(guard);
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(
+            () => save.SaveAsync(_ => Task.FromResult("")));
     }
 
     private sealed class Fixture : IDisposable
