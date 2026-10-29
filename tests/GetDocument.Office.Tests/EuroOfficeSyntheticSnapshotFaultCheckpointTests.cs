@@ -116,6 +116,57 @@ public sealed class EuroOfficeSyntheticSnapshotFaultCheckpointTests
     }
 
     [TestMethod]
+    public void MutatingPendingBetweenJournalFlushAndHardLinkMustNotCreateFinalName()
+    {
+        using var lab = new EuroOfficeSyntheticReviewedSnapshotTests.SyntheticLab();
+        lab.Create();
+        var review = lab.GetReview();
+        string original = lab.Hash(lab.Source);
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            EuroOfficeSyntheticReviewedSnapshot.CommitWithFaultProbe(
+                lab.Root, review, checkpoint =>
+                {
+                    if (checkpoint == EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterPendingJournalFlushed)
+                    {
+                        string pending = Directory.GetFiles(lab.Reviewed,
+                            ".gd31j29-pending-*.tmp").Single();
+                        File.AppendAllText(pending, "tampered-after-flush");
+                    }
+                }, labApproved: true));
+        Assert.IsFalse(File.Exists(Path.Combine(lab.Reviewed,
+            EuroOfficeSyntheticReviewedSnapshot.ExpectedName(
+                review.Receipt.SessionId, review.Receipt.SelectedFormat))));
+        Assert.AreEqual(original, lab.Hash(lab.Source));
+        Assert.AreEqual(1, Directory.GetFiles(lab.Reviewed,
+            ".gd31j29-pending-*.tmp").Length);
+    }
+
+    [TestMethod]
+    public void MutatingJournalBetweenPendingFlushAndLinkMustNotCreateFinalName()
+    {
+        using var lab = new EuroOfficeSyntheticReviewedSnapshotTests.SyntheticLab();
+        lab.Create();
+        var review = lab.GetReview();
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            EuroOfficeSyntheticReviewedSnapshot.CommitWithFaultProbe(
+                lab.Root, review, checkpoint =>
+                {
+                    if (checkpoint == EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterPendingJournalFlushed)
+                    {
+                        string journal = Directory.GetFiles(lab.Reviewed,
+                            ".gd31j30-intent-*.jsonl").Single();
+                        File.AppendAllText(journal, "{\"unexpected\":\"untrusted\"}\n");
+                    }
+                }, labApproved: true));
+        Assert.IsFalse(File.Exists(Path.Combine(lab.Reviewed,
+            EuroOfficeSyntheticReviewedSnapshot.ExpectedName(
+                review.Receipt.SessionId, review.Receipt.SelectedFormat))));
+        var findings = EuroOfficeSyntheticSnapshotJournal.Inspect(lab.Root, true);
+        Assert.IsTrue(findings.Any(f => f.State ==
+            EuroOfficeSyntheticSnapshotJournal.Observation.MalformedJournal));
+    }
+
+    [TestMethod]
     public void SuccessfulCommitWithoutProbeStillWritesExactlyFourStages()
     {
         using var lab = new EuroOfficeSyntheticReviewedSnapshotTests.SyntheticLab();
