@@ -165,6 +165,16 @@ public static class EuroOfficeSyntheticReviewedSnapshot
             throw new InvalidDataException("Синтетическая новая редакция изменилась во время записи.");
         EuroOfficeSyntheticSnapshotJournal.Append(attempt, "pending_flushed");
         faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterPendingJournalFlushed);
+        // The snapshot may be altered by a concurrent writer *after* the
+        // original pending hash check or journal append. Recheck both
+        // immediately before the hardlink. This narrows (not closes) TOCTOU;
+        // a private VM/account and no shared mounts remain mandatory.
+        if (HashBounded(pending, out long preLinkLength) != actual.Sha256 ||
+            preLinkLength != actual.Length ||
+            HashBounded(quarantine, out _) != actual.Sha256 ||
+            HashBounded(source, out _) != native.Core.SourceBeforeSha256)
+            throw new InvalidDataException("Подмена файла перед фиксацией синтетической редакции.");
+        EuroOfficeSyntheticSnapshotJournal.RequireLastStage(attempt, "pending_flushed");
         RequireRegularPath(reviewed, expectDirectory: true);
         if (File.Exists(destination) || Directory.Exists(destination))
             throw new IOException("Конфликт: синтетическая новая редакция уже появилась.");
