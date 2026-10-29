@@ -42,7 +42,8 @@ class PrivateRoundTripContracts(unittest.TestCase):
         self.assertIn('fixtureShaAfter == fixtureShaBefore', self.cpp)
         self.assertIn('nativeCandidateName', self.cpp)
         self.assertIn('QFile::copy(privateWorkingPath, candidatePath)', self.cpp)
-        self.assertIn('File.Move(', self.host) is False if False else None
+        self.assertNotIn('File.Move(', self.host)
+        self.assertNotIn('File.Delete(', self.host)
         self.assertIn('EuroOfficeNativeArtifactCandidate.InspectRevision(', self.host)
         self.assertIn('CryptographicOperations.FixedTimeEquals(', self.host)
 
