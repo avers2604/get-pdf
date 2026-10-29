@@ -27,6 +27,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstring>
@@ -142,6 +143,13 @@ public:
     std::atomic<bool> onSave{false};
     std::atomic<bool> saveCancelled{false};
     std::atomic<bool> printEnd{false};
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+    std::atomic<bool> acceptSaveAsDialog{false};
+    std::atomic<bool> saveAsRequestSeen{false};
+    std::atomic<bool> rejectedSaveAsRequest{false};
+    std::atomic<int> saveAsRequestCount{0};
+    std::atomic<int> expectedSaveAsFormat{-1};
+#endif
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
     // The patched SDK emits this event only from its renderer bridge. It is
     // not a trusted proof of fully parsed or editable OOXML.
@@ -149,6 +157,10 @@ public:
 #endif
 
     bool IsSupportEvent(int type) override {
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+        if (type == ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE)
+            return true;
+#endif
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
         if (type == ASC_MENU_EVENT_TYPE_GETDOC_DOCUMENT_CONTENT_READY)
             return true;
@@ -161,6 +173,29 @@ public:
     void OnEvent(NSEditorApi::CAscCefMenuEvent* event) override {
         if (event && event->get_SenderId() == expectedViewId.load(std::memory_order_acquire)) {
             switch (event->m_nType) {
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+            case ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE: {
+                saveAsRequestCount.fetch_add(1, std::memory_order_acq_rel);
+                if (!acceptSaveAsDialog.load(std::memory_order_acquire) ||
+                    !event->m_pData) {
+                    rejectedSaveAsRequest.store(true, std::memory_order_release);
+                    break;
+                }
+                auto* data = static_cast<NSEditorApi::CAscLocalSaveFileDialog*>(
+                    event->m_pData);
+                const int required = expectedSaveAsFormat.load(std::memory_order_acquire);
+                const auto& formats = data->get_SupportFormats();
+                if (data->get_Id() != expectedViewId.load(std::memory_order_acquire) ||
+                    data->get_FileType() != required || required <= 0 ||
+                    (!formats.empty() &&
+                     std::find(formats.begin(), formats.end(), required) == formats.end())) {
+                    rejectedSaveAsRequest.store(true, std::memory_order_release);
+                    break;
+                }
+                saveAsRequestSeen.store(true, std::memory_order_release);
+                break;
+            }
+#endif
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
             case ASC_MENU_EVENT_TYPE_GETDOC_DOCUMENT_CONTENT_READY:
                 onContentReady.store(true, std::memory_order_release);
@@ -519,8 +554,15 @@ int main(int argc, char** argv) {
 #ifndef GETDOC_GD31J25_SYNTHETIC_SAVE_LAB
     if (saveLab) return 2;
 #endif
-    const bool readyLab = argc == 6 &&
-        (std::strcmp(argv[1], "--open-staged-ready-event-lab") == 0 || saveLab);
+    const bool saveAsLab = argc == 7 &&
+        std::strcmp(argv[1], "--open-staged-guarded-saveas-lab") == 0;
+#ifndef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+    if (saveAsLab) return 2;
+#endif
+    const bool readyLab =
+        (argc == 6 &&
+         (std::strcmp(argv[1], "--open-staged-ready-event-lab") == 0 || saveLab)) ||
+        saveAsLab;
 #ifndef GETDOC_GD31J24_READY_EVENT_LAB
     if (readyLab) return 2;
 #endif
@@ -567,6 +609,13 @@ int main(int argc, char** argv) {
 #endif
     const QString staging = QString::fromLocal8Bit(argv[2]);
     const QString fixtureName = QString::fromLocal8Bit(argv[3]);
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+    const QString selectedFormat = saveAsLab ? QString::fromLatin1(argv[6]) : QString();
+    if (saveAsLab &&
+        (selectedFormat != QFileInfo(fixtureName).suffix() ||
+         (selectedFormat != "docx" && selectedFormat != "xlsx" && selectedFormat != "pptx")))
+        return 2;
+#endif
     QString path;
     QString reason;
     if (!VerifySyntheticFixture(staging, fixtureName, path, reason)) {
@@ -596,7 +645,7 @@ int main(int argc, char** argv) {
     QString privateWorkingPath;
     QString workingShaBefore;
     qint64 workingSizeBefore = 0;
-    if (saveLab) {
+    if (saveLab || saveAsLab) {
         if (!HashSyntheticFile(path, fixtureShaBefore, fixtureSize) ||
             !QDir(profile.path()).mkpath("work")) return 14;
         privateWorkingPath = QDir(profile.path()).filePath(
@@ -652,6 +701,17 @@ int main(int argc, char** argv) {
     editor->OpenLocalFile(openedPath.toStdWString(), format, L"");
     const int viewId = editor->GetId();
     eventObserver.expectedViewId.store(viewId, std::memory_order_release);
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+    eventObserver.expectedSaveAsFormat.store(format, std::memory_order_release);
+    eventObserver.acceptSaveAsDialog.store(saveAsLab, std::memory_order_release);
+    QString privateSaveAsPath;
+    if (saveAsLab) {
+        privateSaveAsPath = QDir(profile.path()).filePath(
+            "work/gd31j26-private-saveas." + selectedFormat);
+        if (QFileInfo::exists(privateSaveAsPath) ||
+            !PathIsLocalAndUnlinked(privateSaveAsPath)) return 15;
+    }
+#endif
     window.show();
 
 #ifdef GETDOC_GD31J22_BINDING_LAB
@@ -672,6 +732,10 @@ int main(int argc, char** argv) {
 #ifdef GETDOC_GD31J25_SYNTHETIC_SAVE_LAB
     bool saveRequested = false;
     bool saveWasAcknowledged = false;
+#endif
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+    bool saveAsTriggered = false;
+    bool saveAsTargetAssigned = false;
 #endif
     QTimer bindingPollTimer;
     if (bindingLab) {
@@ -734,6 +798,43 @@ int main(int argc, char** argv) {
                     eventObserver.onSave.load(std::memory_order_acquire) &&
                     !eventObserver.saveCancelled.load(std::memory_order_acquire))
                     saveWasAcknowledged = true;
+            }
+#endif
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+            if (saveAsLab && bindingSeen && conversionObserved &&
+                eventObserver.onContentReady.load(std::memory_order_acquire) &&
+                eventObserver.modified.load(std::memory_order_acquire) &&
+                !editor->IsSaveLocked()) {
+                if (!saveAsTriggered) {
+                    saveAsTriggered = true;
+                    // Pinned SDK CEF V8 LocalFileSave('saveas=true') triggers
+                    // its typed LOCALFILE_SAVE event. Static JS only; no
+                    // arbitrary destination, user input, network or plugins.
+                    // Subframes only because editor UI is in an iframe.
+                    editor->ExecuteInAllFrames(
+                        "if(window.AscDesktopEditor && "
+                        "typeof window.AscDesktopEditor.LocalFileSave==='function')"
+                        "{window.AscDesktopEditor.LocalFileSave('saveas=true');}",
+                        false);
+                }
+                if (saveAsTriggered && !saveAsTargetAssigned &&
+                    eventObserver.saveAsRequestSeen.load(std::memory_order_acquire) &&
+                    eventObserver.saveAsRequestCount.load(std::memory_order_acquire) == 1 &&
+                    !eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire) &&
+                    !QFileInfo::exists(privateSaveAsPath) &&
+                    PathIsLocalAndUnlinked(privateSaveAsPath)) {
+                    auto* saveAsReply = new NSEditorApi::CAscMenuEvent(
+                        ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE_PATH);
+                    auto* data = new NSEditorApi::CAscLocalSaveFileDialog();
+                    data->put_Id(viewId);
+                    data->put_FileType(format);
+                    data->put_Path(privateSaveAsPath.toStdWString());
+                    saveAsReply->m_pData = data;
+                    saveAsTargetAssigned = true;
+                    // Qt owner thread: the pinned SDK dispatches this through
+                    // LocalFile_SaveStart(path, type), never into original.
+                    editor->Apply(saveAsReply);
+                }
             }
 #endif
         });
@@ -804,7 +905,7 @@ int main(int argc, char** argv) {
 
     // No success acknowledgement is available yet. Timeout merely limits the
     // trial and does NOT claim the document loaded or saved successfully.
-    QTimer::singleShot(saveLab ? 25000 : 15000, &app, &QCoreApplication::quit);
+    QTimer::singleShot((saveLab || saveAsLab) ? 25000 : 15000, &app, &QCoreApplication::quit);
     const int exitCode = app.exec();
 #ifdef GETDOC_GD31J22_BINDING_LAB
     bindingPollTimer.stop();
@@ -836,6 +937,71 @@ int main(int argc, char** argv) {
     manager.SetEventListener(nullptr);
     manager.CloseApplication();
 
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+    if (saveAsLab) {
+        qint64 verifiedSourceBytes = 0;
+        qint64 savedBytes = 0;
+        QString savedDigest;
+        const bool sourceUntouched =
+            HashSyntheticFile(path, fixtureShaAfter, verifiedSourceBytes) &&
+            fixtureShaAfter == fixtureShaBefore &&
+            verifiedSourceBytes == fixtureSize;
+        const bool privateDestinationValid =
+            sourceUntouched && saveAsTargetAssigned &&
+            eventObserver.saveAsRequestSeen.load(std::memory_order_acquire) &&
+            eventObserver.saveAsRequestCount.load(std::memory_order_acquire) == 1 &&
+            !eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire) &&
+            eventObserver.onSave.load(std::memory_order_acquire) &&
+            !eventObserver.saveCancelled.load(std::memory_order_acquire) &&
+            HashSyntheticFile(privateSaveAsPath, savedDigest, savedBytes) &&
+            savedDigest != fixtureShaBefore;
+        bool candidateWritten = false;
+        QString candidateDigest;
+        qint64 candidateLength = 0;
+        const QString nativeCandidateName =
+            "gd31j26-saveas-candidate-" + bindingSession + "." + selectedFormat;
+        if (privateDestinationValid) {
+            const QString candidatePath = QDir(staging).filePath(nativeCandidateName);
+            // Refuse an existing output. Never delete, move or truncate user
+            // files. Even this destination is synthetic-only staging.
+            if (!QFileInfo::exists(candidatePath) &&
+                PathIsLocalAndUnlinked(candidatePath) &&
+                QFile::copy(privateSaveAsPath, candidatePath) &&
+                HashSyntheticFile(candidatePath, candidateDigest, candidateLength) &&
+                candidateDigest == savedDigest && candidateLength == savedBytes)
+                candidateWritten = true;
+        }
+        const QJsonObject evidence{
+            {"schema", "getdoc-native-saveas-private-lab/1"},
+            {"sessionId", bindingSession},
+            {"tabId", bindingTab},
+            {"fixtureName", fixtureName},
+            {"selectedFormat", selectedFormat},
+            {"sourceBeforeSha256", fixtureShaBefore},
+            {"sourceAfterSha256", fixtureShaAfter},
+            {"saveAsRequestSeen",
+                eventObserver.saveAsRequestSeen.load(std::memory_order_acquire) &&
+                eventObserver.saveAsRequestCount.load(std::memory_order_acquire) == 1 &&
+                !eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire)},
+            {"saveAsTargetAccepted", saveAsTargetAssigned},
+            {"saveNotification", eventObserver.onSave.load(std::memory_order_acquire)},
+            {"saveCancelled", eventObserver.saveCancelled.load(std::memory_order_acquire)},
+            {"candidateWritten", candidateWritten},
+            {"candidateName", candidateWritten ? nativeCandidateName : QString()},
+            {"candidateLength", static_cast<qint64>(candidateWritten ? candidateLength : 0)},
+            {"candidateSha256", candidateWritten ? candidateDigest : QString()},
+            {"documentVerified", false},
+            {"saveVerified", false},
+            {"pdfVerified", false},
+            {"printApproved", false},
+            {"laboratoryOnly", true}
+        };
+        const QByteArray json = QJsonDocument(evidence).toJson(QJsonDocument::Compact);
+        std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()), stdout);
+        std::fputc('\n', stdout);
+        return exitCode;
+    }
+#endif
 #ifdef GETDOC_GD31J25_SYNTHETIC_SAVE_LAB
     if (saveLab) {
         // Only after CEF is destroyed, recheck the immutable source and

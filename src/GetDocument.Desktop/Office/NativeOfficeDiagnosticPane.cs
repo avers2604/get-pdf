@@ -176,6 +176,23 @@ internal sealed class NativeOfficeDiagnosticPane : Border
               "Эталонный файл не изменён, разрешения на запись нет.";
     }
 
+    /// <summary>
+    /// Isolated SDK Save As dialog to approved same-format QTemporaryDir file.
+    /// No user file picker, publishing or real document save permission.
+    /// </summary>
+    public void SetNativeSaveAsReview(EuroOfficeNativeSaveAsLab.Review evidence)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+        if (evidence.DocumentVerified || evidence.SaveCompleted ||
+            evidence.AuthorizedForPublication)
+            throw new InvalidDataException("Нельзя выдавать права сохранения по SDK лаборатории.");
+        _connection.Text = evidence.CandidateValidatedAsOoxml
+            ? "EuroOffice: типизированное «Сохранить как» создало тестовый OOXML-кандидат " +
+              "в карантине. Совместимость MS Office и сохранение рабочих файлов НЕ подтверждены."
+            : "EuroOffice: лабораторное «Сохранить как» не подтвердило корректный OOXML. " +
+              "Пользовательские файлы и WORM недоступны.";
+    }
+
     public void SetTransportLost()
     {
         DetachOsrLabInput();
