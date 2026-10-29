@@ -15,6 +15,8 @@ public static class EuroOfficeNativeSaveAsLab
         EuroOfficeNativeArtifactCandidate? Candidate)
     {
         public bool CandidateValidatedAsOoxml => Candidate is not null;
+        public EuroOfficeNativeSaveAsLifecycle.Result Lifecycle =>
+            EuroOfficeNativeSaveAsLifecycle.Classify(Receipt, Candidate is not null);
         public bool DocumentVerified => false;
         public bool SaveCompleted => false;
         public bool AuthorizedForPublication => false;
@@ -44,6 +46,13 @@ public static class EuroOfficeNativeSaveAsLab
             fixtureName, selectedFormat, sessionId, tabId, labApproved);
         string root = Path.GetFullPath(stagingDirectory);
         string source = Path.Combine(root, fixtureName);
+        string candidateName = EuroOfficeNativeSaveAsReceipt.CandidateNameFor(
+            sessionId, selectedFormat);
+        string candidatePath = Path.Combine(root, candidateName);
+        // Refuse a conflict BEFORE starting an unsandboxed native process:
+        // the Qt host separately uses no-overwrite QFile::copy afterwards.
+        if (File.Exists(candidatePath) || Directory.Exists(candidatePath))
+            throw new IOException("Конфликт: карантинная тестовая редакция уже существует.");
         // A second, independent local SHA before native execution. Host
         // reports do not confer authenticity or permission to save.
         string before = HashBoundedFile(source);

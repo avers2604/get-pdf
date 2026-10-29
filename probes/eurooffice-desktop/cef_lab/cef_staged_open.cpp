@@ -566,13 +566,18 @@ int main(int argc, char** argv) {
 #ifndef GETDOC_GD31J24_READY_EVENT_LAB
     if (readyLab) return 2;
 #endif
-    const bool conversionLab = argc == 6 &&
-        (std::strcmp(argv[1], "--open-staged-conversion-evidence-lab") == 0 || readyLab);
+    const bool conversionLab =
+        (argc == 6 &&
+         std::strcmp(argv[1], "--open-staged-conversion-evidence-lab") == 0) ||
+        readyLab;
 #ifndef GETDOC_GD31J23_CONVERSION_EVIDENCE_LAB
     if (conversionLab) return 2;
 #endif
-    const bool bindingLab = argc == 6 &&
-        (std::strcmp(argv[1], "--open-staged-binding-lab") == 0 || conversionLab);
+    const bool bindingLab =
+        (argc == 6 &&
+         std::strcmp(argv[1], "--open-staged-binding-lab") == 0) ||
+        conversionLab;
+    if (saveAsLab && (!bindingLab || !conversionLab || !readyLab)) return 2;
 #ifndef GETDOC_GD31J22_BINDING_LAB
     if (bindingLab) return 2;
 #else
@@ -626,6 +631,7 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
 #ifdef GETDOC_GD31J22_BINDING_LAB
     if (bindingLab && app.platformName() != "wayland") return 9;
+    if (saveAsLab && app.platformName() != "wayland") return 9;
 #endif
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
     if ((osrLab || streamLab) && app.platformName() != "wayland") return 9;
@@ -703,7 +709,9 @@ int main(int argc, char** argv) {
     eventObserver.expectedViewId.store(viewId, std::memory_order_release);
 #ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
     eventObserver.expectedSaveAsFormat.store(format, std::memory_order_release);
-    eventObserver.acceptSaveAsDialog.store(saveAsLab, std::memory_order_release);
+    // Never accept an unsolicited Save As request before we issued our
+    // single scripted request on this Qt owner thread.
+    eventObserver.acceptSaveAsDialog.store(false, std::memory_order_release);
     QString privateSaveAsPath;
     if (saveAsLab) {
         privateSaveAsPath = QDir(profile.path()).filePath(
@@ -736,6 +744,9 @@ int main(int argc, char** argv) {
 #ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
     bool saveAsTriggered = false;
     bool saveAsTargetAssigned = false;
+    bool saveAsLifecycleAborted = false;
+    bool saveAsTargetConflict = false;
+    bool saveAsLifetimeTimeout = false;
 #endif
     QTimer bindingPollTimer;
     if (bindingLab) {
@@ -801,12 +812,31 @@ int main(int argc, char** argv) {
             }
 #endif
 #ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
-            if (saveAsLab && bindingSeen && conversionObserved &&
+            // Late, duplicated or unsolicited callbacks poison this attempt.
+            // Nothing may grant write authority once the attempt is poisoned.
+            if (saveAsLab &&
+                (eventObserver.saveAsRequestCount.load(std::memory_order_acquire) > 1 ||
+                 eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire) ||
+                 eventObserver.saveCancelled.load(std::memory_order_acquire))) {
+                saveAsLifecycleAborted = true;
+                eventObserver.acceptSaveAsDialog.store(false, std::memory_order_release);
+            }
+            if (saveAsLab && saveAsTriggered && !saveAsTargetAssigned &&
+                QFileInfo::exists(privateSaveAsPath)) {
+                saveAsTargetConflict = true;
+                saveAsLifecycleAborted = true;
+                eventObserver.acceptSaveAsDialog.store(false, std::memory_order_release);
+            }
+            if (saveAsLab && !saveAsLifecycleAborted &&
+                bindingSeen && conversionObserved &&
                 eventObserver.onContentReady.load(std::memory_order_acquire) &&
-                eventObserver.modified.load(std::memory_order_acquire) &&
-                !editor->IsSaveLocked()) {
-                if (!saveAsTriggered) {
+                eventObserver.modified.load(std::memory_order_acquire)) {
+                // The file converter may lock after the request. Check that
+                // lock only BEFORE issuing the request, not while replying
+                // to the already outstanding typed Save As dialog.
+                if (!saveAsTriggered && !editor->IsSaveLocked()) {
                     saveAsTriggered = true;
+                    eventObserver.acceptSaveAsDialog.store(true, std::memory_order_release);
                     // Pinned SDK CEF V8 LocalFileSave('saveas=true') triggers
                     // its typed LOCALFILE_SAVE event. Static JS only; no
                     // arbitrary destination, user input, network or plugins.
@@ -831,6 +861,7 @@ int main(int argc, char** argv) {
                     data->put_Path(privateSaveAsPath.toStdWString());
                     saveAsReply->m_pData = data;
                     saveAsTargetAssigned = true;
+                    eventObserver.acceptSaveAsDialog.store(false, std::memory_order_release);
                     // Qt owner thread: the pinned SDK dispatches this through
                     // LocalFile_SaveStart(path, type), never into original.
                     editor->Apply(saveAsReply);
@@ -932,6 +963,12 @@ int main(int argc, char** argv) {
     // the first received OnPaint frame, not proof of complete OOXML import.
     const QImage osrSnapshot = (osrLab && view) ? view->SnapshotOsrLab() : QImage();
 #endif
+#ifdef GETDOC_GD31J26_GUARDED_SAVEAS_LAB
+    eventObserver.acceptSaveAsDialog.store(false, std::memory_order_release);
+    if (saveAsLab &&
+        !eventObserver.onSave.load(std::memory_order_acquire))
+        saveAsLifetimeTimeout = true;
+#endif
     if (view && viewId > 0)
         manager.DestroyCefView(viewId, false);
     manager.SetEventListener(nullptr);
@@ -948,6 +985,8 @@ int main(int argc, char** argv) {
             verifiedSourceBytes == fixtureSize;
         const bool privateDestinationValid =
             sourceUntouched && saveAsTargetAssigned &&
+            !saveAsLifecycleAborted && !saveAsLifetimeTimeout &&
+            !saveAsTargetConflict &&
             eventObserver.saveAsRequestSeen.load(std::memory_order_acquire) &&
             eventObserver.saveAsRequestCount.load(std::memory_order_acquire) == 1 &&
             !eventObserver.rejectedSaveAsRequest.load(std::memory_order_acquire) &&
@@ -964,12 +1003,14 @@ int main(int argc, char** argv) {
             const QString candidatePath = QDir(staging).filePath(nativeCandidateName);
             // Refuse an existing output. Never delete, move or truncate user
             // files. Even this destination is synthetic-only staging.
-            if (!QFileInfo::exists(candidatePath) &&
-                PathIsLocalAndUnlinked(candidatePath) &&
+            if (QFileInfo::exists(candidatePath)) {
+                saveAsTargetConflict = true;
+            } else if (PathIsLocalAndUnlinked(candidatePath) &&
                 QFile::copy(privateSaveAsPath, candidatePath) &&
                 HashSyntheticFile(candidatePath, candidateDigest, candidateLength) &&
-                candidateDigest == savedDigest && candidateLength == savedBytes)
+                candidateDigest == savedDigest && candidateLength == savedBytes) {
                 candidateWritten = true;
+            }
         }
         const QJsonObject evidence{
             {"schema", "getdoc-native-saveas-private-lab/1"},

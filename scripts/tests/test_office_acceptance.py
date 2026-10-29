@@ -13,6 +13,15 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_native_saveas_lifecycle_guards_are_required_in_offline_acceptance(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-native-saveas-lifecycle-source-tests", names)
+        self.assertLess(names.index("cef-native-saveas-lifecycle-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn("eurooffice-saveas-seven-argument-route-duplicate-conflict-timeout-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_guarded_native_saveas_needs_source_and_manual_offline_vm(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
