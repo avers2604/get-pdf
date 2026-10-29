@@ -114,6 +114,18 @@ public sealed record EuroOfficeNativeSaveAsEventReceipt(
                     onSaveSequence <= dialogSequence) ||
                 code == "candidate_untrusted" && !core.CandidateWritten ||
                 code == "duplicate_dialog" && dialogCount < 2 ||
+                // A native reason is only diagnostic if it is compatible
+                // with the host's own event observations. Never turn a
+                // contradictory reason into a misleading lifecycle state.
+                code == "not_started" &&
+                    (dialogCount != 0 || onSaveCount != 0 ||
+                     core.SaveAsRequestSeen || core.SaveAsTargetAccepted ||
+                     phase != "not_started") ||
+                code == "target_not_assigned" && core.SaveAsTargetAccepted ||
+                code == "candidate_missing" && !core.SaveNotification ||
+                code == "invalid_dialog" &&
+                    (dialogCount == 0 ||
+                     dialogCount == 1 && core.SaveAsTargetAccepted) ||
                 code == "dialog_missing" && dialogCount != 0 ||
                 code == "cancelled" && !core.SaveCancelled ||
                 code == "save_not_acknowledged" && onSaveCount != 0 ||

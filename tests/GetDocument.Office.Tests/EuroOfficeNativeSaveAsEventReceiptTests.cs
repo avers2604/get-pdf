@@ -72,6 +72,66 @@ public sealed class EuroOfficeNativeSaveAsEventReceiptTests
     }
 
     [TestMethod]
+    public void LateDuplicateAfterAssignedTargetRemainsParseableAsUnsafeFailure()
+    {
+        // Regression: the real native host previously erased the observed
+        // first request when count became 2. That made its nested /1 receipt
+        // impossible (target=true but request=false) and hid DuplicateDialog.
+        var receipt = EuroOfficeNativeSaveAsEventReceipt.Parse(
+            Envelope("duplicate_dialog", candidate: false,
+                dialogCount: 2, saveCount: 0, dialogSeq: 1, saveSeq: 0),
+            Session, Tab, Fixture, "docx");
+        Assert.IsTrue(receipt.Core.SaveAsRequestSeen);
+        Assert.IsTrue(receipt.Core.SaveAsTargetAccepted);
+        Assert.AreEqual(2, receipt.DialogCount);
+        Assert.IsFalse(receipt.Core.CandidateWritten);
+        Assert.IsFalse(receipt.CorrelatedNativeCallbacks);
+        Assert.AreEqual(EuroOfficeNativeSaveAsLifecycle.State.DuplicateDialog,
+            EuroOfficeNativeSaveAsLifecycle.Classify(receipt, false).Status);
+        Assert.IsFalse(receipt.AuthorizedForPublication);
+    }
+
+    [TestMethod]
+    public void InvalidDialogAfterAcceptedRequestStillCannotAuthoriseCandidate()
+    {
+        // An extra SDK dialog is a failure EVEN if the first reply was
+        // targeted. Test data must not imply a successful second Save As.
+        var failed = EuroOfficeNativeSaveAsEventReceipt.Parse(
+            Envelope("duplicate_dialog", candidate: false,
+                dialogCount: 2, saveCount: 0, dialogSeq: 1, saveSeq: 0),
+            Session, Tab, Fixture, "docx");
+        Assert.AreEqual("duplicate_dialog", failed.FailureCode);
+        Assert.IsFalse(failed.SaveCompleted);
+        Assert.IsFalse(failed.DocumentVerified);
+        Assert.IsFalse(failed.AuthorizedForPublication);
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            EuroOfficeNativeSaveAsEventReceipt.Parse(
+                Envelope("candidate_untrusted", candidate: true, dialogCount: 2),
+                Session, Tab, Fixture, "docx"));
+    }
+
+    [TestMethod]
+    public void RejectsFailureReasonThatContradictsObservedNativePhase()
+    {
+        // The v2 failure reason must not contradict what the host itself
+        // reported about the first valid dialog, assigned target or OnSave.
+        foreach (string forged in new[]
+        {
+            Envelope("not_started", candidate: false,
+                dialogCount: 1, saveCount: 0, dialogSeq: 1, saveSeq: 0),
+            Envelope("target_not_assigned", candidate: false,
+                dialogCount: 1, saveCount: 0, dialogSeq: 1, saveSeq: 0),
+            Envelope("candidate_missing", candidate: false,
+                dialogCount: 1, saveCount: 0, dialogSeq: 1, saveSeq: 0),
+            Envelope("invalid_dialog", candidate: false,
+                dialogCount: 1, saveCount: 0, dialogSeq: 1, saveSeq: 0)
+        })
+            Assert.ThrowsExactly<InvalidDataException>(() =>
+                EuroOfficeNativeSaveAsEventReceipt.Parse(
+                    forged, Session, Tab, Fixture, "docx"));
+    }
+
+    [TestMethod]
     public void RejectsForgedOrInconsistentOrderAndUnrecognizedMetadata()
     {
         string valid = Envelope();
