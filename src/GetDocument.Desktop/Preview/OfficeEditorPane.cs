@@ -601,7 +601,7 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
     {
         try { await action(); }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or
-                                   UnauthorizedAccessException or NotSupportedException)
+                                   UnauthorizedAccessException or NotSupportedException or InvalidDataException)
         {
             _status(ex.Message);
         }
@@ -743,10 +743,10 @@ internal sealed class OfficeEditorPane : DockPanel, IDisposable
         var ordered = formats.OrderBy(f => f == extension ? 0 : 1).ToArray();
         var chosen = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Сохранить копию",
+            Title = "Сохранить новую копию (без перезаписи)",
             SuggestedFileName = Path.GetFileNameWithoutExtension(_path) + " (копия)." + ordered[0],
             DefaultExtension = ordered[0],
-            ShowOverwritePrompt = true,
+            ShowOverwritePrompt = false,
             FileTypeChoices = ordered.Select(f => new FilePickerFileType(f.ToUpperInvariant()) { Patterns = ["*." + f] }).ToList()
         });
         if (chosen is null || !chosen.Path.IsFile) return;
