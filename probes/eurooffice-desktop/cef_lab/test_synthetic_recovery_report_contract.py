@@ -21,6 +21,8 @@ class SyntheticRecoveryReportContracts(unittest.TestCase):
             "getdoc-synthetic-recovery-report/1",
             "private const int PageSize = 32;",
             "private const int MaxJsonChars = 16384;",
+            "internal Page(int pageIndex, int pageCount, int totalFindings,",
+            "Array.AsReadOnly(counts), Array.AsReadOnly(page)",
             "EuroOfficeSyntheticSnapshotJournal.Inspect(stagingRoot, labApproved: true)",
             "if (!labApproved)",
             "if (pageIndex is < 0 or > 7)",
