@@ -18,7 +18,7 @@ public sealed record EuroOfficeNativeConversionCandidate(
     public bool ApprovedForProduction => false;
 
     private const int MaximumJsonChars = 2048;
-    private const long MaximumEditorBytes = 128L * 1024 * 1024;
+    private const long MaximumEditorBytes = 8L * 1024 * 1024;
     private static readonly HashSet<string> ExpectedFields = new(StringComparer.Ordinal)
     {
         "schema", "sessionId", "tabId", "fixtureName",
