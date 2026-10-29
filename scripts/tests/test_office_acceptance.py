@@ -13,6 +13,16 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_net10_native_hardlink_compatibility_is_required_before_restore(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-net10-hardlink-api-compatibility-source-tests", names)
+        self.assertLess(names.index("cef-net10-hardlink-api-compatibility-source-tests"),
+                        names.index("solution-restore"))
+        self.assertIn(
+            "eurooffice-gd31j33-net10-windows-linux-hardlink-build-and-no-replace-vm",
+            acceptance.MANUAL_GATES)
+
     def test_synthetic_fault_boundary_regressions_remain_offline_and_manual(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
