@@ -896,7 +896,7 @@ public sealed class MainWindow : Window
             state.Status is EuroOfficeNativeDocumentStatus.Failed or
                 EuroOfficeNativeDocumentStatus.Closed ||
             evidence.DocumentVerified || evidence.SaveCompleted ||
-            evidence.AuthorizedForPublication || evidence.ApprovedForProduction ||
+            evidence.AuthorizedForPublication ||
             !_nativeTabViews.TryGetValue(tabId, out var tab) ||
             tab.Content is not NativeOfficeDiagnosticPane pane)
             throw new InvalidDataException("Чужой или неподтверждённый native roundtrip.");
