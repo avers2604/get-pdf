@@ -723,8 +723,8 @@ public sealed class MainWindow : Window
             throw new InvalidDataException("Чужое или неподтверждённое событие native conversion.");
         pane.SetNativeConversionCandidate(evidence);
         _status.Text = evidence.ConversionArtifactObserved
-            ? "EuroOffice SDK: подтверждена только результат конвертации тестового файла; редактор не аттестован."
-            : "EuroOffice SDK: результат конвертации тестового файла не подтверждена. Сохранение недоступно.";
+            ? "EuroOffice SDK: наблюдается кандидат конвертации тестового файла; редактор не аттестован."
+            : "EuroOffice SDK: результат конвертации тестового файла не подтверждён. Сохранение недоступно.";
     }
 
     /// <summary>
