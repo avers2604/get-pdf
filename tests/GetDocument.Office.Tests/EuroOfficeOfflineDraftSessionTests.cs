@@ -119,6 +119,19 @@ public sealed class EuroOfficeOfflineDraftSessionTests
     }
 
     [TestMethod]
+    public async Task RefusesNetworkStagingRootInsteadOfWritingRecoveryToShare()
+    {
+        using var root = new TemporaryRoot();
+        string original = Path.Combine(root.Path, "original.docx");
+        CreateOoxml(original, "word/document.xml", "<document/>");
+        string networkRoot = OperatingSystem.IsWindows()
+            ? @"\\server\share\office-drafts" : "//server/share/office-drafts";
+        await Assert.ThrowsExactlyAsync<NotSupportedException>(() =>
+            EuroOfficeOfflineDraftSession.CreateAsync(original, networkRoot));
+        Assert.IsTrue(File.Exists(original));
+    }
+
+    [TestMethod]
     public async Task AcceptsWellFormedExplicitDirectoryEntries()
     {
         using var root = new TemporaryRoot();
