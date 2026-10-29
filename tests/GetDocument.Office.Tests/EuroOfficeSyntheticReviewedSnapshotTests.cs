@@ -33,6 +33,12 @@ public sealed class EuroOfficeSyntheticReviewedSnapshotTests
         Assert.AreEqual(original, lab.Hash(lab.Source));
         Assert.AreEqual(quarantine, lab.Hash(lab.Candidate));
         Assert.IsTrue(Directory.GetFiles(lab.Reviewed, "*.tmp").Length == 0);
+        var journal = EuroOfficeSyntheticSnapshotJournal.Inspect(lab.Root, labApproved: true);
+        Assert.AreEqual(1, journal.Count);
+        Assert.AreEqual(EuroOfficeSyntheticSnapshotJournal.Observation.CompleteObserved,
+            journal[0].State);
+        Assert.AreEqual("completed", journal[0].LastStage);
+        Assert.IsFalse(journal[0].TrustedForDeletion);
     }
 
     [TestMethod]
