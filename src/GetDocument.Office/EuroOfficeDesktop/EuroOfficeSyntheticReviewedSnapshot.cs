@@ -179,10 +179,10 @@ public static class EuroOfficeSyntheticReviewedSnapshot
         if (File.Exists(destination) || Directory.Exists(destination))
             throw new IOException("Конфликт: синтетическая новая редакция уже появилась.");
 
-        // Unlike File.Move, CreateHardLink is a single new-directory-entry
-        // operation with NO replace-existing fallback. Filesystems lacking
-        // hard-link support fail closed. This does NOT fsync directory metadata.
-        File.CreateHardLink(destination, pending);
+        // .NET 10 does not expose File.CreateHardLink; the explicit native
+        // Windows/Linux adapter creates a single no-replace directory entry
+        // without fallback. This does NOT fsync directory metadata.
+        EuroOfficeNativeHardLinkNoReplace.Create(destination, pending);
         faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterHardLinkCreated);
         EuroOfficeSyntheticSnapshotJournal.Append(attempt, "linked");
         faultProbe?.Invoke(EuroOfficeSyntheticSnapshotFaultCheckpoint.AfterLinkedJournalFlushed);

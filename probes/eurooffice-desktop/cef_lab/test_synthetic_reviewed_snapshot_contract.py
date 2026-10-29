@@ -39,7 +39,7 @@ class ReviewedSyntheticSnapshotSourceContract(unittest.TestCase):
         self.assertIn('FileOptions.WriteThrough',self.source)
         self.assertIn('output.Flush(flushToDisk: true)',self.source)
         self.assertIn('HashBounded(pending, out long pendingLength)',self.source)
-        self.assertIn('File.CreateHardLink(destination, pending)',self.source)
+        self.assertIn('EuroOfficeNativeHardLinkNoReplace.Create(destination, pending)',self.source)
         self.assertIn('File.Delete(pending)',self.source)
         self.assertNotIn('File.Move(',self.source)
         self.assertNotIn('File.Copy(',self.source)

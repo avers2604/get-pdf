@@ -22,8 +22,8 @@ class SyntheticJournalContractTests(unittest.TestCase):
         self.assertLess(source.index("EuroOfficeSyntheticSnapshotJournal.Begin("),
                         source.index("new FileStream(\n            pending, FileMode.CreateNew"))
         self.assertLess(source.index('Append(attempt, "pending_flushed")'),
-                        source.index("File.CreateHardLink(destination, pending)"))
-        self.assertLess(source.index("File.CreateHardLink(destination, pending)"),
+                        source.index("EuroOfficeNativeHardLinkNoReplace.Create(destination, pending)"))
+        self.assertLess(source.index("EuroOfficeNativeHardLinkNoReplace.Create(destination, pending)"),
                         source.index('Append(attempt, "linked")'))
         self.assertLess(source.index('Append(attempt, "linked")'),
                         source.index("File.Delete(pending)"))
