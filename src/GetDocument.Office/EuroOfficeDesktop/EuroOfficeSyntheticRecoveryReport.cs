@@ -28,10 +28,25 @@ public static class EuroOfficeSyntheticRecoveryReport
         public bool AuthorizedForPublication => false;
     }
 
-    public sealed record Page(
-        int PageIndex, int PageCount, int TotalFindings,
-        IReadOnlyList<CountByState> Counts, IReadOnlyList<Finding> Findings)
+    // Only Build can create a report page. A public record constructor
+    // would permit callers to inject arbitrary names into ToJson().
+    public sealed class Page
     {
+        internal Page(int pageIndex, int pageCount, int totalFindings,
+            IReadOnlyList<CountByState> counts, IReadOnlyList<Finding> findings)
+        {
+            PageIndex = pageIndex;
+            PageCount = pageCount;
+            TotalFindings = totalFindings;
+            Counts = counts;
+            Findings = findings;
+        }
+
+        public int PageIndex { get; }
+        public int PageCount { get; }
+        public int TotalFindings { get; }
+        public IReadOnlyList<CountByState> Counts { get; }
+        public IReadOnlyList<Finding> Findings { get; }
         public bool ReadOnly => true;
         public bool ManualReviewRequired => true;
         public bool CleanupAuthorized => false;
@@ -117,7 +132,9 @@ public static class EuroOfficeSyntheticRecoveryReport
                 SafeStage(x.LastStage),
                 GuidanceFor(x.State)))
             .ToArray();
-        return new Page(pageIndex, pages, total, counts, page);
+        // Backing arrays must not be mutable through the public interface.
+        return new Page(pageIndex, pages, total,
+            Array.AsReadOnly(counts), Array.AsReadOnly(page));
     }
 
     private static string SafeStage(string input) => input switch
