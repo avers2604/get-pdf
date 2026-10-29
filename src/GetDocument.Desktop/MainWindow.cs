@@ -971,6 +971,98 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>
+    /// GD-31J.26: manual diagnostic; CEF Save As path fixed inside disposable
+    /// QTemporaryDir, selected format restricted to synthetic OOXML fixture.
+    /// </summary>
+    internal void ReportNativeSaveAsReview(Guid tabId, Guid sessionId,
+        EuroOfficeNativeSaveAsLab.Review evidence)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(evidence);
+        var state = _nativeWorkspaceTabs.Get(tabId);
+        if (!_nativeOsrLabTabs.Contains(tabId) ||
+            state.SessionId != sessionId ||
+            state.Status is EuroOfficeNativeDocumentStatus.Failed or
+                EuroOfficeNativeDocumentStatus.Closed ||
+            evidence.DocumentVerified || evidence.SaveCompleted ||
+            evidence.AuthorizedForPublication ||
+            !_nativeTabViews.TryGetValue(tabId, out var tab) ||
+            tab.Content is not NativeOfficeDiagnosticPane pane)
+            throw new InvalidDataException("Чужая лабораторная квитанция Save As.");
+        pane.SetNativeSaveAsReview(evidence);
+        _status.Text = evidence.CandidateValidatedAsOoxml
+            ? "EuroOffice SDK: Save As OOXML-кандидат проверен, публикация запрещена."
+            : "EuroOffice SDK: Save As тестовой копии не подтверждён.";
+    }
+
+    /// <summary>
+    /// Explicit isolated diagnostic invocation only. The actual process
+    /// must stop and be reaped before any receipt is displayed.
+    /// </summary>
+    internal async Task StartNativeSaveAsLabAsync(
+        EuroOfficeNativeLabHostPolicy approvedHost,
+        string stagingRoot, string syntheticFixture,
+        Guid tabId, Guid sessionId, bool labApproved,
+        CancellationToken cancellationToken)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        if (!labApproved)
+            throw new NotSupportedException("Save As тестовой копии допустимо только в отдельной лаборатории.");
+        if (_nativeTabViews.ContainsKey(tabId) ||
+            _nativeOsrLabStreams.ContainsKey(tabId) ||
+            _nativeOsrLabTabs.Contains(tabId))
+            throw new InvalidOperationException("Идентификатор лабораторной вкладки уже занят.");
+        // Verify SHA-approved host, synthetic manifest and platform BEFORE
+        // creating a visible diagnostic tab or starting a native process.
+        string selectedFormat = Path.GetExtension(syntheticFixture)
+            .TrimStart('.').ToLowerInvariant();
+        _ = EuroOfficeNativeSaveAsLab.CreateStartInfo(
+            approvedHost, stagingRoot, syntheticFixture, selectedFormat,
+            sessionId, tabId, labApproved);
+        var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _nativeOsrLabStreams.Add(tabId, lifetime);
+        _nativeOsrLabTabs.Add(tabId);
+        bool registered = false;
+        try
+        {
+            AddNativeDiagnosticTab(tabId, sessionId, syntheticFixture,
+                "EuroOffice SDK — лабораторное «Сохранить как»");
+            registered = true;
+            EuroOfficeNativeSaveAsLab.Review evidence =
+                await EuroOfficeNativeSaveAsLab.RunAsync(
+                    approvedHost, stagingRoot, syntheticFixture, selectedFormat,
+                    sessionId, tabId, labApproved, lifetime.Token);
+            if (lifetime.IsCancellationRequested) return;
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (!lifetime.IsCancellationRequested &&
+                    _nativeTabViews.ContainsKey(tabId))
+                    ReportNativeSaveAsReview(tabId, sessionId, evidence);
+            });
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            // User closed only THIS lab tab; process host is killed/reaped by
+            // EuroOfficeNativeSaveAsLab before UI cleanup.
+        }
+        catch
+        {
+            if (registered && _nativeTabViews.ContainsKey(tabId))
+                ReportNativeDiagnosticCrash(tabId, sessionId);
+            throw;
+        }
+        finally
+        {
+            _nativeOsrLabStreams.Remove(tabId);
+            if (!registered)
+                _nativeOsrLabTabs.Remove(tabId);
+            else if (lifetime.IsCancellationRequested && _nativeTabViews.ContainsKey(tabId))
+                CloseNativeDiagnosticTab(tabId, sessionId);
+            lifetime.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Real CEF OnPaint LAB preview, not a verified DOCX/XLSX/PPTX rendering.
     /// Only frames from the registered synthetic Wayland lab process are shown.
     /// </summary>
