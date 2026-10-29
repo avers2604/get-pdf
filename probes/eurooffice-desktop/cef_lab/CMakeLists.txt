@@ -24,6 +24,12 @@ option(GETDOC_GD31J17_ENABLE_IME_COMMIT_LAB "Enable synthetic Wayland final IME 
 # Separate Linux/Wayland opt-in: observe pinned SDK GetLocalFilePath only.
 # No document import guarantee, editing, save, clipboard or launch privileges.
 option(GETDOC_GD31J22_ENABLE_BINDING_LAB "Observe synthetic editor local-file binding via pinned SDK, no production rights" OFF)
+# Separate synthetic-only artifact candidate gate, NOT a document ready signal.
+option(GETDOC_GD31J23_ENABLE_CONVERSION_EVIDENCE_LAB "Inspect isolated Editor.bin candidate, no edit/save or OOXML readiness" OFF)
+if(GETDOC_GD31J23_ENABLE_CONVERSION_EVIDENCE_LAB AND NOT GETDOC_GD31J22_ENABLE_BINDING_LAB)
+  message(FATAL_ERROR "GD-31J.23 requires independently approved GD-31J.22 binding lab.")
+endif()
+
 if(GETDOC_GD31J22_ENABLE_BINDING_LAB AND NOT GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
   message(FATAL_ERROR "GD-31J.22 needs the approved synthetic GD-31J.6 file-open lab.")
 endif()
@@ -159,6 +165,11 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
         GETDOC_GD31J22_BINDING_LAB=1)
     message(WARNING "GD-31J.22 synthetic GetLocalFilePath evidence only; not confirmed OOXML import or editing.")
+  endif()
+  if(GETDOC_GD31J23_ENABLE_CONVERSION_EVIDENCE_LAB)
+    target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+        GETDOC_GD31J23_CONVERSION_EVIDENCE_LAB=1)
+    message(WARNING "GD-31J.23 isolated Editor.bin candidate only; never a ready/save receipt.")
   endif()
   if(GETDOC_GD31J12_ENABLE_WAYLAND_OSR_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
