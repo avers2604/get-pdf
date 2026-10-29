@@ -990,9 +990,7 @@ public sealed class MainWindow : Window
             tab.Content is not NativeOfficeDiagnosticPane pane)
             throw new InvalidDataException("Чужая лабораторная квитанция Save As.");
         pane.SetNativeSaveAsReview(evidence);
-        _status.Text = evidence.CandidateValidatedAsOoxml
-            ? "EuroOffice SDK: Save As OOXML-кандидат проверен, публикация запрещена."
-            : "EuroOffice SDK: Save As тестовой копии не подтверждён.";
+        _status.Text = "EuroOffice SDK: " + evidence.Lifecycle.Description + ".";
     }
 
     /// <summary>
