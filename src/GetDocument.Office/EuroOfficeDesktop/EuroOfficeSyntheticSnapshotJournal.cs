@@ -17,6 +17,7 @@ public static class EuroOfficeSyntheticSnapshotJournal
     private const int MaxJournalBytes = 8192;
     private const int MaxItems = 256;
     private const long MaxFileBytes = 128L * 1024 * 1024;
+    private static readonly object JournalWriteLock = new();
 
     public enum Observation
     {
@@ -80,6 +81,12 @@ public static class EuroOfficeSyntheticSnapshotJournal
     /// A failed append leaves evidence for manual examination, never cleanup.
     /// </summary>
     internal static void Append(Attempt attempt, string stage)
+    {
+        lock (JournalWriteLock)
+            AppendLocked(attempt, stage);
+    }
+
+    private static void AppendLocked(Attempt attempt, string stage)
     {
         ArgumentNullException.ThrowIfNull(attempt);
         ValidateRoot(Path.GetDirectoryName(Path.GetDirectoryName(attempt.JournalPath)!)!,
