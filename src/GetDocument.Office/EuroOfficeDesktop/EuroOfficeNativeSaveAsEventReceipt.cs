@@ -96,7 +96,16 @@ public sealed record EuroOfficeNativeSaveAsEventReceipt(
                 EuroOfficeNativeSaveAsReceipt.Parse(nested.GetRawText(),
                     expectedSession, expectedTab, expectedFixture, expectedFormat);
             if (core.SaveAsRequestSeen && dialogCount == 0 ||
-                core.SaveNotification && onSaveCount == 0 ||
+                (onSaveCount > 0) != core.SaveNotification ||
+                (core.CandidateWritten && phase != "quarantined") ||
+                (!core.CandidateWritten && phase == "quarantined") ||
+                (!core.CandidateWritten && onSaveCount > 0 &&
+                 phase != "on_save_observed") ||
+                (!core.CandidateWritten && onSaveCount == 0 &&
+                 core.SaveAsTargetAccepted && phase != "target_assigned") ||
+                (!core.CandidateWritten && onSaveCount == 0 &&
+                 !core.SaveAsTargetAccepted && dialogCount > 0 &&
+                 phase != "dialog_observed") ||
                 core.CandidateWritten && (
                     code != "candidate_untrusted" ||
                     phase != "quarantined" ||
