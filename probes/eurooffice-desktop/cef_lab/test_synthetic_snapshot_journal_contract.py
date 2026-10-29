@@ -39,7 +39,8 @@ class SyntheticJournalContractTests(unittest.TestCase):
             "MaxJournalBytes = 8192", "MaxItems = 256",
             'stage: "intent"', '"pending_flushed"', '"linked"', '"completed"',
             "JsonDocument.Parse(", "TrustedForDeletion => false",
-            "AuthorizedForPublication => false", "FileAttributes.ReparsePoint",
+            "AuthorizedForPublication => false",
+            "EuroOfficeSyntheticReviewedSnapshot.RequireRegularPath",
             "Directory.EnumerateFileSystemEntries(", "SearchOption.TopDirectoryOnly",
             "Observation.MalformedJournal", "Observation.UnknownPending",
             "if (!labApproved)"
