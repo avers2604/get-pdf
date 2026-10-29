@@ -105,6 +105,24 @@ internal sealed class NativeOfficeDiagnosticPane : Border
     public void SetTransportConnected() =>
         _connection.Text = "Qt IPC подключён. Редактор CEF и документ не подтверждены.";
 
+    /// <summary>
+    /// Native SDK path binding is useful LAB evidence, never a verified OOXML
+    /// document or permission to save/print. Called only after the scoped
+    /// synthetic Qt host has been reaped and its receipt parsed.
+    /// </summary>
+    public void SetNativeBindingEvidence(EuroOfficeNativeBindingReceipt evidence)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+        if (evidence.DocumentVerified || evidence.SaveCompleted ||
+            evidence.PrintApproved || evidence.ApprovedForProduction)
+            throw new InvalidDataException("Binding-лаборатория не может выдать права редактора.");
+        _connection.Text = evidence.BindingObserved
+            ? "Нативный EuroOffice подтвердил привязку к синтетическому файлу и загрузку CEF view. " +
+              "Содержимое OOXML, сохранение и печать НЕ подтверждены."
+            : "Нативная привязка EuroOffice к синтетическому файлу не подтверждена. " +
+              "Открытие документа и сохранение запрещены.";
+    }
+
     public void SetTransportLost()
     {
         DetachOsrLabInput();
