@@ -8,7 +8,7 @@ namespace GetDocument.Office.EuroOfficeDesktop;
 /// corporate document save, publication or fidelity claims.
 /// </summary>
 public sealed record EuroOfficeNativeSaveAsReceipt(
-    string SelectedFormat, string SourceBeforeSha256, string SourceAfterSha256,
+    Guid SessionId, Guid TabId, string FixtureName, string SelectedFormat, string SourceBeforeSha256, string SourceAfterSha256,
     bool SaveAsRequestSeen, bool SaveAsTargetAccepted,
     bool SaveNotification, bool SaveCancelled,
     bool CandidateWritten, string CandidateName,
@@ -116,7 +116,8 @@ public sealed record EuroOfficeNativeSaveAsReceipt(
                 : !(name.Length == 0 && length == 0 && hash.Length == 0))
                 throw new InvalidDataException("Не подтверждён результат сохранения.");
             return new EuroOfficeNativeSaveAsReceipt(
-                allowedFormat, first, last, dialog, target,
+                sessionId, tabId, fixtureName, allowedFormat,
+                first, last, dialog, target,
                 saved, cancelled, written, name, length, hash);
         }
         catch (JsonException ex) { throw new InvalidDataException("Повреждённый JSON.", ex); }
