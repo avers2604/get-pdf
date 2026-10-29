@@ -56,6 +56,7 @@ MANUAL_GATES = (
     "eurooffice-gd31j35-docx-xlsx-pptx-manifest-and-roundtrip-manual-vm",
     "eurooffice-gd31j36-native-saveas-v2-stdout-2048-4096-manual-vm",
     "eurooffice-gd31j37-post-onsave-timeout-and-strict-manifest-vm",
+    "eurooffice-gd31j38-offline-feed-windows-linux-build-replay-manual",
     "eurooffice-cef-authenticated-caret-ime-candidates",
     "eurooffice-windows-x11-osr-or-uno-fallback",
     "eurooffice-server-2-5-10-user-coediting",
