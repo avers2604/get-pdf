@@ -368,9 +368,21 @@ public sealed class EditorDocument
     /// <summary>Saves a copy in the format of <paramref name="path"/>'s extension; the document stays bound to its file.</summary>
     public async Task SaveAsAsync(string path)
     {
-        var reply = await _editor.CallAsync(new { op = "saveas", id = Id, path = Path.GetFullPath(path), filter = FilterFor(path) },
-            CancellationToken.None);
-        SetModified(reply);
+        if (_closed) throw new InvalidOperationException("Документ уже закрыт.");
+        string filter = FilterFor(path);
+        await _copyAndSaveGate.WaitAsync();
+        try
+        {
+            JsonElement reply = default;
+            await OfficeCopyPublisher.PublishAsync(path, async staging =>
+            {
+                reply = await _editor.CallAsync(
+                    new { op = "saveas", id = Id, path = staging, filter },
+                    CancellationToken.None);
+            });
+            SetModified(reply);
+        }
+        finally { _copyAndSaveGate.Release(); }
     }
 
     /// <summary>Exports an OOXML recovery snapshot without marking the original document as saved.</summary>
@@ -380,7 +392,8 @@ public sealed class EditorDocument
 
     /// <summary>Writes the document as it is now (unsaved edits included) to a PDF.</summary>
     public Task ExportPdfAsync(string path) =>
-        _editor.CallAsync(new { op = "pdf", id = Id, path = Path.GetFullPath(path) }, CancellationToken.None);
+        OfficeCopyPublisher.PublishAsync(path, staging =>
+            _editor.CallAsync(new { op = "pdf", id = Id, path = staging }, CancellationToken.None));
 
     public async Task CloseAsync()
     {
