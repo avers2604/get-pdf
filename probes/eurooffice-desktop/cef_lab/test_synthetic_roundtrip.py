@@ -39,8 +39,17 @@ def package(name, marker="", extra=None):
     from io import BytesIO
     buf = BytesIO()
     with ZipFile(buf, "w", ZIP_STORED) as arc:
-        arc.writestr("[Content_Types].xml", '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>')
-        arc.writestr("_rels/.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+        content_type = {
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+            ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
+        }[suffix]
+        arc.writestr("[Content_Types].xml",
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Override PartName="/' + main + '" ContentType="' + content_type + '"/></Types>')
+        arc.writestr("_rels/.rels",
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="' + main + '"/></Relationships>')
         if text_part != main:
             arc.writestr(main, MAIN[suffix])
         arc.writestr(text_part, prefix + marker.encode() + CLOSINGS[suffix])
@@ -151,6 +160,22 @@ class SyntheticRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root, output, _ = environment(tmp, name)
             output.write_bytes(package(name, "NOT_CHANGED", {"docProps/custom.xml": lab.CANARIES[name]}))
+            with self.assertRaises(lab.LabError):
+                lab.verify(root, name)
+
+    def test_required_ooxml_main_relationship_and_content_type_must_match(self):
+        name = "gd31j6_writer.docx"
+        with tempfile.TemporaryDirectory() as tmp:
+            root, output, _ = environment(tmp, name)
+            wrong_relation = package(name, lab.CANARIES[name]).replace(
+                b'Target="word/document.xml"', b'Target="xl/workbook.xml"')
+            output.write_bytes(wrong_relation)
+            with self.assertRaises(lab.LabError):
+                lab.verify(root, name)
+            wrong_type = package(name, lab.CANARIES[name]).replace(
+                b'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
+                b'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml')
+            output.write_bytes(wrong_type)
             with self.assertRaises(lab.LabError):
                 lab.verify(root, name)
 
