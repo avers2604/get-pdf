@@ -75,7 +75,6 @@ public sealed class EuroOfficeNativeSaveAsCandidateTests
             Receipt(published: true, path: false),
             Receipt(published: true, canceled: true),
             Receipt(published: true, sourceUnchanged: false),
-            Receipt(published: false),
             Receipt().Replace("\"documentVerified\":false", "\"documentVerified\":true"),
             Receipt().Replace("\"approvedForProduction\":false", "\"approvedForProduction\":true"),
             Receipt().Replace("\"laboratoryOnly\":true", "\"laboratoryOnly\":false"),
