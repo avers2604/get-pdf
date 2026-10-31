@@ -56,6 +56,14 @@ REQUIRED_MAIN = {
     ".xlsx": ("xl/workbook.xml", "{"+NS["s"]+"}workbook"),
     ".pptx": ("ppt/presentation.xml", "{"+NS["p"]+"}presentation"),
 }
+MAIN_CONTENT_TYPES = {
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
+}
+OFFICE_DOCUMENT_REL = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"
+)
 
 
 class LabError(ValueError):
@@ -136,6 +144,8 @@ def _read_ooxml(data: bytes, suffix: str, canary: str) -> None:
     main, expected_root = REQUIRED_MAIN[suffix]
     names = set()
     text_matches = 0
+    main_type_present = False
+    main_rel_present = False
     total = 0
     expected_text = {"w": "{"+NS["w"]+"}t", "s": "{"+NS["s"]+"}t",
                      "a": "{"+NS["a"]+"}t"}
@@ -174,8 +184,15 @@ def _read_ooxml(data: bytes, suffix: str, canary: str) -> None:
                 if not name.endswith((".xml", ".rels")) and name != CONTENT_TYPES:
                     continue
                 root = _xml(raw)
-                if name == CONTENT_TYPES and root.tag != "{"+NS["content"]+"}Types":
-                    raise LabError("Invalid OOXML content-type root")
+                if name == CONTENT_TYPES:
+                    if root.tag != "{"+NS["content"]+"}Types":
+                        raise LabError("Invalid OOXML content-type root")
+                    main_type_present = any(
+                        item.tag == "{"+NS["content"]+"}Override" and
+                        item.get("PartName") == "/" + main and
+                        item.get("ContentType") == MAIN_CONTENT_TYPES[suffix]
+                        for item in root
+                    )
                 if name.endswith(".rels") or name == PACKAGE_RELS:
                     if root.tag != "{"+NS["rels"]+"}Relationships":
                         raise LabError("Invalid OOXML relationship root")
@@ -186,6 +203,14 @@ def _read_ooxml(data: bytes, suffix: str, canary: str) -> None:
                             target.startswith(("/", "\\")) or
                             re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target)):
                             raise LabError("External OOXML relationship in synthetic fixture")
+                if name == PACKAGE_RELS:
+                    main_rel_present = any(
+                        item.tag == "{"+NS["rels"]+"}Relationship" and
+                        item.get("Type") == OFFICE_DOCUMENT_REL and
+                        item.get("Target") == main and
+                        item.get("TargetMode", "Internal") == "Internal"
+                        for item in root
+                    )
                 if name == main and root.tag != expected_root:
                     raise LabError("OOXML main document root does not match the extension")
                 eligible = (
@@ -202,8 +227,10 @@ def _read_ooxml(data: bytes, suffix: str, canary: str) -> None:
                                   expected_text["a"])
                     text_matches += sum(1 for node in root.iter(target_tag)
                                         if node.text == canary)
+            if not main_rel_present or not main_type_present:
+                raise LabError("Missing OOXML officeDocument link or main content type")
             if text_matches != 1:
-                raise LabError("Expected exactly one visible synthetic edit canary")
+                raise LabError("Expected exactly one synthetic edit canary in a text node")
     except (OSError, EOFError, zlib.error, zipfile.BadZipFile, RuntimeError, ValueError) as exc:
         if isinstance(exc, LabError):
             raise
