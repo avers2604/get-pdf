@@ -719,7 +719,7 @@ int main(int argc, char** argv) {
         // OnEvent can be called outside Qt owner thread. It only records
         // atomics; the SDK Apply() call is made here on the Qt owner thread.
         QObject::connect(&nativeSaveAnswerTimer, &QTimer::timeout, &app, [&]() {
-            if (!eventObserver.savePathRequested.exchange(false, std::memory_order_acq_rel))
+            if (!eventObserver.savePathRequested.load(std::memory_order_acquire))
                 return;
             if (!view || view->GetCefView() != editor ||
                 eventObserver.saveAnswerSent.load(std::memory_order_acquire) ||
@@ -740,6 +740,8 @@ int main(int argc, char** argv) {
             if (requestedFormat == 0 || requestedFormat != outputFormat ||
                 requestedFormat != format)
                 return;
+            if (!eventObserver.savePathRequested.exchange(
+                    false, std::memory_order_acq_rel)) return;
             auto* reply = new NSEditorApi::CAscMenuEvent(
                 ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE_PATH);
             auto* response = new NSEditorApi::CAscLocalSaveFileDialog();
