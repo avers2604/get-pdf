@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import stat
 import sys
+import zlib
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -179,9 +180,11 @@ def _read_ooxml(data: bytes, suffix: str, canary: str) -> None:
                     if root.tag != "{"+NS["rels"]+"}Relationships":
                         raise LabError("Invalid OOXML relationship root")
                     for relationship in root:
-                        if (relationship.get("TargetMode") == "External" or
-                            relationship.get("Target", "").startswith(("/", "\\", "file:")) or
-                            "://" in relationship.get("Target", "")):
+                        target = relationship.get("Target", "")
+                        mode = relationship.get("TargetMode", "Internal")
+                        if (mode != "Internal" or
+                            target.startswith(("/", "\\")) or
+                            re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target)):
                             raise LabError("External OOXML relationship in synthetic fixture")
                 if name == main and root.tag != expected_root:
                     raise LabError("OOXML main document root does not match the extension")
@@ -201,7 +204,7 @@ def _read_ooxml(data: bytes, suffix: str, canary: str) -> None:
                                         if node.text == canary)
             if text_matches != 1:
                 raise LabError("Expected exactly one visible synthetic edit canary")
-    except (OSError, EOFError, zipfile.BadZipFile, RuntimeError, ValueError) as exc:
+    except (OSError, EOFError, zlib.error, zipfile.BadZipFile, RuntimeError, ValueError) as exc:
         if isinstance(exc, LabError):
             raise
         raise LabError("Corrupt or unsupported OOXML ZIP") from exc
@@ -223,7 +226,17 @@ def verify(staging: Path | str, fixture_name: str) -> dict:
         raise LabError("Disposable output directory not explicitly approved")
     manifest_bytes = _read_limited(root / "gd31j6-fixture-manifest.json", 16 * 1024)
     try:
-        manifest = json.loads(manifest_bytes)
+        def exact_object(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise LabError("Duplicated JSON manifest key")
+                result[key] = value
+            return result
+
+        manifest = json.loads(
+            manifest_bytes, object_pairs_hook=exact_object,
+            parse_constant=lambda _: (_ for _ in ()).throw(LabError("Invalid JSON constant")))
         if (not isinstance(manifest, dict) or
             manifest.get("schema") != "gd31j6-office-fixtures/1" or
             manifest.get("purpose") != "test-only-local-ooxml-no-corporate-documents" or
