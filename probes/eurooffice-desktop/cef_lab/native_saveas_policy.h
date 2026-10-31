@@ -88,7 +88,7 @@ inline bool PrepareSyntheticShadow(const QString& sourcePath,
     const QString marker = QDir(outputRoot).filePath("gd31j25-output-lab.marker");
     QFile markerFile(marker);
     if (!NoLinksInPath(marker) || !markerFile.open(QIODevice::ReadOnly) ||
-        markerFile.size() != 40 || // exact prefix+newline, separately compare bytes
+        markerFile.size() != 38 || // exact prefix+LF, separately compare bytes
         markerFile.readAll() != "GETDOC_GD31J25_DISPOSABLE_OUTPUT_ONLY\n") return false;
     const QString finalPath = QDir(outputRoot).filePath(basename);
     if (QFileInfo::exists(finalPath) || QFileInfo(finalPath).isSymLink()) return false;
