@@ -13,6 +13,18 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j26_native_saveas_event_bridge_is_only_a_manual_isolated_lab(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("cef-native-saveas-source-contract-tests", names)
+        self.assertLess(names.index("cef-native-saveas-source-contract-tests"),
+                        names.index("solution-restore"))
+        check = next(step for step in steps
+                     if step.name == "cef-native-saveas-source-contract-tests")
+        self.assertIn("test_native_saveas_contract.py", check.command)
+        self.assertIn("eurooffice-native-saveas-pinned-sdk-output-isolation-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j25_offline_verifier_runs_before_restore_and_native_save_is_manual(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
