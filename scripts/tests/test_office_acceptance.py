@@ -13,6 +13,18 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j25_offline_verifier_runs_before_restore_and_native_save_is_manual(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        self.assertIn("synthetic-ooxml-roundtrip-verifier-tests", names)
+        self.assertLess(names.index("synthetic-ooxml-roundtrip-verifier-tests"),
+                        names.index("solution-restore"))
+        check = next(item for item in steps
+                     if item.name == "synthetic-ooxml-roundtrip-verifier-tests")
+        self.assertIn("test_synthetic_roundtrip.py", check.command)
+        self.assertIn("eurooffice-synthetic-ooxml-native-saveas-canary-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_patched_native_ready_sdk_requires_two_offline_source_gates_and_manual_vm(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
