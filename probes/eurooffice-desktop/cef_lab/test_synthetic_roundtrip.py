@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from zipfile import ZipFile, ZIP_DEFLATED, ZipInfo
+from zipfile import ZipFile, ZIP_STORED
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import synthetic_roundtrip as lab
@@ -38,14 +38,12 @@ def package(name, marker="", extra=None):
     main, text_part, prefix = FIXTURES[name]
     from io import BytesIO
     buf = BytesIO()
-    with ZipFile(buf, "w", ZIP_DEFLATED) as arc:
+    with ZipFile(buf, "w", ZIP_STORED) as arc:
         arc.writestr("[Content_Types].xml", '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>')
         arc.writestr("_rels/.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
-        arc.writestr(main, MAIN[suffix])
         if text_part != main:
-            arc.writestr(text_part, prefix + marker.encode() + CLOSINGS[suffix])
-        else:
-            arc.writestr(text_part, prefix + marker.encode() + CLOSINGS[suffix])
+            arc.writestr(main, MAIN[suffix])
+        arc.writestr(text_part, prefix + marker.encode() + CLOSINGS[suffix])
         for entry, value in (extra or {}).items():
             arc.writestr(entry, value)
     return buf.getvalue()
