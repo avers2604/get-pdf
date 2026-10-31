@@ -33,7 +33,7 @@ MAIN = {
 }
 
 
-def package(name, marker="", extra=None):
+def package(name, marker="", extra=None, main_target=None, main_type=None):
     suffix = Path(name).suffix
     main, text_part, prefix = FIXTURES[name]
     from io import BytesIO
@@ -46,10 +46,10 @@ def package(name, marker="", extra=None):
         }[suffix]
         arc.writestr("[Content_Types].xml",
             '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-            '<Override PartName="/' + main + '" ContentType="' + content_type + '"/></Types>')
+            '<Override PartName="/' + main + '" ContentType="' + (main_type or content_type) + '"/></Types>')
         arc.writestr("_rels/.rels",
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="' + main + '"/></Relationships>')
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="' + (main_target or main) + '"/></Relationships>')
         if text_part != main:
             arc.writestr(main, MAIN[suffix])
         arc.writestr(text_part, prefix + marker.encode() + CLOSINGS[suffix])
@@ -167,14 +167,13 @@ class SyntheticRoundTripTests(unittest.TestCase):
         name = "gd31j6_writer.docx"
         with tempfile.TemporaryDirectory() as tmp:
             root, output, _ = environment(tmp, name)
-            wrong_relation = package(name, lab.CANARIES[name]).replace(
-                b'Target="word/document.xml"', b'Target="xl/workbook.xml"')
+            wrong_relation = package(name, lab.CANARIES[name],
+                                     main_target="xl/workbook.xml")
             output.write_bytes(wrong_relation)
             with self.assertRaises(lab.LabError):
                 lab.verify(root, name)
-            wrong_type = package(name, lab.CANARIES[name]).replace(
-                b'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
-                b'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml')
+            wrong_type = package(name, lab.CANARIES[name],
+                                 main_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml")
             output.write_bytes(wrong_type)
             with self.assertRaises(lab.LabError):
                 lab.verify(root, name)
