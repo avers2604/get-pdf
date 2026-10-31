@@ -28,6 +28,21 @@ option(GETDOC_GD31J22_ENABLE_BINDING_LAB "Observe synthetic editor local-file bi
 option(GETDOC_GD31J23_ENABLE_CONVERSION_EVIDENCE_LAB "Inspect isolated Editor.bin candidate, no edit/save or OOXML readiness" OFF)
 # This is a SEPARATE manually overlaid SDK lab, NEVER the normal editor build.
 option(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB "Observe untrusted renderer content-ready notification only" OFF)
+# Dedicated synthetic-only, manually triggered SaveAs event path. No JS injection.
+# Requires the same two pinned rebuilt SDK libraries as GD31J24, plus separate
+# offline writable-output isolation approval. Never enabled by default.
+option(GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB "Isolated synthetic SaveAs via exact vendor event" OFF)
+if(GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
+  if(NOT GETDOC_GD31J24_ENABLE_READY_EVENT_LAB)
+    message(FATAL_ERROR "GD-31J.26 requires separately approved patched GD-31J.24 ready bridge.")
+  endif()
+  if(NOT GETDOC_GD31J26_PRIVATE_OUTPUT_ISOLATION_CONFIRMED)
+    message(FATAL_ERROR "GD-31J.26 requires explicit disposable output-only VM approval.")
+  endif()
+  if(NOT (UNIX AND NOT APPLE))
+    message(FATAL_ERROR "GD-31J.26 exclusive link publication is Linux-only.")
+  endif()
+endif()
 if(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB AND NOT GETDOC_GD31J23_ENABLE_CONVERSION_EVIDENCE_LAB)
   message(FATAL_ERROR "GD-31J.24 requires GD-31J.23 private candidate lab.")
 endif()
@@ -213,6 +228,11 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
         GETDOC_GD31J23_CONVERSION_EVIDENCE_LAB=1)
     message(WARNING "GD-31J.23 isolated Editor.bin candidate only; never a ready/save receipt.")
+  endif()
+  if(GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
+    target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+        GETDOC_GD31J26_NATIVE_SAVEAS_LAB=1)
+    message(WARNING "GD-31J.26: modified synthetic shadow to disposable output via SDK SaveAs events; not a verified or production save.")
   endif()
   if(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
