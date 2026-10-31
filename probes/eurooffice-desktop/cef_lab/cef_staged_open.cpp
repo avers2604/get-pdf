@@ -50,6 +50,9 @@
 #endif
 #include "qascapplicationmanager.h"
 #include "qcefview.h"
+#ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+#include "native_saveas_policy.h"
+#endif
 #ifdef GETDOC_GD31J14_POINTER_INPUT
 #include "osr_input.h"
 #endif
@@ -142,6 +145,15 @@ public:
     std::atomic<bool> onSave{false};
     std::atomic<bool> saveCancelled{false};
     std::atomic<bool> printEnd{false};
+#ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+    std::atomic<bool> nativeSaveLabEnabled{false};
+    std::atomic<bool> savePathRequested{false};
+    std::atomic<int> saveRequestCount{0};
+    std::atomic<int> requestedFileType{0};
+    std::atomic<bool> saveAnswerSent{false};
+    std::atomic<bool> nativeOnSaveAfterAnswer{false};
+    std::atomic<bool> saveCancelledAfterAnswer{false};
+#endif
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
     // The patched SDK emits this event only from its renderer bridge. It is
     // not a trusted proof of fully parsed or editable OOXML.
@@ -149,6 +161,10 @@ public:
 #endif
 
     bool IsSupportEvent(int type) override {
+#ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+        if (type == ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE)
+            return nativeSaveLabEnabled.load(std::memory_order_acquire);
+#endif
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
         if (type == ASC_MENU_EVENT_TYPE_GETDOC_DOCUMENT_CONTENT_READY)
             return true;
@@ -175,8 +191,29 @@ public:
                     auto* data = static_cast<NSEditorApi::CAscDocumentOnSaveData*>(event->m_pData);
                     if (data->get_IsCancel())
                         saveCancelled.store(true, std::memory_order_release);
+#ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+                    if (nativeSaveLabEnabled.load(std::memory_order_acquire) &&
+                        saveAnswerSent.load(std::memory_order_acquire)) {
+                        if (data->get_IsCancel())
+                            saveCancelledAfterAnswer.store(true, std::memory_order_release);
+                        else
+                            nativeOnSaveAfterAnswer.store(true, std::memory_order_release);
+                    }
+#endif
                 }
                 break;
+#ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+            case ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE:
+                if (nativeSaveLabEnabled.load(std::memory_order_acquire) && event->m_pData) {
+                    auto* request = static_cast<NSEditorApi::CAscLocalSaveFileDialog*>(event->m_pData);
+                    if (request->get_Id() == expectedViewId.load(std::memory_order_acquire)) {
+                        requestedFileType.store(request->get_FileType(), std::memory_order_release);
+                        saveRequestCount.fetch_add(1, std::memory_order_acq_rel);
+                        savePathRequested.store(true, std::memory_order_release);
+                    }
+                }
+                break;
+#endif
             case ASC_MENU_EVENT_TYPE_CEF_PRINT_END:
                 printEnd.store(true, std::memory_order_release);
                 break;
@@ -487,11 +524,17 @@ int main(int argc, char** argv) {
         std::strcmp(argv[1], "--open-staged-lab") == 0;
     const bool readyLab = argc == 6 &&
         std::strcmp(argv[1], "--open-staged-ready-event-lab") == 0;
+    const bool saveLab = argc == 6 &&
+        std::strcmp(argv[1], "--open-staged-native-saveas-lab") == 0;
+#ifndef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+    if (saveLab) return 2;
+#endif
 #ifndef GETDOC_GD31J24_READY_EVENT_LAB
     if (readyLab) return 2;
 #endif
     const bool conversionLab = argc == 6 &&
-        (std::strcmp(argv[1], "--open-staged-conversion-evidence-lab") == 0 || readyLab);
+        (std::strcmp(argv[1], "--open-staged-conversion-evidence-lab") == 0 ||
+         readyLab || saveLab);
 #ifndef GETDOC_GD31J23_CONVERSION_EVIDENCE_LAB
     if (conversionLab) return 2;
 #endif
@@ -539,6 +582,16 @@ int main(int argc, char** argv) {
         std::fputs("GD31J6_REFUSED_INVALID_FIXTURE\n", stderr);
         return 3;
     }
+#ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+    Gd31J26::NativeSaveAsStaging saveStage;
+    if (saveLab) {
+        // Crucially, CEF NEVER receives original input. Manual Ctrl+S, if
+        // triggered, can affect only this disposable ephemeral shadow.
+        if (!Gd31J26::PrepareSyntheticShadow(path, staging, fixtureName, saveStage))
+            return 14;
+        path = saveStage.shadowPath;
+    }
+#endif
 
     QApplication app(argc, argv);
 #ifdef GETDOC_GD31J22_BINDING_LAB
@@ -591,9 +644,13 @@ int main(int argc, char** argv) {
         return 8;
     }
     auto* editor = static_cast<CCefViewEditor*>(view->GetCefView());
-    editor->OpenLocalFile(path.toStdWString(), format, L"");
     const int viewId = editor->GetId();
+    // Set ID BEFORE dispatch, otherwise an early renderer callback is lost.
     eventObserver.expectedViewId.store(viewId, std::memory_order_release);
+#ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+    eventObserver.nativeSaveLabEnabled.store(saveLab, std::memory_order_release);
+#endif
+    editor->OpenLocalFile(path.toStdWString(), format, L"");
     window.show();
 
 #ifdef GETDOC_GD31J22_BINDING_LAB
@@ -653,6 +710,49 @@ int main(int argc, char** argv) {
 #endif
         });
         bindingPollTimer.start(250);
+    }
+#endif
+
+#ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+    QTimer nativeSaveAnswerTimer;
+    if (saveLab) {
+        // OnEvent can be called outside Qt owner thread. It only records
+        // atomics; the SDK Apply() call is made here on the Qt owner thread.
+        QObject::connect(&nativeSaveAnswerTimer, &QTimer::timeout, &app, [&]() {
+            if (!eventObserver.savePathRequested.load(std::memory_order_acquire))
+                return;
+            if (!view || view->GetCefView() != editor ||
+                eventObserver.saveAnswerSent.load(std::memory_order_acquire) ||
+                eventObserver.saveRequestCount.load(std::memory_order_acquire) != 1 ||
+                !eventObserver.onContentReady.load(std::memory_order_acquire) ||
+                !eventObserver.modified.load(std::memory_order_acquire) ||
+                !bindingSeen || !conversionObserved ||
+                !Gd31J26::NoLinksInPath(saveStage.nativeOutputPath) ||
+                QFileInfo::exists(saveStage.nativeOutputPath) ||
+                QFileInfo(saveStage.nativeOutputPath).isSymLink() ||
+                QFileInfo::exists(saveStage.finalOutputPath) ||
+                QFileInfo(saveStage.finalOutputPath).isSymLink())
+                return;
+            const int requestedFormat =
+                eventObserver.requestedFileType.load(std::memory_order_acquire);
+            const int outputFormat = CCefViewEditor::GetFileFormat(
+                saveStage.nativeOutputPath.toStdWString());
+            if (requestedFormat == 0 || requestedFormat != outputFormat ||
+                requestedFormat != format)
+                return;
+            if (!eventObserver.savePathRequested.exchange(
+                    false, std::memory_order_acq_rel)) return;
+            auto* reply = new NSEditorApi::CAscMenuEvent(
+                ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE_PATH);
+            auto* response = new NSEditorApi::CAscLocalSaveFileDialog();
+            response->put_Id(viewId);
+            response->put_FileType(requestedFormat);
+            response->put_Path(saveStage.nativeOutputPath.toStdWString());
+            reply->m_pData = response;
+            eventObserver.saveAnswerSent.store(true, std::memory_order_release);
+            editor->Apply(reply); // pinned SDK owns/releases reply
+        });
+        nativeSaveAnswerTimer.start(100);
     }
 #endif
 
@@ -719,8 +819,11 @@ int main(int argc, char** argv) {
 
     // No success acknowledgement is available yet. Timeout merely limits the
     // trial and does NOT claim the document loaded or saved successfully.
-    QTimer::singleShot(15000, &app, &QCoreApplication::quit);
+    QTimer::singleShot(saveLab ? 90000 : 15000, &app, &QCoreApplication::quit);
     const int exitCode = app.exec();
+#ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+    nativeSaveAnswerTimer.stop();
+#endif
 #ifdef GETDOC_GD31J22_BINDING_LAB
     bindingPollTimer.stop();
 #endif
@@ -750,6 +853,53 @@ int main(int argc, char** argv) {
         manager.DestroyCefView(viewId, false);
     manager.SetEventListener(nullptr);
     manager.CloseApplication();
+
+#ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
+    if (saveLab) {
+        const bool sourceUnchanged =
+            Gd31J26::LabSourceSha256(saveStage.originalPath) == saveStage.originalSha256;
+        const bool callback =
+            exitCode == 0 && viewCallback && bindingSeen && conversionObserved &&
+            eventObserver.onContentReady.load(std::memory_order_acquire) &&
+            eventObserver.modified.load(std::memory_order_acquire) &&
+            eventObserver.saveRequestCount.load(std::memory_order_acquire) == 1 &&
+            eventObserver.saveAnswerSent.load(std::memory_order_acquire) &&
+            eventObserver.nativeOnSaveAfterAnswer.load(std::memory_order_acquire) &&
+            !eventObserver.saveCancelledAfterAnswer.load(std::memory_order_acquire) &&
+            sourceUnchanged;
+        QString outputSha;
+        const bool publishedToDisposableOutput =
+            Gd31J26::NativeSaveAsPublish(saveStage, callback, outputSha);
+        const QJsonObject evidence{
+            {"schema", "getdoc-native-saveas-candidate-lab/1"},
+            {"sessionId", bindingSession},
+            {"tabId", bindingTab},
+            {"fixtureName", fixtureName},
+            {"nativeSaveRequestObserved",
+             eventObserver.saveRequestCount.load(std::memory_order_acquire) == 1},
+            {"savePathProvided",
+             eventObserver.saveAnswerSent.load(std::memory_order_acquire)},
+            {"nativeOnSaveAfterAnswer",
+             eventObserver.nativeOnSaveAfterAnswer.load(std::memory_order_acquire)},
+            {"saveCancelledAfterAnswer",
+             eventObserver.saveCancelledAfterAnswer.load(std::memory_order_acquire)},
+            {"sourceUnchanged", sourceUnchanged},
+            {"publishedToDisposableOutput", publishedToDisposableOutput},
+            {"outputSha256", publishedToDisposableOutput ? outputSha : QString()},
+            {"nativeSaveProven", false},
+            {"documentVerified", false},
+            {"saveVerified", false},
+            {"pdfVerified", false},
+            {"printApproved", false},
+            {"approvedForProduction", false},
+            {"laboratoryOnly", true}
+        };
+        const QByteArray json = QJsonDocument(evidence).toJson(QJsonDocument::Compact);
+        std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()), stdout);
+        std::fputc('\n', stdout);
+        return exitCode;
+    }
+#endif
 
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
     if (readyLab) {
