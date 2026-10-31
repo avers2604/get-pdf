@@ -13,6 +13,20 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27_native_ooxml_correlator_requires_offline_tests_and_manual_vm(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, file in (
+            ("native-ooxml-join-tests", "test_native_ooxml_join.py"),
+            ("native-ooxml-join-source-contract-tests", "test_native_ooxml_join_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            step = next(item for item in steps if item.name == gate)
+            self.assertIn(file, step.command)
+        self.assertIn("eurooffice-native-ooxml-session-sha-and-canary-join-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j26_native_saveas_event_bridge_is_only_a_manual_isolated_lab(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
