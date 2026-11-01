@@ -41,9 +41,9 @@ inline Fd OpenPrivateDir(const QString& directory) {
     if (!dir.ok() || ::fstat(dir.value, &state) != 0 ||
         !S_ISDIR(state.st_mode) || (state.st_mode & 0022))
         return Fd();
-    // Fd is deliberately noncopyable: cannot return dir by value unless
-    // its file descriptor ownership is transferred explicitly.
-    return Fd(::dup(dir.value));
+    // Duplicate without losing close-on-exec. No inherited directory fds
+    // in the CEF renderer/utility subprocess.
+    return Fd(::fcntl(dir.value, F_DUPFD_CLOEXEC, 0));
 }
 
 inline bool fsync_directory(const QString& directory) {
@@ -67,6 +67,22 @@ inline bool CreateScratchMarker(const QString& privatePath) {
                             static_cast<size_t>(content.size()));
     return count == content.size() && ::fsync(marker.value) == 0 &&
            ::fsync(directory.value) == 0;
+}
+
+inline bool ExactOwnedMarker(int directoryFd, const char* name,
+                             const QByteArray& expected) {
+    Fd marker(::openat(directoryFd, name,
+                       O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK));
+    struct stat current{};
+    if (!marker.ok() || ::fstat(marker.value, &current) != 0 ||
+        !S_ISREG(current.st_mode) || current.st_nlink != 1 ||
+        (current.st_mode & 0022) || current.st_size != expected.size() ||
+        expected.size() > 64)
+        return false;
+    char buffer[64];
+    const ssize_t bytes = ::read(marker.value, buffer, sizeof(buffer));
+    return bytes == expected.size() &&
+           QByteArray(buffer, bytes) == expected;
 }
 
 inline bool SameFile(const struct stat& left, const struct stat& right) {
@@ -119,7 +135,12 @@ inline bool DurableExclusivePublish(const QString& scratchDir,
     if (!SafeBasename(basename) || expectedSha.size() != 64) return false;
     Fd scratch = OpenPrivateDir(scratchDir);
     Fd output = OpenPrivateDir(outputRoot);
-    if (!scratch.ok() || !output.ok()) return false;
+    if (!scratch.ok() || !output.ok() ||
+        !ExactOwnedMarker(scratch.value, PRIVATE_MARKER_NAME,
+                          QByteArray(GD31J27G_PRIVATE_SCRATCH_ONLY)) ||
+        !ExactOwnedMarker(output.value, "gd31j25-output-lab.marker",
+                          QByteArray("GETDOC_GD31J25_DISPOSABLE_OUTPUT_ONLY\\n")))
+        return false;
     struct stat fromDir{}, toDir{};
     if (::fstat(scratch.value, &fromDir) != 0 ||
         ::fstat(output.value, &toDir) != 0 ||
@@ -132,6 +153,7 @@ inline bool DurableExclusivePublish(const QString& scratchDir,
     struct stat before{};
     if (!source.ok() || ::fstat(source.value, &before) != 0 ||
         !S_ISREG(before.st_mode) || before.st_nlink != 1 ||
+        (before.st_mode & 0022) ||
         before.st_size <= 0 || before.st_size > 32LL * 1024 * 1024)
         return false;
     if (!StableFdDigest(source.value, expectedSha) ||
