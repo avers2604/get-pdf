@@ -15,7 +15,6 @@ import sys
 sys.dont_write_bytecode = True
 
 import array
-import fcntl
 import hashlib
 import json
 import os
@@ -23,6 +22,10 @@ import re
 import socket
 import stat
 import struct
+if sys.platform.startswith("linux"):
+    import fcntl
+else:
+    fcntl = None  # Linux-only module, imported by offline source contracts.
 
 REQUEST_SCHEMA = "getdoc-gd31j27l-native-fd-worker-inspect-lab/1"
 RESPONSE_SCHEMA = "getdoc-gd31j27l-native-fd-worker-denial-lab/1"
