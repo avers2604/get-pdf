@@ -153,6 +153,19 @@ class FdWorkerProtocolTests(unittest.TestCase):
             finally:
                 os.close(src); os.close(scratch_fd); os.close(output_fd)
 
+    def test_same_uid_unix_peer_never_receives_worker_permission(self):
+        if not sys.platform.startswith("linux") or not hasattr(socket, "SO_PEERCRED"):
+            self.skipTest("Linux SO_PEERCRED is required")
+        left, right = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        try:
+            result = worker.serve_one(left)
+            self.assertEqual(2, result)
+            raw = right.recv(1024)
+            self.assertEqual("denied", json.loads(raw)["state"])
+        finally:
+            left.close()
+            right.close()
+
     def test_denial_response_never_grants_production(self):
         response = worker.diagnostic(
             worker.parse_request(manifest()),
