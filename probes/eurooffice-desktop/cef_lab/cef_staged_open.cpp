@@ -167,6 +167,7 @@ public:
     // Any fault sticks until teardown; only synthetic v2 is affected.
     std::atomic<bool> v2DialogArmed{false};
     std::atomic<bool> v2TerminalAbort{false};
+    std::atomic<bool> v2TimedOut{false};
 #endif
 #endif
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
@@ -212,7 +213,7 @@ public:
                     firstOnSaveSequence.compare_exchange_strong(
                         first, serial, std::memory_order_acq_rel);
                     if (!saveAnswerSent.load(std::memory_order_acquire) || !event->m_pData ||
-                        v2TerminalAbort.load(std::memory_order_acquire)) {
+                        v2TimedOut.load(std::memory_order_acquire)) {
                         unexpectedOnSaveObserved.store(true, std::memory_order_release);
                         v2TerminalAbort.store(true, std::memory_order_release);
                     }
@@ -936,8 +937,10 @@ int main(int argc, char** argv) {
     QTimer::singleShot(saveLab ? 90000 : 15000, &app, [&]() {
         if (saveLab) saveLabTimedOut = true;
 #ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
-        if (eventV2Lab)
+        if (eventV2Lab) {
+            eventObserver.v2TimedOut.store(true, std::memory_order_release);
             eventObserver.v2TerminalAbort.store(true, std::memory_order_release);
+        }
 #endif
         app.quit();
     });
