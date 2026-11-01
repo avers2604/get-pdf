@@ -24,6 +24,15 @@ SESSION = "102030405060708090a0b0c0d0e0f010"
 TAB = "f010e0d0c0b0a0908070605040302010"
 
 
+def pins():
+    # Externally pinned trusted fixture hashes, NOT derived from the request.
+    return {
+        "gd31j6_writer.docx": hashlib.sha256(PAYLOAD).hexdigest(),
+        "gd31j6_calc.xlsx": "a" * 64,
+        "gd31j6_impress.pptx": "b" * 64,
+    }
+
+
 def request():
     return (json.dumps({
         "schema": worker.REQUEST_SCHEMA,
@@ -97,7 +106,8 @@ class BrokerHandoffTests(unittest.TestCase):
         session = broker.BrokerSession()
         response = session.handoff(sock, request(), self.fds,
                                    broker_uid=uid, expected_worker_uid=peer_uid,
-                                   approved_disposable_vm=True)
+                                   approved_disposable_vm=True,
+                                   approved_fixture_hashes=pins())
         self.assertTrue(session.consumed)
         self.assertEqual("denied", response["state"])
         self.assertFalse(response["writePermissionGranted"])
@@ -113,7 +123,8 @@ class BrokerHandoffTests(unittest.TestCase):
         with self.assertRaises(broker.BrokerError):
             session.handoff(sock, request(), self.fds,
                             broker_uid=uid, expected_worker_uid=peer_uid,
-                            approved_disposable_vm=True)
+                            approved_disposable_vm=True,
+                                   approved_fixture_hashes=pins())
 
     def test_missing_vm_approval_or_same_uid_peer_refuses_before_sending(self):
         uid = os.geteuid()
@@ -125,8 +136,22 @@ class BrokerHandoffTests(unittest.TestCase):
                     broker.BrokerSession().handoff(
                         sock, request(), self.fds, broker_uid=uid,
                         expected_worker_uid=peer_uid,
-                        approved_disposable_vm=approved)
+                        approved_disposable_vm=approved,
+                        approved_fixture_hashes=pins())
                 self.assertEqual([], sock.sent)
+
+    def test_request_sha_must_match_external_supervisor_pin(self):
+        uid = os.geteuid()
+        peer_uid = uid + 10001
+        forged = request().replace(
+            hashlib.sha256(PAYLOAD).hexdigest().encode("ascii"), b"c" * 64)
+        sock = FakeSocket(peer_uid)
+        with self.assertRaises(broker.BrokerError):
+            broker.BrokerSession().handoff(
+                sock, forged, self.fds,
+                broker_uid=uid, expected_worker_uid=peer_uid,
+                approved_disposable_vm=True, approved_fixture_hashes=pins())
+        self.assertEqual([], sock.sent)
 
     def test_unexpected_peer_and_forged_worker_success_always_refused(self):
         uid = os.geteuid()
@@ -144,7 +169,8 @@ class BrokerHandoffTests(unittest.TestCase):
                     broker.BrokerSession().handoff(
                         sock, request(), self.fds, broker_uid=uid,
                         expected_worker_uid=target,
-                        approved_disposable_vm=True)
+                        approved_disposable_vm=True,
+                                   approved_fixture_hashes=pins())
 
     def test_reject_writer_source_duplicate_fds_and_non_synthetic_operation(self):
         uid = os.geteuid()
@@ -160,7 +186,8 @@ class BrokerHandoffTests(unittest.TestCase):
                     broker.BrokerSession().handoff(
                         sock, payload, handles, broker_uid=uid,
                         expected_worker_uid=target,
-                        approved_disposable_vm=True)
+                        approved_disposable_vm=True,
+                                   approved_fixture_hashes=pins())
                 self.assertEqual([], sock.sent)
         finally:
             os.close(wfd)
