@@ -22,6 +22,7 @@
 #include <QMutexLocker>
 #include <QJsonObject>
 #include <QLabel>
+#include <QPushButton>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -52,6 +53,9 @@
 #include "qcefview.h"
 #ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
 #include "native_saveas_policy.h"
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+#include "native_saveas_event_budget.h"
+#endif
 #endif
 #ifdef GETDOC_GD31J14_POINTER_INPUT
 #include "osr_input.h"
@@ -168,6 +172,10 @@ public:
     std::atomic<bool> v2DialogArmed{false};
     std::atomic<bool> v2TerminalAbort{false};
     std::atomic<bool> v2TimedOut{false};
+    std::atomic<bool> v2EventBudgetOverflow{false};
+    std::atomic<bool> v2OperatorApproved{false};
+    std::atomic<bool> v2CallbacksClosed{false};
+    std::atomic<int> v2CallbacksInFlight{0};
 #endif
 #endif
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
@@ -177,6 +185,10 @@ public:
 #endif
 
     bool IsSupportEvent(int type) override {
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+        if (v2CallbacksClosed.load(std::memory_order_acquire))
+            return false;
+#endif
 #ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
         if (type == ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE)
             return nativeSaveLabEnabled.load(std::memory_order_acquire);
@@ -191,6 +203,21 @@ public:
     }
 
     void OnEvent(NSEditorApi::CAscCefMenuEvent* event) override {
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+        // Keep this observer alive for the one-shot process lifetime.
+        // A detached, late callback must not mutate the sealed receipt.
+        struct CallbackInFlight {
+            std::atomic<int>& value;
+            explicit CallbackInFlight(std::atomic<int>& v) : value(v) {
+                value.fetch_add(1, std::memory_order_acq_rel);
+            }
+            ~CallbackInFlight() { value.fetch_sub(1, std::memory_order_acq_rel); }
+        } callbackGuard(v2CallbacksInFlight);
+        if (v2CallbacksClosed.load(std::memory_order_acquire)) {
+            NSEditorApi::CAscCefMenuEventListener::OnEvent(event);
+            return;
+        }
+#endif
         if (event && event->get_SenderId() == expectedViewId.load(std::memory_order_acquire)) {
             switch (event->m_nType) {
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
@@ -205,10 +232,12 @@ public:
 #ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
                 if (nativeSaveLabEnabled.load(std::memory_order_acquire) &&
                     nativeEventV2Enabled.load(std::memory_order_acquire)) {
-                    const int serial = saveEventSerial.fetch_add(
-                        1, std::memory_order_acq_rel) + 1;
-                    const int count = saveOnSaveCount.fetch_add(
-                        1, std::memory_order_acq_rel) + 1;
+                    const int serial = Gd31J27F::TickBounded(
+                        saveEventSerial, Gd31J27F::MAX_SERIAL_EVENTS,
+                        v2EventBudgetOverflow);
+                    const int count = Gd31J27F::TickBounded(
+                        saveOnSaveCount, Gd31J27F::MAX_SAVE_EVENTS,
+                        v2EventBudgetOverflow);
                     int first = 0;
                     firstOnSaveSequence.compare_exchange_strong(
                         first, serial, std::memory_order_acq_rel);
@@ -217,7 +246,7 @@ public:
                         unexpectedOnSaveObserved.store(true, std::memory_order_release);
                         v2TerminalAbort.store(true, std::memory_order_release);
                     }
-                    if (count != 1)
+                    if (count != 1 || v2EventBudgetOverflow.load(std::memory_order_acquire))
                         v2TerminalAbort.store(true, std::memory_order_release);
                 }
 #endif
@@ -248,16 +277,19 @@ public:
 #ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
                     const bool eventV2 = nativeEventV2Enabled.load(std::memory_order_acquire);
                     if (eventV2) {
-                        const int serial = saveEventSerial.fetch_add(
-                            1, std::memory_order_acq_rel) + 1;
-                        const int count = saveDialogCount.fetch_add(
-                            1, std::memory_order_acq_rel) + 1;
+                        const int serial = Gd31J27F::TickBounded(
+                            saveEventSerial, Gd31J27F::MAX_SERIAL_EVENTS,
+                            v2EventBudgetOverflow);
+                        const int count = Gd31J27F::TickBounded(
+                            saveDialogCount, Gd31J27F::MAX_DIALOG_EVENTS,
+                            v2EventBudgetOverflow);
                         int first = 0;
                         firstDialogSequence.compare_exchange_strong(
                             first, serial, std::memory_order_acq_rel);
                         const bool armed = v2DialogArmed.exchange(
                             false, std::memory_order_acq_rel);
-                        if (!armed || count != 1) {
+                        if (!armed || count != 1 ||
+                            v2EventBudgetOverflow.load(std::memory_order_acquire)) {
                             if (count == 1)
                                 invalidDialogObserved.store(true, std::memory_order_release);
                             v2TerminalAbort.store(true, std::memory_order_release);
@@ -690,7 +722,10 @@ int main(int argc, char** argv) {
     if (started != 0)
         return 6;
 
-    SyntheticEventObserver eventObserver;
+    // An SDK callback may race with detached teardown. Keep the observer
+    // allocated until OS process exit rather than risk a stack use-after-free.
+    // The native laboratory host is intentionally single-shot.
+    static SyntheticEventObserver eventObserver;
     manager.SetEventListener(&eventObserver);
 
     QWidget window;
