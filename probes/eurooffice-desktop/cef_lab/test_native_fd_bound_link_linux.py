@@ -46,6 +46,32 @@ class DescriptorBoundSyntheticLinkTests(unittest.TestCase):
             finally:
                 os.close(fd)
 
+    def test_original_name_becomes_symlink_but_fd_link_never_follows_it(self):
+        with tempfile.TemporaryDirectory(prefix="getdoc-gd31j27j-") as tmp:
+            root = Path(tmp)
+            original = root / "gd31j25_calc_saved.xlsx"
+            approved = root / "synthetic-verified"
+            decoy = root / "unapproved-synthetic-decoy"
+            original.write_bytes(b"VERIFIED_LAB_XLSX")
+            decoy.write_bytes(b"NOT_VERIFIED_LAB_XLSX")
+            fd = os.open(original, os.O_RDONLY | os.O_NOFOLLOW)
+            proc = os.open("/proc/self/fd", os.O_RDONLY | os.O_DIRECTORY)
+            target_dir = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                original.rename(approved)
+                original.symlink_to(decoy)
+                os.link(str(fd), "synthetic-published.xlsx",
+                        src_dir_fd=proc, dst_dir_fd=target_dir,
+                        follow_symlinks=True)
+                published = root / "synthetic-published.xlsx"
+                self.assertEqual(b"VERIFIED_LAB_XLSX", published.read_bytes())
+                self.assertNotEqual(decoy.stat().st_ino, published.stat().st_ino)
+                self.assertTrue(original.is_symlink())
+            finally:
+                os.close(target_dir)
+                os.close(proc)
+                os.close(fd)
+
     def test_normal_final_name_is_never_overwritten(self):
         with tempfile.TemporaryDirectory(prefix="getdoc-gd31j27j-") as tmp:
             root = Path(tmp)
