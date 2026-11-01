@@ -13,6 +13,23 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27l_fd_only_worker_is_deny_only_and_requires_vm_isolation(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/approved-feed"), "Linux")
+        names = [item.name for item in steps]
+        for gate, testfile in (
+            ("native-saveas-fd-worker-offline-protocol-tests",
+             "test_native_saveas_fd_worker.py"),
+            ("native-saveas-fd-worker-source-contract-tests",
+             "test_native_saveas_fd_worker_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(testfile,
+                          next(x for x in steps if x.name == gate).command)
+        self.assertIn("eurooffice-gd31j27l-distinct-uid-fd3-worker-isolation-e2e",
+                      acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a" * 40, "Linux", "GD-31I")["releaseReady"])
+
     def test_gd31j27k_anonymous_snapshot_owner_gate_requires_linux_vm(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/approved-offline-feed"), "Linux")
         names = [item.name for item in steps]
