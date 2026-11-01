@@ -24,7 +24,7 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
         cls.policy = (LAB / "native_saveas_policy.h").read_text("utf-8")
 
     def test_all_native_stages_are_explicit_and_nonoptional_manual_gates(self):
-        self.assertEqual(17, len(gate.REQUIRED_MANUAL_GATES))
+        self.assertEqual(18, len(gate.REQUIRED_MANUAL_GATES))
         self.assertEqual(len(gate.REQUIRED_MANUAL_GATES),
                          len(set(gate.REQUIRED_MANUAL_GATES)))
         self.assertTrue(set(gate.REQUIRED_MANUAL_GATES).issubset(
@@ -37,9 +37,11 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
                       gate.REQUIRED_MANUAL_GATES)
         self.assertIn("eurooffice-gd31j27l-distinct-uid-fd3-worker-isolation-e2e",
                       gate.REQUIRED_MANUAL_GATES)
+        self.assertIn("eurooffice-gd31j27m-external-broker-fd-handoff-isolation-e2e",
+                      gate.REQUIRED_MANUAL_GATES)
 
     def test_all_fault_scenarios_are_required_and_machine_readable(self):
-        self.assertEqual(20, len(gate.CASES))
+        self.assertEqual(21, len(gate.CASES))
         self.assertEqual(len(gate.CASES), len(set(gate.CASES)))
         for fault in ("source-name-swap-during-linkat",
                       "file-fsync-denied-before-linkat",
@@ -49,6 +51,7 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
             self.assertIn(fault, gate.CASES)
         self.assertIn("same-uid-writer-after-anonymous-snapshot", gate.CASES)
         self.assertIn("worker-fd-only-distinct-uid-mount-net-seccomp", gate.CASES)
+        self.assertIn("broker-peercred-one-shot-fd-handoff-no-privileges", gate.CASES)
         self.assertIn("REQUIRED_AUTOMATED_STEPS", self.gate)
 
     def test_even_all_claims_cannot_enable_production_or_release(self):
