@@ -47,7 +47,7 @@ class BoundedNativeSaveAsLifecycleContractTests(unittest.TestCase):
     def test_owner_thread_settle_and_shutdown_detach_before_destroy(self):
         for token in (
             "nativeSaveSettleTimer", "nativeSaveSettleClock",
-            "nativeSaveSettleClock.restart()", "app.quit()",
+            "nativeSaveSettleClock.start()", "app.quit()",
             "v2CallbacksInFlight", "v2CallbacksQuiescent",
             "nativeEventV2Enabled.store(false",
             "nativeSaveLabEnabled.store(false",
