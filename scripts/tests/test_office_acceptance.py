@@ -13,6 +13,25 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27i_evidence_gate_is_local_deferred_and_never_release(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, testfile in (
+            ("native-saveas-offline-acceptance-evidence-tests",
+             "test_native_saveas_acceptance_gate.py"),
+            ("native-saveas-offline-acceptance-source-contract-tests",
+             "test_native_saveas_acceptance_gate_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(testfile,
+                          next(x for x in steps if x.name == gate).command)
+        report = acceptance.new_report("a" * 40, "Linux", "GD-31I")
+        self.assertFalse(report["releaseReady"])
+        self.assertFalse(report["automatedChecksPassed"])
+        self.assertTrue(all(s == "not-run"
+                            for s in report["manualAcceptance"].values()))
+
     def test_gd31j27h_complete_native_lineage_and_crash_review_remain_manual(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [item.name for item in steps]
