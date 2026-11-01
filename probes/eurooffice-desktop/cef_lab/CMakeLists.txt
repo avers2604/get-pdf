@@ -56,6 +56,13 @@ option(GETDOC_GD31J27N_ENABLE_SANDBOX_WORKER_PUBLICATION_LAB "Blocked until inde
 if(GETDOC_GD31J27N_ENABLE_SANDBOX_WORKER_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27N_BLOCKED: no verified separate-UID system launcher, accepted isolation or worker publication")
 endif()
+# GD31J27o: a read-only observer can compare kernel FD3/UID/PID/namespace facts,
+# but cross-UID /proc visibility and seccomp rules still need manual VM review.
+# Never enable a supervisor or worker publication from a CMake toggle alone.
+option(GETDOC_GD31J27O_ENABLE_SUPERVISOR_PUBLICATION_LAB "Blocked Linux/Astra native SaveAs supervisor without audited UID/FD3 handoff" OFF)
+if(GETDOC_GD31J27O_ENABLE_SUPERVISOR_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27O_BLOCKED: procfs observer is not launcher attestation or worker-side publication")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
