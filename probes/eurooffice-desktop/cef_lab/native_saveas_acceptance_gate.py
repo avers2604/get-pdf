@@ -55,10 +55,23 @@ CASES = (
     "v1-regression-and-no-v2-downgrade",
 )
 
-REQUIRED_MANUAL_GATES = tuple(name for name in acceptance.MANUAL_GATES if
-                             name.startswith("eurooffice-") and
-                             ("saveas" in name or "save-as" in name or
-                              "ooxml" in name or "gd31j27" in name))
+# Explicit list: never silently drop an E2E gate when its name changes.
+REQUIRED_MANUAL_GATES = (
+    "eurooffice-native-sdk-fixture-binding-and-import-e2e",
+    "eurooffice-native-converter-private-artifact-candidate-e2e",
+    "eurooffice-content-ready-patched-sdk-runtime-e2e",
+    "eurooffice-synthetic-ooxml-native-saveas-canary-e2e",
+    "eurooffice-native-saveas-pinned-sdk-output-isolation-e2e",
+    "eurooffice-native-ooxml-session-sha-and-canary-join-e2e",
+    "eurooffice-supervised-native-saveas-pin-stdout-and-ooxml-e2e",
+    "eurooffice-v1-v2-saveas-protocol-lineage-reconciliation-e2e",
+    "eurooffice-pinned-native-v2-callback-counts-and-ooxml-join-e2e",
+    "eurooffice-pinned-v2-supervised-native-host-and-runtime-shas-e2e",
+    "eurooffice-pinned-v2-state-machine-early-duplicate-cancel-timeout-e2e",
+    "eurooffice-pinned-v2-bounded-callback-shutdown-operator-ui-e2e",
+    "eurooffice-gd31j27g-fsync-no-replace-crash-recovery-e2e",
+    "eurooffice-gd31j27h-v1-v2-native-ooxml-crash-lineage-e2e",
+)
 REQUIRED_AUTOMATED_STEPS = tuple(step.name for step in
     acceptance.build_steps(Path("/unused"), Path("/offline-feed"), "Linux"))
 
@@ -130,6 +143,8 @@ def _check_report(report, revision):
             report["automatedChecksPassed"] is not True or
             report["releaseReady"] is not False):
         raise GateError("Automated source report cannot be used for native VM review")
+    if not set(REQUIRED_MANUAL_GATES).issubset(set(acceptance.MANUAL_GATES)):
+        raise GateError("One or more native manual acceptance gates disappeared")
     manual = report["manualAcceptance"]
     _exact(manual, acceptance.MANUAL_GATES)
     if any(status != "not-run" for status in manual.values()):
