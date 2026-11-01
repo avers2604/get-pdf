@@ -28,7 +28,9 @@ class BrokerHandoffSourceContract(unittest.TestCase):
             "sock.sendmsg([packet]", "sock.recvmsg(MAX_REPLY_BYTES + 1, 0)",
             "expected_worker_uid == broker_uid", "expected_worker_uid <= 0",
             "broker_uid <= 0", "broker_uid != os.geteuid()",
-            "worker.parse_request(packet)", "fcntl.F_GETFD",
+            "worker.parse_request(packet)", "approved_fixture_hashes",
+            'request["sourceSha256"] != approved_fixture_hashes[request["fixtureName"]]',
+            "fcntl.F_GETFD",
             "fcntl.FD_CLOEXEC", "os.O_RDONLY", "sock.settimeout(5.0)",
         ):
             with self.subTest(token=token):
