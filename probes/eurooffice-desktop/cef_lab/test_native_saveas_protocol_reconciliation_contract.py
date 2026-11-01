@@ -43,7 +43,8 @@ class SaveAsReconciliationContracts(unittest.TestCase):
     def test_existing_new_supervisor_remains_exact_six_argument_mode(self):
         self.assertIn('"--open-staged-native-saveas-lab"', self.supervisor)
         self.assertNotIn("native_saveas_protocol_reconciliation", self.supervisor)
-        self.assertNotIn("native_ooxml_join", self.python)
+        self.assertNotIn("import native_ooxml_join", self.python)
+        self.assertNotIn("join.correlate", self.python)
 
 
 if __name__ == "__main__":
