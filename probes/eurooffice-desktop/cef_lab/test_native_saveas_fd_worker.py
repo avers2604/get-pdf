@@ -46,6 +46,7 @@ def kernel():
     }
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "Linux-only FD worker protocol")
 class FdWorkerProtocolTests(unittest.TestCase):
     def test_exact_request_without_paths_permissions_or_write_operation(self):
         validated = worker.parse_request(manifest())
