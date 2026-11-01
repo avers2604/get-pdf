@@ -233,7 +233,8 @@ def diagnostic(request, reason: str):
 
 def _linux_kernel_facts(peer_pid: int):
     try:
-        raw = open("/proc/self/status", "r", encoding="ascii").read(32768)
+        with open("/proc/self/status", "r", encoding="ascii") as status_file:
+            raw = status_file.read(32768)
         status = {}
         for line in raw.splitlines():
             key, _, value = line.partition(":")
@@ -253,6 +254,7 @@ def _receive_exact_three(sock: socket.socket):
     ancillary_size = socket.CMSG_SPACE(ROLE_COUNT * fds.itemsize)
     if not hasattr(socket, "MSG_CMSG_CLOEXEC"):
         raise WorkerError("SCM_RIGHTS CLOEXEC kernel support required")
+    transferred = False
     try:
         payload, ancillary, flags, _ = sock.recvmsg(
             MAX_REQUEST_BYTES + 1, ancillary_size,
@@ -266,13 +268,14 @@ def _receive_exact_three(sock: socket.socket):
                 any(level != socket.SOL_SOCKET or kind != socket.SCM_RIGHTS
                     for level, kind, _ in ancillary)):
             raise WorkerError("Unexpected worker FD payload or truncated packet")
+        transferred = True
         return payload, list(fds)
     except (OSError, socket.timeout) as exc:
         raise WorkerError("Worker socket packet unavailable") from exc
     finally:
         # Handles are transferred to the caller only on success. On any
         # failure close all received handles; the trusted broker owns none.
-        if sys.exc_info()[0] is not None:
+        if not transferred:
             for fd in fds:
                 try:
                     os.close(fd)
