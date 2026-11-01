@@ -13,6 +13,22 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27c_pinned_v2_keeps_native_telemetry_offline_and_manual(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, test in (
+            ("pinned-native-saveas-event-v2-tests", "test_native_pinned_saveas_event_v2.py"),
+            ("pinned-native-saveas-event-v2-source-contract-tests",
+             "test_native_pinned_saveas_event_v2_contract.py"),
+            ("pinned-native-event-v2-ooxml-join-tests",
+             "test_native_pinned_event_ooxml_join.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(test, next(x for x in steps if x.name == gate).command)
+        self.assertIn("eurooffice-pinned-native-v2-callback-counts-and-ooxml-join-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j27b_protocol_diagnostics_remain_offline_and_manual(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [item.name for item in steps]
