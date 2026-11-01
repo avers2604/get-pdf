@@ -129,7 +129,9 @@ def parse(raw, session, tab, fixture):
     unchanged = _boolean(base, "sourceUnchanged")
     published = _boolean(base, "publishedToDisposableOutput")
     sha = _string(base, "outputSha256")
-    if (request != (d == 1) or (target and d == 0) or
+    if ((request and d == 0) or
+            (d == 1 and not invalid and not request) or
+            (target and d == 0) or
             (saved and (n == 0 or not target)) or
             (cancelled and (n == 0 or not target)) or
             (saved and cancelled) or
