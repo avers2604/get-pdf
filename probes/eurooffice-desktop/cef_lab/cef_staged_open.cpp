@@ -303,8 +303,18 @@ public:
                             expectedViewId.load(std::memory_order_acquire)) {
                         requestedFileType.store(request->get_FileType(), std::memory_order_release);
                         // Count typed and sender-matched requests in BOTH versions.
-                        // The v2 total dialog count also includes invalid requests.
-                        saveRequestCount.fetch_add(1, std::memory_order_acq_rel);
+                        // V2 caps the count to prevent signed overflow under a storm;
+                        // legacy v1 keeps the pre-existing behavior unchanged.
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+                        if (eventV2) {
+                            Gd31J27F::TickBounded(
+                                saveRequestCount, Gd31J27F::MAX_DIALOG_EVENTS,
+                                v2EventBudgetOverflow);
+                            if (v2EventBudgetOverflow.load(std::memory_order_acquire))
+                                v2TerminalAbort.store(true, std::memory_order_release);
+                        } else
+#endif
+                            saveRequestCount.fetch_add(1, std::memory_order_acq_rel);
                         savePathRequested.store(true, std::memory_order_release);
                     } else {
 #ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
