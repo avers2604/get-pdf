@@ -101,7 +101,7 @@ class ReconciliationTests(unittest.TestCase):
     def test_legacy_detailed_failure_remains_diagnostic_only(self):
         receipt = legacy_receipt()
         receipt["failureCode"] = "duplicate_dialog"
-        receipt["phase"] = "dialog_observed"
+        receipt["phase"] = "target_assigned"
         receipt["dialogCount"] = 2
         receipt["onSaveCount"] = 0
         receipt["onSaveSequence"] = 0
