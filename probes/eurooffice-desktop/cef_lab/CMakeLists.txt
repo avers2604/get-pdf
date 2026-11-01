@@ -32,6 +32,16 @@ option(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB "Observe untrusted renderer content
 # Requires the same two pinned rebuilt SDK libraries as GD31J24, plus separate
 # offline writable-output isolation approval. Never enabled by default.
 option(GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB "Isolated synthetic SaveAs via exact vendor event" OFF)
+# Extra explicit opt-in: v2 adds bounded telemetry, never changes legacy v1 stdout.
+option(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB "Pinned native SaveAs event v2 diagnostic for isolated synthetic VM" OFF)
+if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
+  if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
+    message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
+  endif()
+  if(NOT GETDOC_GD31J27C_EVENT_V2_ISOLATION_CONFIRMED)
+    message(FATAL_ERROR "GD-31J.27c requires separately confirmed disposable offline VM isolation.")
+  endif()
+endif()
 if(GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
   if(NOT GETDOC_GD31J24_ENABLE_READY_EVENT_LAB)
     message(FATAL_ERROR "GD-31J.26 requires separately approved patched GD-31J.24 ready bridge.")
@@ -233,6 +243,11 @@ if(GETDOC_GD31J6_ENABLE_STAGED_OPEN_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
         GETDOC_GD31J26_NATIVE_SAVEAS_LAB=1)
     message(WARNING "GD-31J.26: modified synthetic shadow to disposable output via SDK SaveAs events; not a verified or production save.")
+  endif()
+  if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
+    target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
+        GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB=1)
+    message(WARNING "GD-31J.27c: untrusted synthetic native event-v2 telemetry ONLY; no user SaveAs authority.")
   endif()
   if(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB)
     target_compile_definitions(getdoc-eurooffice-cef-staged-open-lab PRIVATE
