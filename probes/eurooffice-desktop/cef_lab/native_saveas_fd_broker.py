@@ -119,11 +119,14 @@ class BrokerSession:
                 approved_disposable_vm is not True or
                 type(broker_uid) is not int or
                 type(expected_worker_uid) is not int or
-                broker_uid < 0 or expected_worker_uid <= 0 or
+                broker_uid <= 0 or expected_worker_uid <= 0 or
                 expected_worker_uid == broker_uid or
                 broker_uid != os.geteuid()):
             raise BrokerError("External VM/UID boundary not approved")
-        request = worker.parse_request(packet)
+        try:
+            request = worker.parse_request(packet)
+        except worker.WorkerError as exc:
+            raise BrokerError("Rejected exact synthetic worker request") from exc
         if len(packet) > MAX_SEND_BYTES:
             raise BrokerError("Oversized broker request")
         _valid_fd_roles(fds)
