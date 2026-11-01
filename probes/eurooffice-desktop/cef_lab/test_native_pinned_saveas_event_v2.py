@@ -96,6 +96,24 @@ class PinnedNativeEventV2Tests(unittest.TestCase):
                 r = self.parse(envelope(**changes))
                 self.assertEqual("unconfirmed", r["diagnosticState"])
 
+    def test_duplicate_on_save_is_unconfirmed_but_remains_precisely_diagnostic(self):
+        result = self.parse(envelope(
+            failureCode="duplicate_on_save", phase="on_save_observed",
+            onSaveCount=2, dialogSequence=1, onSaveSequence=2,
+            receipt=nested(publishedToDisposableOutput=False, outputSha256="")))
+        self.assertEqual("duplicate_on_save", result["failureCode"])
+        self.assertFalse(result["nativeCallbackSequenceSelfReported"])
+        self.assertEqual("", result["outputSha256"])
+
+    def test_timeout_after_onsave_cannot_be_a_published_candidate(self):
+        result = self.parse(envelope(
+            failureCode="timeout", phase="on_save_observed",
+            receipt=nested(publishedToDisposableOutput=False, outputSha256="")))
+        self.assertEqual("timeout", result["failureCode"])
+        self.assertEqual("unconfirmed", result["diagnosticState"])
+        with self.assertRaises(v2.PinnedEventError):
+            self.parse(envelope(failureCode="timeout"))
+
     def test_forged_privileges_counts_sequences_and_schema_refused(self):
         base = envelope()
         for candidate in (
