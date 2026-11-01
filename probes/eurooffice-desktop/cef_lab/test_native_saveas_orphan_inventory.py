@@ -121,7 +121,10 @@ class OrphanInventoryTests(unittest.TestCase):
             (output / "gd31j25_writer_saved.docx").write_bytes(b"saved")
             self.age(private)
             result = inventory.scan(Path(tmp), now=time.time() + 90000)
-            self.assertEqual(1, result["eligibleForManualReview"])
+            # Different final inode cannot be called our published link.
+            self.assertEqual(0, result["eligibleForManualReview"])
+            self.assertEqual(1, result["rejected"])
+            self.assertEqual(0, result["linkedPublicationPendingReview"])
             self.assertTrue((output / "gd31j25_writer_saved.docx").exists())
 
 
