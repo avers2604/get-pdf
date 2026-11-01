@@ -89,6 +89,17 @@ class SyntheticRoundTripTests(unittest.TestCase):
                 self.assertNotEqual(result["outputSha256"], result["sourceSha256"])
                 self.assertEqual((root / name).read_bytes(), original)
 
+    def test_hardlinked_final_output_requires_manual_crash_reconciliation(self):
+        import os
+        for name in FIXTURES:
+            with self.subTest(fixture=name), tempfile.TemporaryDirectory() as tmp:
+                root, output, _ = environment(tmp, name)
+                # Emulates process termination between linkat() and QTemporaryDir cleanup.
+                os.link(output, root / ("synthetic-still-linked-" + output.name))
+                with self.assertRaises(lab.LabError):
+                    lab.verify(root, name)
+                self.assertTrue(output.exists())
+
     def test_unmodified_copy_does_not_pass(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, output, _ = environment(tmp, "gd31j6_writer.docx")
