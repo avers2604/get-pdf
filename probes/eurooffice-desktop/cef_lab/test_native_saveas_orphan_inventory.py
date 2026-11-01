@@ -37,7 +37,7 @@ class OrphanInventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             _, private = self.prepare(tmp)
             self.age(private)
-            result = inventory.scan(Path(tmp), now=time.time())
+            result = inventory.scan(Path(tmp), now=time.time() + 90000)
             self.assertEqual(1, result["eligibleForManualReview"])
             self.assertEqual(0, result["rejected"])
             self.assertEqual(["gd31j26-private-ABCDEF"], result["scratchNames"])
@@ -68,7 +68,7 @@ class OrphanInventoryTests(unittest.TestCase):
                 elif mutation == "group_write":
                     private.chmod(0o770)
                 self.age(private)
-                result = inventory.scan(Path(tmp), now=time.time())
+                result = inventory.scan(Path(tmp), now=time.time() + 90000)
                 self.assertEqual(0, result["eligibleForManualReview"])
                 self.assertFalse(result["safeToDeleteAutomatically"])
                 self.assertTrue(private.exists())
@@ -120,7 +120,7 @@ class OrphanInventoryTests(unittest.TestCase):
             output, private = self.prepare(tmp)
             (output / "gd31j25_writer_saved.docx").write_bytes(b"saved")
             self.age(private)
-            result = inventory.scan(Path(tmp), now=time.time())
+            result = inventory.scan(Path(tmp), now=time.time() + 90000)
             self.assertEqual(1, result["eligibleForManualReview"])
             self.assertTrue((output / "gd31j25_writer_saved.docx").exists())
 
