@@ -49,6 +49,13 @@ option(GETDOC_GD31J27M_ENABLE_BROKER_PUBLICATION_LAB "Blocked external-broker pu
 if(GETDOC_GD31J27M_ENABLE_BROKER_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27M_BLOCKED: external supervisor not audited; worker publication unavailable")
 endif()
+# GD31J27n: the blocked systemd policy is a review specimen, not a trusted
+# launcher. The kernel observer can refuse unsafe runtime facts but cannot
+# attest seccomp BPF semantics or corporate mount absence. No worker publish.
+option(GETDOC_GD31J27N_ENABLE_SANDBOX_WORKER_PUBLICATION_LAB "Blocked until independently attested Linux/Astra VM sandbox and worker-side SaveAs" OFF)
+if(GETDOC_GD31J27N_ENABLE_SANDBOX_WORKER_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27N_BLOCKED: no verified separate-UID system launcher, accepted isolation or worker publication")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")

@@ -1,0 +1,49 @@
+# GD31J27n EXAMPLE ONLY — NEVER INSTALL/ENABLE ON REAL MACHINES.
+# Not a working launcher. Its ExecStart is /usr/bin/false, intentionally.
+# A future reviewed external supervisor must create a connected seqpacket
+# socket *after* separate worker UID is in effect and pass it as FD 3, with
+# three source/directory FDs supplied by a trusted authority. systemd alone
+# does not satisfy this wire protocol or attestation.
+[Unit]
+Description=GET Document synthetic SaveAs worker — blocked policy specimen
+RefuseManualStart=yes
+ConditionPathExists=/run/getdoc-gd31j27n/APPROVAL_NEVER_AUTOCREATE
+
+[Service]
+Type=exec
+User=getdoc-lab-saveas-worker
+Group=getdoc-lab-saveas-worker
+UMask=0077
+ExecStart=/usr/bin/false
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateMounts=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RemoveIPC=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+TasksMax=16
+TimeoutStartSec=5s
+TimeoutStopSec=2s
+Restart=no
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+
+[Install]
+# Intentionally NO WantedBy: cannot be automatically enabled.

@@ -47,6 +47,7 @@ CASES = (
     "same-uid-writer-after-anonymous-snapshot",
     "worker-fd-only-distinct-uid-mount-net-seccomp",
     "broker-peercred-one-shot-fd-handoff-no-privileges",
+    "worker-live-proc-status-namespace-mountinfo-caps-deny",
     "scratch-and-final-on-different-filesystems",
     "file-fsync-denied-before-linkat",
     "directory-fsync-denied-after-linkat",
@@ -78,6 +79,7 @@ REQUIRED_MANUAL_GATES = (
     "eurooffice-gd31j27k-owner-only-unlinked-snapshot-same-uid-writer-e2e",
     "eurooffice-gd31j27l-distinct-uid-fd3-worker-isolation-e2e",
     "eurooffice-gd31j27m-external-broker-fd-handoff-isolation-e2e",
+    "eurooffice-gd31j27n-live-linux-kernel-sandbox-observer-e2e",
 )
 REQUIRED_AUTOMATED_STEPS = tuple(step.name for step in
     acceptance.build_steps(Path("/unused"), Path("/offline-feed"), "Linux"))
