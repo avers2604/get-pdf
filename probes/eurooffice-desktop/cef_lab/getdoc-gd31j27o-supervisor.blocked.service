@@ -1,0 +1,41 @@
+# GD31J27o — STATIC REVIEW SPECIMEN, NEVER INSTALL OR ENABLE.
+# No production launcher is supplied. ExecStart intentionally exits denied.
+# A real supervisor must establish peer credentials AFTER UID setup, create
+# a preconnected SOCK_SEQPACKET on FD3, and supply approved FD roles.
+# Checking /proc on a different UID may be forbidden; fail closed.
+[Unit]
+Description=GET Document isolated SaveAs supervisor — disabled specimen
+RefuseManualStart=yes
+ConditionPathExists=/run/getdoc-gd31j27o/OPERATOR_APPROVAL_NEVER_AUTOCREATE
+
+[Service]
+Type=exec
+User=getdoc-lab-supervisor
+Group=getdoc-lab-supervisor
+UMask=0077
+ExecStart=/usr/bin/false
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateMounts=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+MemoryDenyWriteExecute=yes
+TasksMax=8
+TimeoutStartSec=5s
+Restart=no
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+# No [Install] section, no WantedBy, no privileged helper, no FD inheritance.
