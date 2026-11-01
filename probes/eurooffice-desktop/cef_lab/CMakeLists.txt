@@ -34,6 +34,13 @@ option(GETDOC_GD31J24_ENABLE_READY_EVENT_LAB "Observe untrusted renderer content
 option(GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB "Isolated synthetic SaveAs via exact vendor event" OFF)
 # Extra explicit opt-in: v2 adds bounded telemetry, never changes legacy v1 stdout.
 option(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB "Pinned native SaveAs event v2 diagnostic for isolated synthetic VM" OFF)
+# GD31J27l: the standalone FD worker has no audited privileged broker,
+# no service account provisioning and no VM validation. Never wire it into
+# CEF or enable native publication via a CMake opt-in alone.
+option(GETDOC_GD31J27L_ENABLE_ISOLATED_WORKER_LAB "Experimental FD worker; blocked until external sandbox broker audit" OFF)
+if(GETDOC_GD31J27L_ENABLE_ISOLATED_WORKER_LAB)
+  message(FATAL_ERROR "GD31J27L_BLOCKED: no audited separate-UID broker, namespace policy or VM acceptance")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
