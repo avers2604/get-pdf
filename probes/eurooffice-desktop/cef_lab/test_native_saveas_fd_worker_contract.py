@@ -65,6 +65,8 @@ class NativeFdWorkerSourceContracts(unittest.TestCase):
             'option(GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB '
             '"Isolated synthetic SaveAs via exact vendor event" OFF)',
             self.cmake)
+        self.assertIn('option(GETDOC_GD31J27L_ENABLE_ISOLATED_WORKER_LAB', self.cmake)
+        self.assertIn('message(FATAL_ERROR "GD31J27L_BLOCKED:', self.cmake)
         self.assertIn("NativeSaveAsPublish(", self.policy)
         self.assertNotIn("native_saveas_fd_worker.py", self.policy)
         self.assertNotIn("native_saveas_fd_worker.py", self.cmake)
