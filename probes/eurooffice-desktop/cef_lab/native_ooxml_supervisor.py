@@ -68,12 +68,15 @@ def _binary_digest(path: Path) -> str:
         raise SupervisorError("Native host pin check failed") from exc
 
 
-def capture_native(argv: list[str], env: dict[str, str]) -> tuple[int, bytes]:
+def capture_native(argv: list[str], env: dict[str, str],
+                   *, max_stdout_bytes: int = join.MAX_NATIVE_BYTES + 1) -> tuple[int, bytes]:
     """Launch one host; bound captured stdout/elapsed time, never invoke shell or read stderr.
 
     An executable SHA sampled before/after is only evidence. It is NOT a kernel
     guarantee against concurrent privileged binary replacement or injected code.
     """
+    if type(max_stdout_bytes) is not int or not 64 <= max_stdout_bytes <= 8192:
+        raise SupervisorError("Invalid native stdout bound")
     if not sys.platform.startswith("linux"):
         raise SupervisorError("Native CEF SaveAs lab is supported only on Linux/Wayland")
     process = None
@@ -101,7 +104,7 @@ def capture_native(argv: list[str], env: dict[str, str]) -> tuple[int, bytes]:
                 eof = True
             else:
                 collected.extend(block)
-                if len(collected) > join.MAX_NATIVE_BYTES + 1:
+                if len(collected) > max_stdout_bytes:
                     raise SupervisorError("Native stdout exceeds the strict receipt budget")
         remaining = expiry - time.monotonic()
         if remaining <= 0:
