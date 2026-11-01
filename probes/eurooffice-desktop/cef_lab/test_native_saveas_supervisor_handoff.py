@@ -113,7 +113,8 @@ class SupervisorHandoffTests(unittest.TestCase):
             handoff.read_actual_handoff(FakeSock(),
                                         expected_worker_pid=22001,
                                         expected_worker_uid=40002,
-                                        broker_uid=40001)
+                                        broker_uid=40001,
+                                        expected_worker_start_ticks=1200)
 
     def test_snapshot_does_not_override_external_profile_or_create_process(self):
         self.assertEqual("blocked", handoff.default_handoff_gate()["state"])
