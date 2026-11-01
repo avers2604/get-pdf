@@ -13,6 +13,17 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27f_bounded_native_callback_close_is_deferred_and_manual(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        target = "pinned-saveas-event-budget-lifecycle-source-contract-tests"
+        self.assertIn(target, names)
+        self.assertLess(names.index(target), names.index("solution-restore"))
+        self.assertIn("test_native_saveas_event_budget_contract.py",
+                      next(x for x in steps if x.name == target).command)
+        self.assertIn("eurooffice-pinned-v2-bounded-callback-shutdown-operator-ui-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j27e_state_machine_negative_matrix_is_offline_and_manual(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
