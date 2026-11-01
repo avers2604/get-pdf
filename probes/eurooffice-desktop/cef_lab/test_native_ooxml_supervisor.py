@@ -19,12 +19,12 @@ from test_native_ooxml_join import SESSION, TAB, native_receipt, setup_case
 
 
 class SupervisedNativeReceiptTests(unittest.TestCase):
-    def prepare(self, tmp):
+    def prepare(self, tmp, name=ooxml.FIXTURES[0]):
         root = Path(tmp)
         # The fixture helper expects an already existing root directory.
         source = root / "staging"
         source.mkdir()
-        staging, output, _, _ = setup_case(source, ooxml.FIXTURES[0])
+        staging, output, _, _ = setup_case(source, name)
         content = output.read_bytes()
         digest = hashlib.sha256(content).hexdigest()
         output.unlink()  # Must not exist before native SaveAs.
@@ -36,8 +36,8 @@ class SupervisedNativeReceiptTests(unittest.TestCase):
 
     def exercise(self, staging, output, content, digest, binary, pin, *,
                  receipt_changes=None, exit_code=0, extra=b"", mutate_host=False,
-                 ack=True, platform="wayland"):
-        name = ooxml.FIXTURES[0]
+                 ack=True, platform="wayland", fixture_name=ooxml.FIXTURES[0]):
+        name = fixture_name
         def fake_capture(argv, env):
             self.assertEqual(str(binary), argv[0])
             self.assertEqual(["--open-staged-native-saveas-lab", str(staging),
@@ -53,21 +53,23 @@ class SupervisedNativeReceiptTests(unittest.TestCase):
             approved_disposable_vm=ack,
             env={"QT_QPA_PLATFORM": platform}, capture=fake_capture)
 
-    def test_accepted_synthetic_candidate_retains_denied_privileges(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            args = self.prepare(tmp)
-            receipt = self.exercise(*args)
-            self.assertEqual(supervisor.ENVELOPE_SCHEMA, receipt["schema"])
-            self.assertTrue(receipt["nativeProcessExitZero"])
-            self.assertTrue(receipt["nativeBinaryPinMatched"])
-            self.assertTrue(receipt["stdoutSingleLineBounded"])
-            self.assertEqual(args[-1], receipt["nativeBinarySha256"])
-            self.assertTrue(receipt["joinedCandidate"]["outputDigestCorrelated"])
-            self.assertFalse(receipt["nativeSaveProven"])
-            self.assertFalse(receipt["approvedForProduction"])
-            self.assertFalse(receipt["joinedCandidate"]["documentVerified"])
-            self.assertEqual("getdoc-native-ooxml-joined-candidate-lab/1",
-                             receipt["joinedCandidate"]["schema"])
+    def test_all_three_synthetic_formats_remain_diagnostic_only(self):
+        for name in ooxml.FIXTURES:
+            with self.subTest(fixture=name), tempfile.TemporaryDirectory() as tmp:
+                args = self.prepare(tmp, name)
+                receipt = self.exercise(*args, fixture_name=name)
+                self.assertEqual(supervisor.ENVELOPE_SCHEMA, receipt["schema"])
+                self.assertTrue(receipt["nativeProcessExitZero"])
+                self.assertTrue(receipt["nativeBinaryPinMatched"])
+                self.assertTrue(receipt["stdoutSingleLineBounded"])
+                self.assertEqual(args[-1], receipt["nativeBinarySha256"])
+                self.assertEqual(name, receipt["joinedCandidate"]["fixtureName"])
+                self.assertTrue(receipt["joinedCandidate"]["outputDigestCorrelated"])
+                self.assertFalse(receipt["nativeSaveProven"])
+                self.assertFalse(receipt["approvedForProduction"])
+                self.assertFalse(receipt["joinedCandidate"]["documentVerified"])
+                self.assertEqual("getdoc-native-ooxml-joined-candidate-lab/1",
+                                 receipt["joinedCandidate"]["schema"])
 
     def test_refuses_unapproved_vm_wrong_platform_and_wrong_binary_pin(self):
         for change in ("ack", "platform", "pin"):
