@@ -69,6 +69,8 @@ class FakeSocket:
                      "Linux kernel credential and FD broker")
 class BrokerHandoffTests(unittest.TestCase):
     def setUp(self):
+        if os.geteuid() == 0:
+            self.skipTest("Unprivileged broker tests must never run as root")
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
         self.source = root / FIXTURE
