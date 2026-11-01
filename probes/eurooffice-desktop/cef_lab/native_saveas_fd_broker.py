@@ -111,7 +111,7 @@ class BrokerSession:
 
     def handoff(self, sock: socket.socket, packet: bytes, fds, *,
                 broker_uid: int, expected_worker_uid: int,
-                approved_disposable_vm: bool):
+                approved_disposable_vm: bool, approved_fixture_hashes: dict):
         if self.consumed:
             raise BrokerError("Broker session already consumed")
         self.consumed = True   # Even a failed preflight is not replayable.
@@ -127,6 +127,14 @@ class BrokerSession:
             request = worker.parse_request(packet)
         except worker.WorkerError as exc:
             raise BrokerError("Rejected exact synthetic worker request") from exc
+        # Peer-provided SHA is NOT authority. The external trusted operator
+        # must independently pin all three synthetic fixture digest values.
+        if (type(approved_fixture_hashes) is not dict or
+                set(approved_fixture_hashes) != set(worker.FIXTURES) or
+                any(type(d) is not str or not worker.SHA.fullmatch(d) or
+                    d == "0" * 64 for d in approved_fixture_hashes.values()) or
+                request["sourceSha256"] != approved_fixture_hashes[request["fixtureName"]]):
+            raise BrokerError("Synthetic fixture digest not independently pinned")
         if len(packet) > MAX_SEND_BYTES:
             raise BrokerError("Oversized broker request")
         _valid_fd_roles(fds)
