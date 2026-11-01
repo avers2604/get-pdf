@@ -139,7 +139,7 @@ inline bool DurableExclusivePublish(const QString& scratchDir,
         !ExactOwnedMarker(scratch.value, PRIVATE_MARKER_NAME,
                           QByteArray(GD31J27G_PRIVATE_SCRATCH_ONLY)) ||
         !ExactOwnedMarker(output.value, "gd31j25-output-lab.marker",
-                          QByteArray("GETDOC_GD31J25_DISPOSABLE_OUTPUT_ONLY\\n")))
+                          QByteArray("GETDOC_GD31J25_DISPOSABLE_OUTPUT_ONLY\n")))
         return false;
     struct stat fromDir{}, toDir{};
     if (::fstat(scratch.value, &fromDir) != 0 ||
