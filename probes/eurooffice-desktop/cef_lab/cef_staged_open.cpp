@@ -246,10 +246,9 @@ public:
                     if (request && request->get_Id() ==
                             expectedViewId.load(std::memory_order_acquire)) {
                         requestedFileType.store(request->get_FileType(), std::memory_order_release);
-#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
-                        if (!eventV2)
-#endif
-                            saveRequestCount.fetch_add(1, std::memory_order_acq_rel);
+                        // Count typed and sender-matched requests in BOTH versions.
+                        // The v2 total dialog count also includes invalid requests.
+                        saveRequestCount.fetch_add(1, std::memory_order_acq_rel);
                         savePathRequested.store(true, std::memory_order_release);
                     } else {
 #ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
