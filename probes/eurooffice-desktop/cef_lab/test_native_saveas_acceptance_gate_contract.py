@@ -24,12 +24,14 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
         cls.policy = (LAB / "native_saveas_policy.h").read_text("utf-8")
 
     def test_all_native_stages_are_explicit_and_nonoptional_manual_gates(self):
-        self.assertEqual(14, len(gate.REQUIRED_MANUAL_GATES))
+        self.assertEqual(15, len(gate.REQUIRED_MANUAL_GATES))
         self.assertEqual(len(gate.REQUIRED_MANUAL_GATES),
                          len(set(gate.REQUIRED_MANUAL_GATES)))
         self.assertTrue(set(gate.REQUIRED_MANUAL_GATES).issubset(
             acceptance.MANUAL_GATES))
         self.assertIn("eurooffice-gd31j27h-v1-v2-native-ooxml-crash-lineage-e2e",
+                      gate.REQUIRED_MANUAL_GATES)
+        self.assertIn("eurooffice-gd31j27j-fd-bound-link-no-path-swap-e2e",
                       gate.REQUIRED_MANUAL_GATES)
 
     def test_all_fault_scenarios_are_required_and_machine_readable(self):
