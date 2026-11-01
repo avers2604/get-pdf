@@ -54,7 +54,7 @@ public sealed class EuroOfficePinnedNativeSaveAsEventV2
     private static readonly HashSet<string> FailureCodes = new(StringComparer.Ordinal)
     {
         "candidate_untrusted", "invalid_dialog", "duplicate_dialog",
-        "unexpected_on_save", "cancelled", "source_modified",
+        "unexpected_on_save", "duplicate_on_save", "cancelled", "source_modified",
         "dialog_missing", "target_not_assigned", "timeout",
         "save_not_acknowledged", "candidate_missing"
     };
@@ -138,14 +138,17 @@ public sealed class EuroOfficePinnedNativeSaveAsEventV2
             string expectedCode = invalid ? "invalid_dialog" :
                 dialogs > 1 ? "duplicate_dialog" :
                 unexpected ? "unexpected_on_save" :
+                saves > 1 ? "duplicate_on_save" :
                 cancelled ? "cancelled" :
                 !unchanged ? "source_modified" :
                 dialogs == 0 ? "dialog_missing" :
                 !path ? "target_not_assigned" :
                 !after ? "save_not_acknowledged" :
                 !published ? "candidate_missing" : "candidate_untrusted";
-            if (code != expectedCode && !(expectedCode == "save_not_acknowledged" &&
-                                          code == "timeout"))
+            if (code != expectedCode &&
+                !((expectedCode == "save_not_acknowledged" ||
+                   expectedCode == "candidate_missing") &&
+                  !published && code == "timeout"))
                 throw new InvalidDataException("Pinned v2 reported reason contradicts events.");
 
             if (published)
