@@ -9,7 +9,10 @@
 #include <QString>
 #include <cerrno>
 #include <fcntl.h>
+#include <linux/magic.h>
+#include <string>
 #include <sys/stat.h>
+#include <sys/vfs.h>
 #include <unistd.h>
 
 namespace Gd31J27G {
@@ -122,6 +125,38 @@ inline bool fsync_output(int fd) {
     return ::fsync(fd) == 0;
 }
 
+// GD31J27j: bind the hardlink to the exact OPEN verified inode, never to the
+// source filename after validation. AT_EMPTY_PATH requires CAP_DAC_READ_SEARCH
+// on some Linux kernels: ordinary disposable-VM users can instead use the
+// procfs fd magic-link, following the documented linkat(2) approach.
+// The fallback is permitted ONLY when /proc/self/fd is a real procfs mount.
+// No path-based scratch/name fallback is allowed, including on older kernels.
+// Return false on EEXIST, EACCES, unsupported or invalid procfs.
+inline bool LinkVerifiedSourceFd(int sourceFd, int outputFd,
+                                 const char* basename) {
+    if (sourceFd < 0 || outputFd < 0 || !basename ||
+        !SafeBasename(QString::fromLatin1(basename)))
+        return false;
+#ifdef AT_EMPTY_PATH
+    if (::linkat(sourceFd, "", outputFd, basename, AT_EMPTY_PATH) == 0)
+        return true;
+    const int emptyPathError = errno;
+    if (emptyPathError != EPERM && emptyPathError != EINVAL &&
+        emptyPathError != ENOENT && emptyPathError != EOPNOTSUPP)
+        return false; // In particular: EEXIST is final; never retry.
+#endif
+    Fd procFdDirectory(::open("/proc/self/fd",
+                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+    struct statfs procfs{};
+    if (!procFdDirectory.ok() ||
+        ::fstatfs(procFdDirectory.value, &procfs) != 0 ||
+        procfs.f_type != PROC_SUPER_MAGIC)
+        return false; // A spoofable proc path cannot create a trusted link.
+    const std::string fdName = std::to_string(sourceFd);
+    return ::linkat(procFdDirectory.value, fdName.c_str(),
+                    outputFd, basename, AT_SYMLINK_FOLLOW) == 0;
+}
+
 // Output durability sequence:
 // validate exact source inode+content -> fsync(file) -> linkat with
 // no-replace -> confirm SAME inode at both names -> fsync(final directory).
@@ -170,14 +205,25 @@ inline bool DurableExclusivePublish(const QString& scratchDir,
         before.st_ctim.tv_sec != latest.st_ctim.tv_sec ||
         before.st_ctim.tv_nsec != latest.st_ctim.tv_nsec)
         return false;
-    // Exclusive hardlink: EEXIST means another file won. No replace.
-    if (::linkat(scratch.value, name.constData(),
-                 output.value, name.constData(), 0) != 0)
+    // The path is used ONLY for a preflight identity check. The publish
+    // syscall receives the verified open FD, not mutable scratch+basename.
+    // Exclusive hardlink: EEXIST means another file won. Never overwrite.
+    if (!LinkVerifiedSourceFd(source.value, output.value,
+                              name.constData()))
         return false;
-    struct stat published{};
-    if (::fstatat(output.value, name.constData(), &published,
+    // After linkat, the inode legitimately has 2 names. If any entry was
+    // swapped or an extra link was created, refuse; never unlink the final.
+    struct stat sourceSnapshot{}, sourceNamed{}, published{};
+    if (::fstat(source.value, &sourceSnapshot) != 0 ||
+        ::fstatat(scratch.value, name.constData(), &sourceNamed,
                   AT_SYMLINK_NOFOLLOW) != 0 ||
-        !SameFile(latest, published))
+        ::fstatat(output.value, name.constData(), &published,
+                  AT_SYMLINK_NOFOLLOW) != 0 ||
+        !SameFile(latest, sourceSnapshot) ||
+        !SameFile(sourceSnapshot, sourceNamed) ||
+        !SameFile(sourceSnapshot, published) ||
+        sourceSnapshot.st_nlink != 2 || published.st_nlink != 2 ||
+        !StableFdDigest(source.value, expectedSha))
         return false; // unknown durability; final may exist, NEVER unlink.
     if (::fsync(output.value) != 0)
         return false; // unknown durability; final may exist, NEVER unlink.
