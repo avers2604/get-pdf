@@ -13,6 +13,22 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27b_protocol_diagnostics_remain_offline_and_manual(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [item.name for item in steps]
+        for gate, file in (
+            ("native-saveas-protocol-reconciliation-tests",
+             "test_native_saveas_protocol_reconciliation.py"),
+            ("native-saveas-protocol-reconciliation-source-contract-tests",
+             "test_native_saveas_protocol_reconciliation_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(file, next(item for item in steps
+                                     if item.name == gate).command)
+        self.assertIn("eurooffice-v1-v2-saveas-protocol-lineage-reconciliation-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j27a_supervised_native_receipt_is_deferred_and_fail_closed(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
