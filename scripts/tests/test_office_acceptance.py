@@ -13,6 +13,22 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27g_durable_no_replace_and_crash_orphan_review_are_deferred(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, filename in (
+            ("native-saveas-durable-policy-source-contract-tests",
+             "test_native_saveas_durable_policy_contract.py"),
+            ("native-saveas-orphan-read-only-inventory-tests",
+             "test_native_saveas_orphan_inventory.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(filename,
+                          next(item for item in steps if item.name == gate).command)
+        self.assertIn("eurooffice-gd31j27g-fsync-no-replace-crash-recovery-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j27f_bounded_native_callback_close_is_deferred_and_manual(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
