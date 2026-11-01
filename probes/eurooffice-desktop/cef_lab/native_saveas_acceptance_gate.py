@@ -45,6 +45,7 @@ CASES = (
     "existing-final-never-overwritten",
     "source-name-swap-during-linkat",
     "same-uid-writer-after-anonymous-snapshot",
+    "worker-fd-only-distinct-uid-mount-net-seccomp",
     "scratch-and-final-on-different-filesystems",
     "file-fsync-denied-before-linkat",
     "directory-fsync-denied-after-linkat",
@@ -74,6 +75,7 @@ REQUIRED_MANUAL_GATES = (
     "eurooffice-gd31j27h-v1-v2-native-ooxml-crash-lineage-e2e",
     "eurooffice-gd31j27j-fd-bound-link-no-path-swap-e2e",
     "eurooffice-gd31j27k-owner-only-unlinked-snapshot-same-uid-writer-e2e",
+    "eurooffice-gd31j27l-distinct-uid-fd3-worker-isolation-e2e",
 )
 REQUIRED_AUTOMATED_STEPS = tuple(step.name for step in
     acceptance.build_steps(Path("/unused"), Path("/offline-feed"), "Linux"))
