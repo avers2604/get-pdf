@@ -159,7 +159,7 @@ class BrokerSession:
             if flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC) or ancillary:
                 raise BrokerError("Unexpected worker reply ancillary data")
             _exact_reply(reply, request)
-        except (OSError, ValueError, socket.timeout) as exc:
+        except (OSError, ValueError, socket.timeout, struct.error) as exc:
             if isinstance(exc, BrokerError):
                 raise
             raise BrokerError("External isolated worker communication failed") from exc
