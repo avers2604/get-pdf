@@ -765,6 +765,9 @@ int main(int argc, char** argv) {
                 eventObserver.saveDialogCount.load(std::memory_order_acquire) == 0 &&
                 eventObserver.saveOnSaveCount.load(std::memory_order_acquire) == 0) {
                 eventObserver.v2OperatorApproved.store(true, std::memory_order_release);
+                // Arm synchronously on the explicit click. Waiting until the
+                // next 100ms timer could reject a legitimate immediate SaveAs.
+                eventObserver.v2DialogArmed.store(true, std::memory_order_release);
                 v2ArmButton->setEnabled(false);
                 v2ArmButton->setText(QString::fromUtf8(
                     "Разрешено: вызовите Save As в синтетическом редакторе"));
