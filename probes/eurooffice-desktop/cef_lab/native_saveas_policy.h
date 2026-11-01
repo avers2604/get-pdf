@@ -12,6 +12,7 @@
 #include <QString>
 #include <memory>
 #include <unistd.h>
+#include "native_saveas_durable.h"
 
 namespace Gd31J26 {
 struct NativeSaveAsStaging {
@@ -96,7 +97,10 @@ inline bool PrepareSyntheticShadow(const QString& sourcePath,
     if (sha.isEmpty()) return false;
     auto scratch = std::make_unique<QTemporaryDir>(
         QDir(outputRoot).filePath("gd31j26-private-XXXXXX"));
-    if (!scratch->isValid() || !NoLinksInPath(scratch->path())) return false;
+    if (!scratch->isValid() || !NoLinksInPath(scratch->path()) ||
+        !Gd31J27G::CreateScratchMarker(scratch->path()) ||
+        !Gd31J27G::SyncScratchParent(outputRoot))
+        return false;
     const QString shadowPath = QDir(scratch->path()).filePath(fixture);
     if (!QFile::copy(sourcePath, shadowPath) ||
         LabSourceSha256(sourcePath) != sha ||
@@ -121,7 +125,16 @@ inline bool NativeSaveAsPublish(const NativeSaveAsStaging& stage,
     if (!nativeCallbackCompleted || !stage.scratch ||
         !NoLinksInPath(stage.nativeOutputPath) ||
         !NoLinksInPath(stage.finalOutputPath) ||
+        !NoLinksInPath(stage.approvedOutputRoot) ||
         !NoLinksInPath(stage.originalPath) ||
+        QFileInfo(stage.nativeOutputPath).dir().absolutePath() !=
+            stage.scratch->path() ||
+        QFileInfo(stage.finalOutputPath).dir().absolutePath() !=
+            stage.approvedOutputRoot ||
+        QFileInfo(stage.nativeOutputPath).fileName() !=
+            QFileInfo(stage.finalOutputPath).fileName() ||
+        (QFileInfo(stage.approvedOutputRoot).permissions() &
+            (QFileDevice::WriteGroup | QFileDevice::WriteOther)) ||
         LabSourceSha256(stage.originalPath) != stage.originalSha256 ||
         QFileInfo::exists(stage.finalOutputPath) ||
         QFileInfo(stage.finalOutputPath).isSymLink())
@@ -133,16 +146,16 @@ inline bool NativeSaveAsPublish(const NativeSaveAsStaging& stage,
     const QString digest = LabSourceSha256(stage.nativeOutputPath);
     if (digest.isEmpty() || LabSourceSha256(stage.nativeOutputPath) != digest)
         return false;
-    const QByteArray from = QFile::encodeName(stage.nativeOutputPath);
-    const QByteArray to = QFile::encodeName(stage.finalOutputPath);
-    if (::link(from.constData(), to.constData()) != 0) return false;
-    // The new inode was published exclusively. Verify it again; if integrity
-    // unexpectedly fails, remove ONLY the just-created synthetic lab link.
-    if (LabSourceSha256(stage.finalOutputPath) != digest ||
-        LabSourceSha256(stage.originalPath) != stage.originalSha256) {
-        ::unlink(to.constData());
+    if (!Gd31J27G::DurableExclusivePublish(
+            stage.scratch->path(), stage.approvedOutputRoot,
+            QFileInfo(stage.finalOutputPath).fileName(), digest))
         return false;
-    }
+    // The exclusive link is durable only after both file and containing
+    // directory fsync. On ANY post-link validation error, never unlink a
+    // pathname that could have been concurrently replaced: outcome unknown.
+    if (LabSourceSha256(stage.finalOutputPath) != digest ||
+        LabSourceSha256(stage.originalPath) != stage.originalSha256)
+        return false;
     publishedSha = digest;
     return true;
 }
