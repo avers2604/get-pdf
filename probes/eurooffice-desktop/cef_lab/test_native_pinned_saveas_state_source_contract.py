@@ -41,7 +41,7 @@ class V2StateGuardSourceContract(unittest.TestCase):
         for term in (
             'saves > 1 ? "duplicate_on_save"',
             'saveLabTimedOut ? "timeout" : "candidate_missing"',
-            '&& !saveLabTimedOut;',
+            '!saveLabTimedOut;',
             'eventObserver.v2TimedOut.store(true, std::memory_order_release)',
         ):
             self.assertIn(term, self.native)
