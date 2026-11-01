@@ -101,7 +101,7 @@ class PinnedNativeEventV2Tests(unittest.TestCase):
         for candidate in (
             envelope(receipt=nested(approvedForProduction=True)),
             envelope(receipt=nested(nativeSaveProven=True)),
-            envelope(receipt=nested(outputSha256="e" * 64)),
+            envelope(receipt=nested(outputSha256="e" * 63)),
             envelope(dialogCount=2),
             envelope(onSaveCount=2),
             envelope(dialogSequence=2, onSaveSequence=1),
