@@ -13,6 +13,21 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27a_supervised_native_receipt_is_deferred_and_fail_closed(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, file in (
+            ("native-ooxml-supervisor-tests", "test_native_ooxml_supervisor.py"),
+            ("native-ooxml-supervisor-source-contract-tests",
+             "test_native_ooxml_supervisor_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(file, next(step for step in steps
+                                     if step.name == gate).command)
+        self.assertIn("eurooffice-supervised-native-saveas-pin-stdout-and-ooxml-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j27_native_ooxml_correlator_requires_offline_tests_and_manual_vm(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
