@@ -13,6 +13,21 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27j_fd_bound_linux_link_and_manual_race_gate_are_deferred(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/approved-feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, testfile in (
+            ("native-saveas-fd-bound-link-source-contract-tests",
+             "test_native_fd_bound_link_contract.py"),
+            ("native-saveas-fd-bound-link-linux-regression-tests",
+             "test_native_fd_bound_link_linux.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(testfile, next(s for s in steps if s.name == gate).command)
+        self.assertIn("eurooffice-gd31j27j-fd-bound-link-no-path-swap-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j27i_evidence_gate_is_local_deferred_and_never_release(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
