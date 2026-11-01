@@ -100,13 +100,15 @@ class PinnedV2SupervisorTests(unittest.TestCase):
                 elif case == "preload":
                     env["LD_PRELOAD"] = "/tmp/evil.so"
                 elif case == "libdir":
-                    outside = root / "inside-staging.so"
+                    outside = root / "libascdocumentscore.so"
                     outside.write_bytes(b"\x7fELFTEST")
                     libs["ascdocumentscore"] = (outside, hashlib.sha256(
                         outside.read_bytes()).hexdigest())
                 elif case == "symlink":
                     libpath, sha = libs["qtascdocumentscore"]
-                    linked = Path(tmp) / "libqtascdocumentscore-linked.so"
+                    outside_dir = Path(tmp) / "external-libs"
+                    outside_dir.mkdir()
+                    linked = outside_dir / "libqtascdocumentscore.so"
                     linked.symlink_to(libpath)
                     libs["qtascdocumentscore"] = (linked, sha)
                 invoked = []
