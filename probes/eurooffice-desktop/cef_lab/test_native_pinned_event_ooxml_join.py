@@ -41,6 +41,23 @@ class NativePinnedEventV2OoxmlJoinTests(unittest.TestCase):
             with self.assertRaises(event_join.V2JoinError):
                 event_join.verify(root, name, SESSION, TAB, json.dumps(envelope()))
 
+    def test_output_with_crash_leftover_hardlink_is_not_an_independent_candidate(self):
+        import os
+        for name in ooxml.FIXTURES:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root, output, _ = synthetic.environment(tmp, name)
+                evidence = envelope()
+                evidence["fixtureName"] = name
+                evidence["receipt"]["fixtureName"] = name
+                evidence["receipt"]["outputSha256"] = hashlib.sha256(
+                    output.read_bytes()).hexdigest()
+                # Native publication might have succeeded, but cleanup/crash
+                # left a second hard link. Do not call this reconciled.
+                os.link(output, root / ("orphan-after-link-" + output.name))
+                with self.assertRaises(event_join.V2JoinError):
+                    event_join.verify(root, name, SESSION, TAB, json.dumps(evidence))
+                self.assertTrue(output.exists())
+
     def test_duplicate_dialog_failure_never_becomes_verified(self):
         name = ooxml.FIXTURES[0]
         with tempfile.TemporaryDirectory() as tmp:
