@@ -732,10 +732,10 @@ int main(int argc, char** argv) {
     if (started != 0)
         return 6;
 
-    // An SDK callback may race with detached teardown. Keep the observer
-    // allocated until OS process exit rather than risk a stack use-after-free.
-    // The native laboratory host is intentionally single-shot.
-    static SyntheticEventObserver eventObserver;
+    // A native callback can race detach/CEF shutdown. This is a one-shot
+    // disposable lab executable: intentionally retain the listener until OS
+    // process termination rather than risk a static/stack destructor UAF.
+    static SyntheticEventObserver& eventObserver = *new SyntheticEventObserver();
     manager.SetEventListener(&eventObserver);
 
     QWidget window;
