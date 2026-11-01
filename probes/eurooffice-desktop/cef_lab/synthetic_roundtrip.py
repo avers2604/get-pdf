@@ -93,21 +93,25 @@ def _must_be_unlinked_local(path: Path, *, directory: bool = False) -> None:
         current = parent
 
 
-def _read_limited(path: Path, limit: int) -> bytes:
+def _read_limited(path: Path, limit: int, *, single_link: bool = False) -> bytes:
     _must_be_unlinked_local(path)
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
         fd = os.open(path, flags)
         with os.fdopen(fd, "rb") as stream:
             before = os.fstat(stream.fileno())
-            if not stat.S_ISREG(before.st_mode) or before.st_size <= 0 or before.st_size > limit:
+            if (not stat.S_ISREG(before.st_mode) or before.st_size <= 0 or
+                    before.st_size > limit or
+                    (single_link and before.st_nlink != 1)):
                 raise LabError("Invalid size or kind of lab file")
             data = stream.read(limit + 1)
             after = os.fstat(stream.fileno())
             if len(data) != before.st_size or len(data) > limit or (
                 before.st_size != after.st_size or
                 before.st_mtime_ns != after.st_mtime_ns or
-                before.st_ctime_ns != after.st_ctime_ns
+                before.st_ctime_ns != after.st_ctime_ns or
+                before.st_ino != after.st_ino or before.st_dev != after.st_dev or
+                (single_link and after.st_nlink != 1)
             ):
                 raise LabError("Lab file changed during inspection")
             return data
@@ -286,14 +290,16 @@ def verify(staging: Path | str, fixture_name: str) -> dict:
     original_digest = hashlib.sha256(original).hexdigest()
     if len(original) != size or original_digest != digest:
         raise LabError("Synthetic source changed since fixture manifest")
-    output = _read_limited(output_root / OUTPUTS[fixture_name], MAX_FILE)
+    output = _read_limited(output_root / OUTPUTS[fixture_name], MAX_FILE,
+                           single_link=True)
     output_digest = hashlib.sha256(output).hexdigest()
     if output_digest == original_digest:
         raise LabError("Output is byte-identical to approved source")
     _read_ooxml(output, Path(fixture_name).suffix, CANARIES[fixture_name])
     if hashlib.sha256(_read_limited(source_path, MAX_FILE)).hexdigest() != original_digest:
         raise LabError("Synthetic original changed during round-trip validation")
-    if hashlib.sha256(_read_limited(output_root / OUTPUTS[fixture_name], MAX_FILE)).hexdigest() != output_digest:
+    if hashlib.sha256(_read_limited(output_root / OUTPUTS[fixture_name], MAX_FILE,
+                                    single_link=True)).hexdigest() != output_digest:
         raise LabError("Synthetic output changed during round-trip validation")
     return {
         "schema": "getdoc-synthetic-ooxml-roundtrip-candidate-lab/1",

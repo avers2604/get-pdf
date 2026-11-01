@@ -13,6 +13,17 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27h_complete_native_lineage_and_crash_review_remain_manual(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [item.name for item in steps]
+        gate = "native-saveas-complete-chain-reconciliation-source-tests"
+        self.assertIn(gate, names)
+        self.assertLess(names.index(gate), names.index("solution-restore"))
+        self.assertIn("test_native_saveas_chain_reconciliation.py",
+                      next(step for step in steps if step.name == gate).command)
+        self.assertIn("eurooffice-gd31j27h-v1-v2-native-ooxml-crash-lineage-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j27g_durable_no_replace_and_crash_orphan_review_are_deferred(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]

@@ -37,7 +37,7 @@ class OrphanInventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             _, private = self.prepare(tmp)
             self.age(private)
-            result = inventory.scan(Path(tmp), now=time.time())
+            result = inventory.scan(Path(tmp), now=time.time() + 90000)
             self.assertEqual(1, result["eligibleForManualReview"])
             self.assertEqual(0, result["rejected"])
             self.assertEqual(["gd31j26-private-ABCDEF"], result["scratchNames"])
@@ -68,18 +68,63 @@ class OrphanInventoryTests(unittest.TestCase):
                 elif mutation == "group_write":
                     private.chmod(0o770)
                 self.age(private)
-                result = inventory.scan(Path(tmp), now=time.time())
+                result = inventory.scan(Path(tmp), now=time.time() + 90000)
                 self.assertEqual(0, result["eligibleForManualReview"])
                 self.assertFalse(result["safeToDeleteAutomatically"])
                 self.assertTrue(private.exists())
+
+    def test_crash_after_exclusive_link_is_distinct_read_only_reconciliation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output, private = self.prepare(tmp)
+            file = private / "gd31j25_writer_saved.docx"
+            final = output / file.name
+            os.link(file, final)
+            self.age(private)
+            result = inventory.scan(Path(tmp), now=time.time() + 90000)
+            self.assertEqual(1, result["eligibleForManualReview"])
+            self.assertEqual(1, result["linkedPublicationPendingReview"])
+            self.assertIn(private.name, result["scratchNames"])
+            self.assertTrue(final.exists())
+            self.assertEqual(final.stat().st_ino, file.stat().st_ino)
+            self.assertFalse(result["safeToDeleteAutomatically"])
+
+    def test_unrelated_hardlink_or_wrong_final_inode_is_never_approved(self):
+        for wrong in ("unrelated", "different_destination"):
+            with self.subTest(wrong=wrong), tempfile.TemporaryDirectory() as tmp:
+                output, private = self.prepare(tmp)
+                saved = private / "gd31j25_writer_saved.docx"
+                if wrong == "unrelated":
+                    os.link(saved, private / "foreign-hardlink.bin")
+                else:
+                    (output / saved.name).write_bytes(b"different")
+                    os.link(saved, private / "foreign-hardlink.bin")
+                    (private / "foreign-hardlink.bin").unlink()
+                self.age(private)
+                result = inventory.scan(Path(tmp), now=time.time() + 90000)
+                self.assertEqual(0, result["eligibleForManualReview"])
+                self.assertEqual(0, result["linkedPublicationPendingReview"])
+                self.assertTrue(saved.exists())
+
+    def test_hardlink_already_in_final_is_not_classified_as_cleanable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output, private = self.prepare(tmp)
+            saved = private / "gd31j25_writer_saved.docx"
+            os.link(saved, output / saved.name)
+            self.age(private)
+            report = inventory.scan(Path(tmp), now=time.time() + 90000)
+            self.assertFalse(report["safeToDeleteAutomatically"])
+            self.assertTrue((output / saved.name).exists())
 
     def test_final_published_output_is_never_considered_an_orphan(self):
         with tempfile.TemporaryDirectory() as tmp:
             output, private = self.prepare(tmp)
             (output / "gd31j25_writer_saved.docx").write_bytes(b"saved")
             self.age(private)
-            result = inventory.scan(Path(tmp), now=time.time())
-            self.assertEqual(1, result["eligibleForManualReview"])
+            result = inventory.scan(Path(tmp), now=time.time() + 90000)
+            # Different final inode cannot be called our published link.
+            self.assertEqual(0, result["eligibleForManualReview"])
+            self.assertEqual(1, result["rejected"])
+            self.assertEqual(0, result["linkedPublicationPendingReview"])
             self.assertTrue((output / "gd31j25_writer_saved.docx").exists())
 
 
