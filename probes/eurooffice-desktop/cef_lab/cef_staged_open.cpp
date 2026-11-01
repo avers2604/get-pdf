@@ -211,7 +211,8 @@ public:
                     int first = 0;
                     firstOnSaveSequence.compare_exchange_strong(
                         first, serial, std::memory_order_acq_rel);
-                    if (!saveAnswerSent.load(std::memory_order_acquire) || !event->m_pData) {
+                    if (!saveAnswerSent.load(std::memory_order_acquire) || !event->m_pData ||
+                        v2TerminalAbort.load(std::memory_order_acquire)) {
                         unexpectedOnSaveObserved.store(true, std::memory_order_release);
                         v2TerminalAbort.store(true, std::memory_order_release);
                     }
@@ -934,6 +935,10 @@ int main(int argc, char** argv) {
     bool saveLabTimedOut = false;
     QTimer::singleShot(saveLab ? 90000 : 15000, &app, [&]() {
         if (saveLab) saveLabTimedOut = true;
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+        if (eventV2Lab)
+            eventObserver.v2TerminalAbort.store(true, std::memory_order_release);
+#endif
         app.quit();
     });
     const int exitCode = app.exec();
