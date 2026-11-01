@@ -13,6 +13,25 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27m_broker_and_profile_are_offline_manual_only(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, file in (
+            ("native-saveas-fd-broker-protocol-tests",
+             "test_native_saveas_fd_broker.py"),
+            ("native-saveas-broker-profile-contract-tests",
+             "test_native_saveas_broker_profile.py"),
+            ("native-saveas-fd-broker-source-contract-tests",
+             "test_native_saveas_fd_broker_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(file, next(s for s in steps if s.name == gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27m-external-broker-fd-handoff-isolation-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a" * 40, "Linux", "GD-31I")["releaseReady"])
+
     def test_gd31j27l_fd_only_worker_is_deny_only_and_requires_vm_isolation(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/approved-feed"), "Linux")
         names = [item.name for item in steps]
