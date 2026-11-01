@@ -60,7 +60,8 @@ class NativeV2StateMatrixTests(unittest.TestCase):
     def test_early_callback_and_late_callbacks_never_arm_again(self):
         for actions, code in (
             (("dialog", "arm", "answer", "on_save"), "invalid_dialog"),
-            (("on_save", "arm", "dialog", "answer"), "unexpected_on_save"),
+            (("on_save",), "unexpected_on_save"),
+            (("on_save", "arm", "dialog", "answer"), "invalid_dialog"),
             (("arm", "dialog", "answer", "on_save", "dialog"), "duplicate_dialog"),
             (("arm", "dialog", "answer", "on_save", "on_save"), "duplicate_on_save"),
             (("arm", "dialog", "dialog", "answer", "on_save"), "duplicate_dialog"),
