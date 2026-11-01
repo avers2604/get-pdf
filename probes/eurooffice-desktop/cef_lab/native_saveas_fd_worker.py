@@ -22,6 +22,7 @@ import re
 import socket
 import stat
 import struct
+import native_saveas_sandbox_observer as kernel_observer
 if sys.platform.startswith("linux"):
     import fcntl
 else:
@@ -300,6 +301,9 @@ def serve_one(sock: socket.socket):
         validate_kernel_prerequisites(
             status, worker_uid=os.geteuid(), peer_uid=peer_uid,
             worker_namespaces=own_ns, peer_namespaces=peer_ns)
+        # GD31J27n: observe CURRENT kernel state before accepting even one FD.
+        # This does not attest the unknown BPF allowlist or private mount data.
+        kernel_observer.inspect_current(peer_pid=pid, peer_uid=peer_uid)
         payload, received = _receive_exact_three(sock)
         request = parse_request(payload)
         inspect_fds(received, request, worker_uid=os.geteuid())
