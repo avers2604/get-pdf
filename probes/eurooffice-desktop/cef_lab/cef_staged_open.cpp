@@ -737,6 +737,31 @@ int main(int argc, char** argv) {
         "Печать, WORM, корпоративные файлы и сервер запрещены."));
     banner->setWordWrap(true);
     layout->addWidget(banner);
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+    QPushButton* v2ArmButton = nullptr;
+    if (eventV2Lab) {
+        // GD31J27F_OPERATOR_LAB_ONLY: a deliberate click authorizes ONE
+        // future synthetic dialog after readiness. This button does NOT
+        // invoke an SDK SaveAs action, user document path or JS injection.
+        v2ArmButton = new QPushButton(QString::fromUtf8(
+            "Разрешить один тестовый Save As (только изолированная ВМ)"), &window);
+        v2ArmButton->setEnabled(false);
+        v2ArmButton->setFocusPolicy(Qt::NoFocus);
+        layout->addWidget(v2ArmButton);
+        QObject::connect(v2ArmButton, &QPushButton::clicked, &app, [&]() {
+            if (eventV2Lab && v2ArmButton && v2ArmButton->isEnabled() &&
+                !eventObserver.v2OperatorApproved.load(std::memory_order_acquire) &&
+                !eventObserver.v2TerminalAbort.load(std::memory_order_acquire) &&
+                eventObserver.saveDialogCount.load(std::memory_order_acquire) == 0 &&
+                eventObserver.saveOnSaveCount.load(std::memory_order_acquire) == 0) {
+                eventObserver.v2OperatorApproved.store(true, std::memory_order_release);
+                v2ArmButton->setEnabled(false);
+                v2ArmButton->setText(QString::fromUtf8(
+                    "Разрешено: вызовите Save As в синтетическом редакторе"));
+            }
+        });
+    }
+#endif
     QPointer<SyntheticEditorView> view = new SyntheticEditorView(&window, QSize(980, 620));
 #ifdef GETDOC_GD31J12_WAYLAND_OSR_CAPTURE
     if (osrLab || streamLab) view->EnableSyntheticOsrCapture(streamLab);
@@ -839,9 +864,23 @@ int main(int argc, char** argv) {
                 // New v2 only: never answer a renderer-initiated, unarmed
                 // dialog. Arming requires all local synthetic readiness
                 // observations and happens only on the Qt owner thread.
-                if (eventObserver.v2TerminalAbort.load(std::memory_order_acquire))
+                if (eventObserver.v2TerminalAbort.load(std::memory_order_acquire)) {
+                    if (v2ArmButton) v2ArmButton->setEnabled(false);
                     return;
-                if (!eventObserver.v2DialogArmed.load(std::memory_order_acquire) &&
+                }
+                const bool v2ReadyForOperator =
+                    view && view->GetCefView() == editor &&
+                    view->cefViewLoaded.load(std::memory_order_acquire) &&
+                    eventObserver.onContentReady.load(std::memory_order_acquire) &&
+                    eventObserver.modified.load(std::memory_order_acquire) &&
+                    bindingSeen && conversionObserved &&
+                    eventObserver.saveDialogCount.load(std::memory_order_acquire) == 0 &&
+                    eventObserver.saveOnSaveCount.load(std::memory_order_acquire) == 0 &&
+                    !eventObserver.v2OperatorApproved.load(std::memory_order_acquire);
+                if (v2ArmButton)
+                    v2ArmButton->setEnabled(v2ReadyForOperator);
+                if (eventObserver.v2OperatorApproved.load(std::memory_order_acquire) &&
+                    !eventObserver.v2DialogArmed.load(std::memory_order_acquire) &&
                     eventObserver.saveDialogCount.load(std::memory_order_acquire) == 0 &&
                     eventObserver.saveOnSaveCount.load(std::memory_order_acquire) == 0 &&
                     !eventObserver.saveAnswerSent.load(std::memory_order_acquire) &&
@@ -861,6 +900,8 @@ int main(int argc, char** argv) {
 #ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
                 (eventV2Lab && (
                     eventObserver.v2TerminalAbort.load(std::memory_order_acquire) ||
+                    eventObserver.v2EventBudgetOverflow.load(std::memory_order_acquire) ||
+                    !eventObserver.v2OperatorApproved.load(std::memory_order_acquire) ||
                     eventObserver.saveDialogCount.load(std::memory_order_acquire) != 1 ||
                     eventObserver.saveOnSaveCount.load(std::memory_order_acquire) != 0 ||
                     eventObserver.firstDialogSequence.load(std::memory_order_acquire) != 1 ||
@@ -903,6 +944,41 @@ int main(int argc, char** argv) {
         });
         nativeSaveAnswerTimer.start(100);
     }
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+    // A successful callback alone does not close the VM lab: allow a short
+    // owner-thread grace interval to notice immediate duplicates/cancellation.
+    // This is NOT a durable disk-save acknowledgement.
+    QElapsedTimer nativeSaveSettleClock;
+    QTimer nativeSaveSettleTimer;
+    if (eventV2Lab) {
+        QObject::connect(&nativeSaveSettleTimer, &QTimer::timeout, &app, [&]() {
+            const bool clean =
+                eventObserver.v2OperatorApproved.load(std::memory_order_acquire) &&
+                !eventObserver.v2TerminalAbort.load(std::memory_order_acquire) &&
+                !eventObserver.v2EventBudgetOverflow.load(std::memory_order_acquire) &&
+                eventObserver.saveDialogCount.load(std::memory_order_acquire) == 1 &&
+                eventObserver.saveOnSaveCount.load(std::memory_order_acquire) == 1 &&
+                eventObserver.firstDialogSequence.load(std::memory_order_acquire) == 1 &&
+                eventObserver.firstOnSaveSequence.load(std::memory_order_acquire) == 2 &&
+                eventObserver.saveAnswerSent.load(std::memory_order_acquire) &&
+                eventObserver.nativeOnSaveAfterAnswer.load(std::memory_order_acquire) &&
+                !eventObserver.saveCancelledAfterAnswer.load(std::memory_order_acquire);
+            if (!clean) {
+                nativeSaveSettleClock.invalidate();
+                return;
+            }
+            if (!nativeSaveSettleClock.isValid()) {
+                nativeSaveSettleClock.start();
+                return;
+            }
+            if (nativeSaveSettleClock.elapsed() >= 2000) {
+                nativeSaveSettleTimer.stop();
+                app.quit();
+            }
+        });
+        nativeSaveSettleTimer.start(100);
+    }
+#endif
 #endif
 
 #if defined(GETDOC_GD31J12_WAYLAND_OSR_CAPTURE) || defined(GETDOC_GD31J22_BINDING_LAB)
@@ -982,6 +1058,9 @@ int main(int argc, char** argv) {
     const int exitCode = app.exec();
 #ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
     nativeSaveAnswerTimer.stop();
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+    nativeSaveSettleTimer.stop();
+#endif
 #endif
 #ifdef GETDOC_GD31J22_BINDING_LAB
     bindingPollTimer.stop();
@@ -1008,10 +1087,38 @@ int main(int argc, char** argv) {
     // the first received OnPaint frame, not proof of complete OOXML import.
     const QImage osrSnapshot = (osrLab && view) ? view->SnapshotOsrLab() : QImage();
 #endif
+    // Seal laboratory callbacks before detaching, and detach BEFORE SDK
+    // DestroyCefView which can itself trigger callbacks. The observer is
+    // process-long, so a late stale SDK pointer cannot access stack storage.
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+    if (eventV2Lab) {
+        eventObserver.v2CallbacksClosed.store(true, std::memory_order_release);
+        eventObserver.nativeEventV2Enabled.store(false, std::memory_order_release);
+        eventObserver.nativeSaveLabEnabled.store(false, std::memory_order_release);
+    }
+#endif
+    manager.SetEventListener(nullptr);
+    bool v2CallbacksQuiescent = true;
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+    if (eventV2Lab) {
+        QElapsedTimer callbackDrain;
+        callbackDrain.start();
+        while (eventObserver.v2CallbacksInFlight.load(std::memory_order_acquire) != 0 &&
+               callbackDrain.elapsed() < 500)
+            QThread::msleep(1);
+        v2CallbacksQuiescent =
+            eventObserver.v2CallbacksInFlight.load(std::memory_order_acquire) == 0;
+    }
+#endif
     if (view && viewId > 0)
         manager.DestroyCefView(viewId, false);
-    manager.SetEventListener(nullptr);
     manager.CloseApplication();
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+    if (eventV2Lab && !v2CallbacksQuiescent) {
+        std::fputs("GD31J27F_REFUSED_UNQUIESCED_CALLBACKS\\n", stderr);
+        return 15; // No JSON, no synthetic publication on unclear lifetime.
+    }
+#endif
 
 #ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
     if (saveLab) {
@@ -1027,6 +1134,9 @@ int main(int argc, char** argv) {
                 eventObserver.firstOnSaveSequence.load(std::memory_order_acquire) == 2 &&
                 !eventObserver.invalidDialogObserved.load(std::memory_order_acquire) &&
                 !eventObserver.unexpectedOnSaveObserved.load(std::memory_order_acquire) &&
+                !eventObserver.v2EventBudgetOverflow.load(std::memory_order_acquire) &&
+                eventObserver.v2OperatorApproved.load(std::memory_order_acquire) &&
+                v2CallbacksQuiescent &&
                 !eventObserver.v2TerminalAbort.load(std::memory_order_acquire) &&
                 !saveLabTimedOut;
         }
