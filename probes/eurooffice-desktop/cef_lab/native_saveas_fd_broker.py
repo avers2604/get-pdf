@@ -28,6 +28,7 @@ else:
     fcntl = None
 
 import native_saveas_fd_worker as worker
+import native_saveas_supervisor_handoff as supervisor_handoff
 
 BROKER_SCHEMA = "getdoc-gd31j27m-external-fd-broker-denial-lab/1"
 MAX_REPLY_BYTES = 2048
@@ -177,3 +178,59 @@ class BrokerSession:
             "writePermissionGranted": False,
             "laboratoryOnly": True,
         }
+
+
+def handoff_after_kernel_review(session: BrokerSession, sock: socket.socket,
+                                packet: bytes, fds, *,
+                                broker_uid: int, expected_worker_uid: int,
+                                expected_worker_pid: int,
+                                expected_worker_start_ticks: int,
+                                approved_disposable_vm: bool,
+                                approved_fixture_hashes: dict):
+    """Only a DENY-ONLY diagnostic transfer after external kernel preflight.
+
+    Unlike the legacy GD31J27m lab handoff, this entrypoint requires actual
+    worker PID lifetime + exact FD3 inventory observed via kernel procfs.
+    Its return is NEVER a permission to launch, save, publish or release.
+    If the procfs observation cannot be performed across UIDs, refuse.
+    """
+    if not isinstance(session, BrokerSession) or session.consumed:
+        raise BrokerError("External broker session unavailable or already consumed")
+    try:
+        observation = supervisor_handoff.read_actual_handoff(
+            sock,
+            expected_worker_pid=expected_worker_pid,
+            expected_worker_uid=expected_worker_uid,
+            broker_uid=broker_uid,
+            expected_worker_start_ticks=expected_worker_start_ticks,
+        )
+        if (type(observation) is not dict or
+                observation.get("state") != "blocked" or
+                observation.get("reviewState") != "requires-independent-review" or
+                observation.get("observedWorkerFds") != 4 or
+                observation.get("observedFd3Socket") is not True or
+                any(observation.get(key) is not False for key in (
+                    "launchAuthorized", "kernelIsolationAttested",
+                    "brokerHandshakeAttested", "nativePublicationAuthorized",
+                    "approvedForProduction", "writePermissionGranted",
+                    "releaseReady"))):
+            raise BrokerError("Supervisor observation is not a denial-only gate")
+    except (supervisor_handoff.HandoffError, BrokerError, OSError) as exc:
+        session.consumed = True
+        raise BrokerError("External Linux worker handoff not independently observable") from exc
+    result = session.handoff(
+        sock, packet, fds,
+        broker_uid=broker_uid,
+        expected_worker_uid=expected_worker_uid,
+        approved_disposable_vm=approved_disposable_vm,
+        approved_fixture_hashes=approved_fixture_hashes,
+    )
+    # Even positive observation + a well-formed worker denial have not
+    # verified isolation, authenticity, saved content, or publication.
+    return {
+        **result,
+        "launchAuthorized": False,
+        "kernelIsolationAttested": False,
+        "brokerHandshakeAttested": False,
+        "nativePublicationAuthorized": False,
+    }
