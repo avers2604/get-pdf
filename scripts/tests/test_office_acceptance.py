@@ -13,6 +13,21 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27d_native_v2_supervisor_is_offline_with_separate_vm_gate(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, script in (
+            ("pinned-native-v2-supervisor-tests", "test_native_pinned_v2_supervisor.py"),
+            ("pinned-native-v2-supervisor-source-contract-tests",
+             "test_native_pinned_v2_supervisor_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(script, next(item for item in steps
+                                       if item.name == gate).command)
+        self.assertIn("eurooffice-pinned-v2-supervised-native-host-and-runtime-shas-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j27c_pinned_v2_keeps_native_telemetry_offline_and_manual(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]
