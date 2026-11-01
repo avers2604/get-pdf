@@ -13,6 +13,24 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27n_kernel_observer_and_blocked_sandbox_are_deferred(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, filename in (
+            ("native-saveas-kernel-sandbox-observer-tests",
+             "test_native_saveas_sandbox_observer.py"),
+            ("native-saveas-kernel-sandbox-observer-source-tests",
+             "test_native_saveas_sandbox_observer_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(filename,
+                          next(x for x in steps if x.name == gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27n-live-linux-kernel-sandbox-observer-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a" * 40, "Linux", "GD-31I")["releaseReady"])
+
     def test_gd31j27m_broker_and_profile_are_offline_manual_only(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
         names = [step.name for step in steps]
