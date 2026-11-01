@@ -164,7 +164,11 @@ inline bool DurableExclusivePublish(const QString& scratchDir,
     if (::fstat(source.value, &latest) != 0 ||
         ::fstatat(scratch.value, name.constData(), &named,
                   AT_SYMLINK_NOFOLLOW) != 0 ||
-        !SameFile(before, latest) || !SameFile(latest, named))
+        !SameFile(before, latest) || !SameFile(latest, named) ||
+        before.st_mtim.tv_sec != latest.st_mtim.tv_sec ||
+        before.st_mtim.tv_nsec != latest.st_mtim.tv_nsec ||
+        before.st_ctim.tv_sec != latest.st_ctim.tv_sec ||
+        before.st_ctim.tv_nsec != latest.st_ctim.tv_nsec)
         return false;
     // Exclusive hardlink: EEXIST means another file won. No replace.
     if (::linkat(scratch.value, name.constData(),
