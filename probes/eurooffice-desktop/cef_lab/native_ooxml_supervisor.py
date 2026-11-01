@@ -77,6 +77,7 @@ def capture_native(argv: list[str], env: dict[str, str]) -> tuple[int, bytes]:
     if not sys.platform.startswith("linux"):
         raise SupervisorError("Native CEF SaveAs lab is supported only on Linux/Wayland")
     process = None
+    completed = False
     try:
         process = subprocess.Popen(
             argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -106,13 +107,16 @@ def capture_native(argv: list[str], env: dict[str, str]) -> tuple[int, bytes]:
         if remaining <= 0:
             raise SupervisorError("Native host timed out before exit")
         status = process.wait(timeout=remaining)
+        completed = True
         return status, bytes(collected)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise SupervisorError("Native process capture failed") from exc
     finally:
         if process is not None:
             try:
-                if process.poll() is None:
+                if not completed:
+                    # A child may exit but leave a helper holding the pipe.
+                    # Kill the entire private session on any incomplete capture.
                     os.killpg(process.pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
