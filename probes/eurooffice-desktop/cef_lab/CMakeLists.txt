@@ -41,6 +41,14 @@ option(GETDOC_GD31J27L_ENABLE_ISOLATED_WORKER_LAB "Experimental FD worker; block
 if(GETDOC_GD31J27L_ENABLE_ISOLATED_WORKER_LAB)
   message(FATAL_ERROR "GD31J27L_BLOCKED: no audited separate-UID broker, namespace policy or VM acceptance")
 endif()
+# GD31J27m is only an unprivileged one-shot FD handoff and DECLARATIVE
+# sandbox profile. It cannot provision UID, namespaces, mounts, seccomp or
+# attest security. In-process CEF NativeSaveAsPublish remains lab-only;
+# the worker has no publication code and no production permission.
+option(GETDOC_GD31J27M_ENABLE_BROKER_PUBLICATION_LAB "Blocked external-broker publication until real VM review" OFF)
+if(GETDOC_GD31J27M_ENABLE_BROKER_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27M_BLOCKED: external supervisor not audited; worker publication unavailable")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
