@@ -16,6 +16,9 @@ from pathlib import Path
 import re
 import sys
 
+# No __pycache__ from read-only lab verification imports.
+sys.dont_write_bytecode = True
+
 import synthetic_roundtrip as ooxml
 
 NATIVE_FIELDS = frozenset({
