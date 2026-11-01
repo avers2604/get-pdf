@@ -58,7 +58,7 @@ class BoundedNativeSaveAsLifecycleContractTests(unittest.TestCase):
             self.assertIn(token, self.native)
         self.assertLess(self.native.index("manager.SetEventListener(nullptr)"),
                         self.native.index("manager.DestroyCefView("))
-        self.assertIn("static SyntheticEventObserver eventObserver;", self.native)
+        self.assertIn("static SyntheticEventObserver& eventObserver = *new SyntheticEventObserver();", self.native)
 
     def test_v1_native_mode_and_v2_parser_privilege_claims_unchanged(self):
         self.assertIn('--open-staged-native-saveas-lab', self.native)
