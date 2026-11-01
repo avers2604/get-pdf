@@ -28,7 +28,7 @@ PHASES = frozenset({
 })
 FAILURES = frozenset({
     "candidate_untrusted", "invalid_dialog", "duplicate_dialog",
-    "unexpected_on_save", "cancelled", "source_modified",
+    "unexpected_on_save", "duplicate_on_save", "cancelled", "source_modified",
     "dialog_missing", "target_not_assigned", "timeout",
     "save_not_acknowledged", "candidate_missing",
 })
@@ -155,6 +155,8 @@ def parse(raw, session, tab, fixture):
         expected_code = "duplicate_dialog"
     elif unexpected:
         expected_code = "unexpected_on_save"
+    elif n > 1:
+        expected_code = "duplicate_on_save"
     elif cancelled:
         expected_code = "cancelled"
     elif not unchanged:
@@ -171,7 +173,8 @@ def parse(raw, session, tab, fixture):
         expected_code = "candidate_untrusted"
 
     if (code != expected_code and not (
-            expected_code == "save_not_acknowledged" and code == "timeout")):
+            expected_code in ("save_not_acknowledged", "candidate_missing") and
+            not published and code == "timeout")):
         raise PinnedEventError("Native failureCode inconsistent with candidate state")
 
     if published:

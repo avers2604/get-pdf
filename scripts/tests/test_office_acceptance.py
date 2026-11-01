@@ -13,6 +13,22 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27e_state_machine_negative_matrix_is_offline_and_manual(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, script in (
+            ("pinned-saveas-state-negative-matrix-tests",
+             "test_native_pinned_saveas_state_model.py"),
+            ("pinned-saveas-state-source-contract-tests",
+             "test_native_pinned_saveas_state_source_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(script, next(step for step in steps
+                                       if step.name == gate).command)
+        self.assertIn("eurooffice-pinned-v2-state-machine-early-duplicate-cancel-timeout-e2e",
+                      acceptance.MANUAL_GATES)
+
     def test_gd31j27d_native_v2_supervisor_is_offline_with_separate_vm_gate(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/feed"), "Linux")
         names = [step.name for step in steps]

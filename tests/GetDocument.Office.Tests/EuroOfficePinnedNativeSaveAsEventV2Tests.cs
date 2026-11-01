@@ -78,6 +78,29 @@ public sealed class EuroOfficePinnedNativeSaveAsEventV2Tests
     }
 
     [TestMethod]
+    public void DuplicateOnSaveAndTimeoutAfterCallbackAreAlwaysUnconfirmed()
+    {
+        var duplicated = EuroOfficePinnedNativeSaveAsEventV2.Parse(
+            V2("duplicate_on_save", "on_save_observed",
+                1, 2, 1, 2, nested: Receipt(published: false)),
+            Session, Tab, Fixture);
+        Assert.AreEqual("duplicate_on_save", duplicated.FailureCode);
+        Assert.AreEqual("", duplicated.OutputSha256);
+        Assert.IsFalse(duplicated.NativeCallbackSequenceSelfReported);
+
+        var timedOut = EuroOfficePinnedNativeSaveAsEventV2.Parse(
+            V2("timeout", "on_save_observed",
+                nested: Receipt(published: false)),
+            Session, Tab, Fixture);
+        Assert.AreEqual("timeout", timedOut.FailureCode);
+        Assert.IsFalse(timedOut.NativeCallbackSequenceSelfReported);
+
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            EuroOfficePinnedNativeSaveAsEventV2.Parse(
+                V2("timeout", "published_disposable"), Session, Tab, Fixture));
+    }
+
+    [TestMethod]
     public void OldV1AndGuardedV2CannotDowngradeToPinnedV2()
     {
         Assert.ThrowsExactly<InvalidDataException>(() =>

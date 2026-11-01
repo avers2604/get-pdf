@@ -163,6 +163,11 @@ public:
     std::atomic<int> firstOnSaveSequence{0};
     std::atomic<bool> invalidDialogObserved{false};
     std::atomic<bool> unexpectedOnSaveObserved{false};
+    // GD31J27e: explicit owner-thread readiness arms exactly ONE dialog.
+    // Any fault sticks until teardown; only synthetic v2 is affected.
+    std::atomic<bool> v2DialogArmed{false};
+    std::atomic<bool> v2TerminalAbort{false};
+    std::atomic<bool> v2TimedOut{false};
 #endif
 #endif
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
@@ -202,12 +207,18 @@ public:
                     nativeEventV2Enabled.load(std::memory_order_acquire)) {
                     const int serial = saveEventSerial.fetch_add(
                         1, std::memory_order_acq_rel) + 1;
-                    saveOnSaveCount.fetch_add(1, std::memory_order_acq_rel);
+                    const int count = saveOnSaveCount.fetch_add(
+                        1, std::memory_order_acq_rel) + 1;
                     int first = 0;
                     firstOnSaveSequence.compare_exchange_strong(
                         first, serial, std::memory_order_acq_rel);
-                    if (!saveAnswerSent.load(std::memory_order_acquire) || !event->m_pData)
+                    if (!saveAnswerSent.load(std::memory_order_acquire) || !event->m_pData ||
+                        v2TimedOut.load(std::memory_order_acquire)) {
                         unexpectedOnSaveObserved.store(true, std::memory_order_release);
+                        v2TerminalAbort.store(true, std::memory_order_release);
+                    }
+                    if (count != 1)
+                        v2TerminalAbort.store(true, std::memory_order_release);
                 }
 #endif
                 onSave.store(true, std::memory_order_release);
@@ -215,6 +226,11 @@ public:
                     auto* data = static_cast<NSEditorApi::CAscDocumentOnSaveData*>(event->m_pData);
                     if (data->get_IsCancel())
                         saveCancelled.store(true, std::memory_order_release);
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+                    if (data->get_IsCancel() &&
+                        nativeEventV2Enabled.load(std::memory_order_acquire))
+                        v2TerminalAbort.store(true, std::memory_order_release);
+#endif
 #ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
                     if (nativeSaveLabEnabled.load(std::memory_order_acquire) &&
                         saveAnswerSent.load(std::memory_order_acquire)) {
@@ -234,10 +250,18 @@ public:
                     if (eventV2) {
                         const int serial = saveEventSerial.fetch_add(
                             1, std::memory_order_acq_rel) + 1;
-                        saveDialogCount.fetch_add(1, std::memory_order_acq_rel);
+                        const int count = saveDialogCount.fetch_add(
+                            1, std::memory_order_acq_rel) + 1;
                         int first = 0;
                         firstDialogSequence.compare_exchange_strong(
                             first, serial, std::memory_order_acq_rel);
+                        const bool armed = v2DialogArmed.exchange(
+                            false, std::memory_order_acq_rel);
+                        if (!armed || count != 1) {
+                            if (count == 1)
+                                invalidDialogObserved.store(true, std::memory_order_release);
+                            v2TerminalAbort.store(true, std::memory_order_release);
+                        }
                     }
 #endif
                     auto* request = event->m_pData
@@ -252,8 +276,10 @@ public:
                         savePathRequested.store(true, std::memory_order_release);
                     } else {
 #ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
-                        if (eventV2)
+                        if (eventV2) {
                             invalidDialogObserved.store(true, std::memory_order_release);
+                            v2TerminalAbort.store(true, std::memory_order_release);
+                        }
 #endif
                     }
                 }
@@ -773,11 +799,38 @@ int main(int argc, char** argv) {
         // OnEvent can be called outside Qt owner thread. It only records
         // atomics; the SDK Apply() call is made here on the Qt owner thread.
         QObject::connect(&nativeSaveAnswerTimer, &QTimer::timeout, &app, [&]() {
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+            if (eventV2Lab) {
+                // New v2 only: never answer a renderer-initiated, unarmed
+                // dialog. Arming requires all local synthetic readiness
+                // observations and happens only on the Qt owner thread.
+                if (eventObserver.v2TerminalAbort.load(std::memory_order_acquire))
+                    return;
+                if (!eventObserver.v2DialogArmed.load(std::memory_order_acquire) &&
+                    eventObserver.saveDialogCount.load(std::memory_order_acquire) == 0 &&
+                    eventObserver.saveOnSaveCount.load(std::memory_order_acquire) == 0 &&
+                    !eventObserver.saveAnswerSent.load(std::memory_order_acquire) &&
+                    view && view->GetCefView() == editor &&
+                    view->cefViewLoaded.load(std::memory_order_acquire) &&
+                    eventObserver.onContentReady.load(std::memory_order_acquire) &&
+                    eventObserver.modified.load(std::memory_order_acquire) &&
+                    bindingSeen && conversionObserved)
+                    eventObserver.v2DialogArmed.store(true, std::memory_order_release);
+            }
+#endif
             if (!eventObserver.savePathRequested.load(std::memory_order_acquire))
                 return;
             if (!view || view->GetCefView() != editor ||
                 eventObserver.saveAnswerSent.load(std::memory_order_acquire) ||
                 eventObserver.saveRequestCount.load(std::memory_order_acquire) != 1 ||
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+                (eventV2Lab && (
+                    eventObserver.v2TerminalAbort.load(std::memory_order_acquire) ||
+                    eventObserver.saveDialogCount.load(std::memory_order_acquire) != 1 ||
+                    eventObserver.saveOnSaveCount.load(std::memory_order_acquire) != 0 ||
+                    eventObserver.firstDialogSequence.load(std::memory_order_acquire) != 1 ||
+                    eventObserver.v2DialogArmed.load(std::memory_order_acquire))) ||
+#endif
                 !eventObserver.onContentReady.load(std::memory_order_acquire) ||
                 !eventObserver.modified.load(std::memory_order_acquire) ||
                 !bindingSeen || !conversionObserved ||
@@ -792,8 +845,15 @@ int main(int argc, char** argv) {
             const int outputFormat = CCefViewEditor::GetFileFormat(
                 saveStage.nativeOutputPath.toStdWString());
             if (requestedFormat == 0 || requestedFormat != outputFormat ||
-                requestedFormat != format)
+                requestedFormat != format) {
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+                if (eventV2Lab) {
+                    eventObserver.invalidDialogObserved.store(true, std::memory_order_release);
+                    eventObserver.v2TerminalAbort.store(true, std::memory_order_release);
+                }
+#endif
                 return;
+            }
             if (!eventObserver.savePathRequested.exchange(
                     false, std::memory_order_acq_rel)) return;
             auto* reply = new NSEditorApi::CAscMenuEvent(
@@ -876,6 +936,12 @@ int main(int argc, char** argv) {
     bool saveLabTimedOut = false;
     QTimer::singleShot(saveLab ? 90000 : 15000, &app, [&]() {
         if (saveLab) saveLabTimedOut = true;
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+        if (eventV2Lab) {
+            eventObserver.v2TimedOut.store(true, std::memory_order_release);
+            eventObserver.v2TerminalAbort.store(true, std::memory_order_release);
+        }
+#endif
         app.quit();
     });
     const int exitCode = app.exec();
@@ -925,7 +991,9 @@ int main(int argc, char** argv) {
                 eventObserver.firstDialogSequence.load(std::memory_order_acquire) == 1 &&
                 eventObserver.firstOnSaveSequence.load(std::memory_order_acquire) == 2 &&
                 !eventObserver.invalidDialogObserved.load(std::memory_order_acquire) &&
-                !eventObserver.unexpectedOnSaveObserved.load(std::memory_order_acquire);
+                !eventObserver.unexpectedOnSaveObserved.load(std::memory_order_acquire) &&
+                !eventObserver.v2TerminalAbort.load(std::memory_order_acquire) &&
+                !saveLabTimedOut;
         }
 #endif
         const bool callback =
@@ -987,12 +1055,14 @@ int main(int argc, char** argv) {
                 invalid ? "invalid_dialog" :
                 dialogs > 1 ? "duplicate_dialog" :
                 unexpected ? "unexpected_on_save" :
+                saves > 1 ? "duplicate_on_save" :
                 cancelled ? "cancelled" :
                 !sourceUnchanged ? "source_modified" :
                 dialogs == 0 ? "dialog_missing" :
                 !assigned ? "target_not_assigned" :
                 !savedAfterAnswer ? (saveLabTimedOut ? "timeout" : "save_not_acknowledged") :
-                !publishedToDisposableOutput ? "candidate_missing" : "candidate_untrusted";
+                !publishedToDisposableOutput ? (saveLabTimedOut ? "timeout" : "candidate_missing") :
+                "candidate_untrusted";
             output = QJsonObject{
                 {"schema", "getdoc-native-saveas-pinned-event-lab/2"},
                 {"sessionId", bindingSession},
