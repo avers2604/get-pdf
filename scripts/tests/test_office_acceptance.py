@@ -13,6 +13,26 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27o_supervisor_fd3_handoff_is_offline_denial_only(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, filename in (
+            ("native-saveas-supervisor-handoff-observer-tests",
+             "test_native_saveas_supervisor_handoff.py"),
+            ("native-saveas-supervisor-broker-guard-tests",
+             "test_native_saveas_supervisor_broker_guard.py"),
+            ("native-saveas-supervisor-handoff-source-tests",
+             "test_native_saveas_supervisor_handoff_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(filename,
+                          next(x for x in steps if x.name == gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27o-supervisor-peercred-pid-start-fd3-handoff-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a" * 40, "Linux", "GD-31I")["releaseReady"])
+
     def test_gd31j27n_kernel_observer_and_blocked_sandbox_are_deferred(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
         names = [step.name for step in steps]
