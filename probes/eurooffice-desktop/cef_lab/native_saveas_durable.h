@@ -25,7 +25,13 @@ struct Fd {
     explicit Fd(int raw = -1) noexcept : value(raw) {}
     Fd(const Fd&) = delete;
     Fd& operator=(const Fd&) = delete;
-    ~Fd() { if (value >= 0) ::close(value); }
+    ~Fd() { closeNow(); }
+    bool closeNow() noexcept {
+        if (value < 0) return true;
+        const int old = value;
+        value = -1;
+        return ::close(old) == 0;
+    }
     bool ok() const noexcept { return value >= 0; }
 };
 
@@ -42,11 +48,22 @@ inline Fd OpenPrivateDir(const QString& directory) {
                   O_CLOEXEC | O_NOFOLLOW));
     struct stat state{};
     if (!dir.ok() || ::fstat(dir.value, &state) != 0 ||
-        !S_ISDIR(state.st_mode) || (state.st_mode & 0022))
+        !S_ISDIR(state.st_mode) || state.st_uid != ::geteuid() ||
+        (state.st_mode & 0022))
         return Fd();
     // Duplicate without losing close-on-exec. No inherited directory fds
     // in the CEF renderer/utility subprocess.
     return Fd(::fcntl(dir.value, F_DUPFD_CLOEXEC, 0));
+}
+
+// The SDK's private scratch has no group/other access. Owner-identity and
+// inode checks are necessary but NOT sufficient against another same-UID
+// process, so never link the writable SDK inode as the published output.
+inline bool IsOwnerPrivateScratch(int scratchFd) {
+    struct stat state{};
+    return ::fstat(scratchFd, &state) == 0 &&
+           S_ISDIR(state.st_mode) && state.st_uid == ::geteuid() &&
+           (state.st_mode & 0777) == 0700 && state.st_nlink >= 2;
 }
 
 inline bool fsync_directory(const QString& directory) {
@@ -157,9 +174,84 @@ inline bool LinkVerifiedSourceFd(int sourceFd, int outputFd,
                     outputFd, basename, AT_SYMLINK_FOLLOW) == 0;
 }
 
+// GD31J27k: make a NEW unlinked snapshot in the private directory.
+// The SDK's named output inode is NEVER published directly. The snapshot
+// starts with st_nlink=0 and only the owner process holds its descriptor;
+// after fchmod and closing the writable FD, publish via the read-only FD.
+// This minimizes accidental SDK/same-UID writer access, NOT a security
+// boundary against ptrace/procfd access from an untrusted same-UID process.
+struct SnapShotFdOwnership {
+    // Both descriptors must be O_CLOEXEC. None is passed to the SDK.
+    // Failure at any step leaves no named snapshot to clean up.
+};
+
+inline bool SameStableMeta(const struct stat& before, const struct stat& after) {
+    return SameFile(before, after) &&
+           before.st_mtim.tv_sec == after.st_mtim.tv_sec &&
+           before.st_mtim.tv_nsec == after.st_mtim.tv_nsec &&
+           before.st_ctim.tv_sec == after.st_ctim.tv_sec &&
+           before.st_ctim.tv_nsec == after.st_ctim.tv_nsec;
+}
+
+inline bool SnapshotSyntheticBytes(int sourceFd, int snapshotFd,
+                                  const QString& expectedSha) {
+    if (::lseek(sourceFd, 0, SEEK_SET) != 0) return false;
+    struct stat first{}, last{}, target{};
+    if (::fstat(sourceFd, &first) != 0 || !S_ISREG(first.st_mode) ||
+        first.st_nlink != 1 || first.st_uid != ::geteuid() ||
+        first.st_size <= 0 || first.st_size > 32LL * 1024 * 1024 ||
+        ::fstat(snapshotFd, &target) != 0 || !S_ISREG(target.st_mode) ||
+        target.st_nlink != 0 || target.st_uid != ::geteuid() ||
+        target.st_size != 0)
+        return false;
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    char block[64 * 1024];
+    qint64 total = 0;
+    for (;;) {
+        const ssize_t got = ::read(sourceFd, block, sizeof(block));
+        if (got < 0 && errno == EINTR) continue;
+        if (got <= 0) {
+            if (got < 0) return false;
+            break;
+        }
+        total += got;
+        if (total > first.st_size) return false;
+        hash.addData(block, got);
+        ssize_t offset = 0;
+        while (offset < got) {
+            const ssize_t put = ::write(snapshotFd, block + offset, got - offset);
+            if (put < 0 && errno == EINTR) continue;
+            if (put <= 0) return false;
+            offset += put;
+        }
+    }
+    return total == first.st_size &&
+           QString::fromLatin1(hash.result().toHex()) == expectedSha &&
+           ::fstat(sourceFd, &last) == 0 && SameStableMeta(first, last) &&
+           ::fstat(snapshotFd, &target) == 0 &&
+           target.st_size == first.st_size && target.st_nlink == 0;
+}
+
+// Open an independent O_RDONLY handle to the anonymous inode. /proc must
+// genuinely be procfs, not a user-controlled symlink or arbitrary mount.
+// We close the writable anonymous descriptor BEFORE creating a visible link.
+inline Fd OpenSnapshotReadOnly(int writerFd) {
+    Fd procFdDirectory(::open("/proc/self/fd",
+                O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+    struct statfs procfs{};
+    if (!procFdDirectory.ok() ||
+        ::fstatfs(procFdDirectory.value, &procfs) != 0 ||
+        procfs.f_type != PROC_SUPER_MAGIC)
+        return Fd();
+    const std::string fdName = std::to_string(writerFd);
+    return Fd(::openat(procFdDirectory.value, fdName.c_str(),
+                       O_RDONLY | O_CLOEXEC | O_NONBLOCK));
+}
+
 // Output durability sequence:
-// validate exact source inode+content -> fsync(file) -> linkat with
-// no-replace -> confirm SAME inode at both names -> fsync(final directory).
+// validate source inode/content -> new anonymous snapshot -> close writable
+// snapshot FD -> no-replace FD hardlink -> output directory fsync.
+// A failed post-link check has UNKNOWN durability and must never unlink.
 // If linkat succeeds but later checks/fsync fail, return false with
 // UNKNOWN DURABILITY. Do NOT unlink: another actor could have changed the
 // directory entry; unilateral rollback could delete a file we do not own.
@@ -171,6 +263,7 @@ inline bool DurableExclusivePublish(const QString& scratchDir,
     Fd scratch = OpenPrivateDir(scratchDir);
     Fd output = OpenPrivateDir(outputRoot);
     if (!scratch.ok() || !output.ok() ||
+        !IsOwnerPrivateScratch(scratch.value) ||
         !ExactOwnedMarker(scratch.value, PRIVATE_MARKER_NAME,
                           QByteArray(GD31J27G_PRIVATE_SCRATCH_ONLY)) ||
         !ExactOwnedMarker(output.value, "gd31j25-output-lab.marker",
@@ -205,28 +298,55 @@ inline bool DurableExclusivePublish(const QString& scratchDir,
         before.st_ctim.tv_sec != latest.st_ctim.tv_sec ||
         before.st_ctim.tv_nsec != latest.st_ctim.tv_nsec)
         return false;
-    // The path is used ONLY for a preflight identity check. The publish
-    // syscall receives the verified open FD, not mutable scratch+basename.
-    // Exclusive hardlink: EEXIST means another file won. Never overwrite.
-    if (!LinkVerifiedSourceFd(source.value, output.value,
+    // Revalidate the named SDK input before making a separate anonymous inode.
+    // No user or renderer has a pathname to the future snapshot inode.
+    Fd snapshotWriter(::openat(scratch.value, ".",
+                    O_TMPFILE | O_RDWR | O_CLOEXEC, 0600));
+    struct stat snapshotBefore{};
+    if (!snapshotWriter.ok() ||
+        !SnapshotSyntheticBytes(source.value, snapshotWriter.value, expectedSha) ||
+        ::fstat(snapshotWriter.value, &snapshotBefore) != 0 ||
+        !S_ISREG(snapshotBefore.st_mode) ||
+        snapshotBefore.st_uid != ::geteuid() ||
+        snapshotBefore.st_nlink != 0 ||
+        ::fsync(snapshotWriter.value) != 0 ||
+        ::fchmod(snapshotWriter.value, 0400) != 0 ||
+        ::fsync(snapshotWriter.value) != 0)
+        return false;
+
+    Fd snapshotReader = OpenSnapshotReadOnly(snapshotWriter.value);
+    struct stat snapshotOpened{}, sourceAfterCopy{};
+    if (!snapshotReader.ok() ||
+        ::fstat(snapshotReader.value, &snapshotOpened) != 0 ||
+        !SameFile(snapshotBefore, snapshotOpened) ||
+        snapshotOpened.st_nlink != 0 ||
+        (snapshotOpened.st_mode & 0777) != 0400 ||
+        !snapshotWriter.closeNow() ||
+        !StableFdDigest(snapshotReader.value, expectedSha) ||
+        ::fstat(source.value, &sourceAfterCopy) != 0 ||
+        !SameStableMeta(latest, sourceAfterCopy) ||
+        ::fstatat(scratch.value, name.constData(), &named,
+                  AT_SYMLINK_NOFOLLOW) != 0 ||
+        !SameFile(sourceAfterCopy, named))
+        return false;
+
+    // Publishing the writable SDK inode is prohibited. Only the copy opened
+    // via O_RDONLY can acquire the ONE permanent final directory name.
+    if (!LinkVerifiedSourceFd(snapshotReader.value, output.value,
                               name.constData()))
         return false;
-    // After linkat, the inode legitimately has 2 names. If any entry was
-    // swapped or an extra link was created, refuse; never unlink the final.
-    struct stat sourceSnapshot{}, sourceNamed{}, published{};
-    if (::fstat(source.value, &sourceSnapshot) != 0 ||
-        ::fstatat(scratch.value, name.constData(), &sourceNamed,
-                  AT_SYMLINK_NOFOLLOW) != 0 ||
+
+    struct stat snapshotAfter{}, published{};
+    if (::fstat(snapshotReader.value, &snapshotAfter) != 0 ||
         ::fstatat(output.value, name.constData(), &published,
                   AT_SYMLINK_NOFOLLOW) != 0 ||
-        !SameFile(latest, sourceSnapshot) ||
-        !SameFile(sourceSnapshot, sourceNamed) ||
-        !SameFile(sourceSnapshot, published) ||
-        sourceSnapshot.st_nlink != 2 || published.st_nlink != 2 ||
-        !StableFdDigest(source.value, expectedSha))
-        return false; // unknown durability; final may exist, NEVER unlink.
+        !SameFile(snapshotOpened, snapshotAfter) ||
+        !SameFile(snapshotAfter, published) ||
+        snapshotAfter.st_nlink != 1 || published.st_nlink != 1 ||
+        !StableFdDigest(snapshotReader.value, expectedSha))
+        return false; // Unknown durability; NEVER unlink final name.
     if (::fsync(output.value) != 0)
-        return false; // unknown durability; final may exist, NEVER unlink.
+        return false; // Unknown durability; NEVER unlink final name.
     return true;
 }
 } // namespace Gd31J27G

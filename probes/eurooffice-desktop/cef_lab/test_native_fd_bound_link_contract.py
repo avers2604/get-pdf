@@ -21,7 +21,7 @@ class NativeFdBoundLinkSourceContract(unittest.TestCase):
             "PROC_SUPER_MAGIC", "::fstatfs(", "F_DUPFD_CLOEXEC",
             "::linkat(sourceFd, \"\", outputFd, basename, AT_EMPTY_PATH)",
             "::linkat(procFdDirectory", "std::to_string(sourceFd)",
-            "SameFile(sourceSnapshot, published)",
+            "SameFile(snapshotAfter, published)",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.code)
@@ -41,7 +41,7 @@ class NativeFdBoundLinkSourceContract(unittest.TestCase):
             "ExactOwnedMarker(scratch.value", "ExactOwnedMarker(output.value",
             "O_NOFOLLOW", "S_ISREG(", "before.st_nlink != 1",
             "fsync_directory(", "::fsync(output.value)",
-            "LinkVerifiedSourceFd(source.value, output.value",
+            "LinkVerifiedSourceFd(snapshotReader.value, output.value",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.code)

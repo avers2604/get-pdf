@@ -13,6 +13,22 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27k_anonymous_snapshot_owner_gate_requires_linux_vm(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/approved-offline-feed"), "Linux")
+        names = [item.name for item in steps]
+        for gate, testfile in (
+            ("native-saveas-unlinked-snapshot-source-contract-tests",
+             "test_native_unlinked_snapshot_contract.py"),
+            ("native-saveas-unlinked-snapshot-linux-tests",
+             "test_native_unlinked_snapshot_linux.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(testfile, next(x for x in steps if x.name == gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27k-owner-only-unlinked-snapshot-same-uid-writer-e2e",
+            acceptance.MANUAL_GATES)
+
     def test_gd31j27j_fd_bound_linux_link_and_manual_race_gate_are_deferred(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/approved-feed"), "Linux")
         names = [step.name for step in steps]
