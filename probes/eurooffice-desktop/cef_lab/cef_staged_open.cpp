@@ -153,6 +153,17 @@ public:
     std::atomic<bool> saveAnswerSent{false};
     std::atomic<bool> nativeOnSaveAfterAnswer{false};
     std::atomic<bool> saveCancelledAfterAnswer{false};
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+    // Only exact sender callbacks are counted; fields are process self-report.
+    std::atomic<bool> nativeEventV2Enabled{false};
+    std::atomic<int> saveEventSerial{0};
+    std::atomic<int> saveDialogCount{0};
+    std::atomic<int> saveOnSaveCount{0};
+    std::atomic<int> firstDialogSequence{0};
+    std::atomic<int> firstOnSaveSequence{0};
+    std::atomic<bool> invalidDialogObserved{false};
+    std::atomic<bool> unexpectedOnSaveObserved{false};
+#endif
 #endif
 #ifdef GETDOC_GD31J24_READY_EVENT_LAB
     // The patched SDK emits this event only from its renderer bridge. It is
@@ -186,6 +197,19 @@ public:
                 modified.store(true, std::memory_order_release);
                 break;
             case ASC_MENU_EVENT_TYPE_CEF_ONSAVE:
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+                if (nativeSaveLabEnabled.load(std::memory_order_acquire) &&
+                    nativeEventV2Enabled.load(std::memory_order_acquire)) {
+                    const int serial = saveEventSerial.fetch_add(
+                        1, std::memory_order_acq_rel) + 1;
+                    saveOnSaveCount.fetch_add(1, std::memory_order_acq_rel);
+                    int first = 0;
+                    firstOnSaveSequence.compare_exchange_strong(
+                        first, serial, std::memory_order_acq_rel);
+                    if (!saveAnswerSent.load(std::memory_order_acquire) || !event->m_pData)
+                        unexpectedOnSaveObserved.store(true, std::memory_order_release);
+                }
+#endif
                 onSave.store(true, std::memory_order_release);
                 if (event->m_pData) {
                     auto* data = static_cast<NSEditorApi::CAscDocumentOnSaveData*>(event->m_pData);
@@ -204,12 +228,34 @@ public:
                 break;
 #ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
             case ASC_MENU_EVENT_TYPE_CEF_LOCALFILE_SAVE:
-                if (nativeSaveLabEnabled.load(std::memory_order_acquire) && event->m_pData) {
-                    auto* request = static_cast<NSEditorApi::CAscLocalSaveFileDialog*>(event->m_pData);
-                    if (request->get_Id() == expectedViewId.load(std::memory_order_acquire)) {
+                if (nativeSaveLabEnabled.load(std::memory_order_acquire)) {
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+                    const bool eventV2 = nativeEventV2Enabled.load(std::memory_order_acquire);
+                    if (eventV2) {
+                        const int serial = saveEventSerial.fetch_add(
+                            1, std::memory_order_acq_rel) + 1;
+                        saveDialogCount.fetch_add(1, std::memory_order_acq_rel);
+                        int first = 0;
+                        firstDialogSequence.compare_exchange_strong(
+                            first, serial, std::memory_order_acq_rel);
+                    }
+#endif
+                    auto* request = event->m_pData
+                        ? static_cast<NSEditorApi::CAscLocalSaveFileDialog*>(event->m_pData)
+                        : nullptr;
+                    if (request && request->get_Id() ==
+                            expectedViewId.load(std::memory_order_acquire)) {
                         requestedFileType.store(request->get_FileType(), std::memory_order_release);
-                        saveRequestCount.fetch_add(1, std::memory_order_acq_rel);
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+                        if (!eventV2)
+#endif
+                            saveRequestCount.fetch_add(1, std::memory_order_acq_rel);
                         savePathRequested.store(true, std::memory_order_release);
+                    } else {
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+                        if (eventV2)
+                            invalidDialogObserved.store(true, std::memory_order_release);
+#endif
                     }
                 }
                 break;
@@ -524,8 +570,14 @@ int main(int argc, char** argv) {
         std::strcmp(argv[1], "--open-staged-lab") == 0;
     const bool readyLab = argc == 6 &&
         std::strcmp(argv[1], "--open-staged-ready-event-lab") == 0;
+    const bool eventV2Lab = argc == 6 &&
+        std::strcmp(argv[1], "--open-staged-native-saveas-event-v2-lab") == 0;
+#ifndef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+    if (eventV2Lab) return 2;
+#endif
     const bool saveLab = argc == 6 &&
-        std::strcmp(argv[1], "--open-staged-native-saveas-lab") == 0;
+        (std::strcmp(argv[1], "--open-staged-native-saveas-lab") == 0 ||
+         eventV2Lab);
 #ifndef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
     if (saveLab) return 2;
 #endif
@@ -649,6 +701,9 @@ int main(int argc, char** argv) {
     eventObserver.expectedViewId.store(viewId, std::memory_order_release);
 #ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
     eventObserver.nativeSaveLabEnabled.store(saveLab, std::memory_order_release);
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+    eventObserver.nativeEventV2Enabled.store(eventV2Lab, std::memory_order_release);
+#endif
 #endif
     editor->OpenLocalFile(path.toStdWString(), format, L"");
     window.show();
@@ -819,7 +874,11 @@ int main(int argc, char** argv) {
 
     // No success acknowledgement is available yet. Timeout merely limits the
     // trial and does NOT claim the document loaded or saved successfully.
-    QTimer::singleShot(saveLab ? 90000 : 15000, &app, &QCoreApplication::quit);
+    bool saveLabTimedOut = false;
+    QTimer::singleShot(saveLab ? 90000 : 15000, &app, [&]() {
+        if (saveLab) saveLabTimedOut = true;
+        app.quit();
+    });
     const int exitCode = app.exec();
 #ifdef GETDOC_GD31J26_NATIVE_SAVEAS_LAB
     nativeSaveAnswerTimer.stop();
@@ -858,7 +917,20 @@ int main(int argc, char** argv) {
     if (saveLab) {
         const bool sourceUnchanged =
             Gd31J26::LabSourceSha256(saveStage.originalPath) == saveStage.originalSha256;
+        bool v2EventChainReady = true;
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+        if (eventV2Lab) {
+            v2EventChainReady =
+                eventObserver.saveDialogCount.load(std::memory_order_acquire) == 1 &&
+                eventObserver.saveOnSaveCount.load(std::memory_order_acquire) == 1 &&
+                eventObserver.firstDialogSequence.load(std::memory_order_acquire) == 1 &&
+                eventObserver.firstOnSaveSequence.load(std::memory_order_acquire) == 2 &&
+                !eventObserver.invalidDialogObserved.load(std::memory_order_acquire) &&
+                !eventObserver.unexpectedOnSaveObserved.load(std::memory_order_acquire);
+        }
+#endif
         const bool callback =
+            v2EventChainReady &&
             exitCode == 0 && viewCallback && bindingSeen && conversionObserved &&
             eventObserver.onContentReady.load(std::memory_order_acquire) &&
             eventObserver.modified.load(std::memory_order_acquire) &&
@@ -894,7 +966,54 @@ int main(int argc, char** argv) {
             {"approvedForProduction", false},
             {"laboratoryOnly", true}
         };
-        const QByteArray json = QJsonDocument(evidence).toJson(QJsonDocument::Compact);
+        // Legacy v1 output remains exactly its original shape and command.
+        QJsonObject output = evidence;
+#ifdef GETDOC_GD31J27C_NATIVE_EVENT_V2_LAB
+        if (eventV2Lab) {
+            const int dialogs = eventObserver.saveDialogCount.load(std::memory_order_acquire);
+            const int saves = eventObserver.saveOnSaveCount.load(std::memory_order_acquire);
+            const bool invalid = eventObserver.invalidDialogObserved.load(std::memory_order_acquire);
+            const bool unexpected = eventObserver.unexpectedOnSaveObserved.load(std::memory_order_acquire);
+            const bool assigned = eventObserver.saveAnswerSent.load(std::memory_order_acquire);
+            const bool savedAfterAnswer =
+                eventObserver.nativeOnSaveAfterAnswer.load(std::memory_order_acquire);
+            const bool cancelled =
+                eventObserver.saveCancelledAfterAnswer.load(std::memory_order_acquire);
+            const QString phase =
+                publishedToDisposableOutput ? "published_disposable" :
+                saves > 0 ? "on_save_observed" :
+                assigned ? "target_assigned" :
+                dialogs > 0 ? "dialog_observed" : "not_started";
+            const QString reason =
+                invalid ? "invalid_dialog" :
+                dialogs > 1 ? "duplicate_dialog" :
+                unexpected ? "unexpected_on_save" :
+                cancelled ? "cancelled" :
+                !sourceUnchanged ? "source_modified" :
+                dialogs == 0 ? "dialog_missing" :
+                !assigned ? "target_not_assigned" :
+                !savedAfterAnswer ? (saveLabTimedOut ? "timeout" : "save_not_acknowledged") :
+                !publishedToDisposableOutput ? "candidate_missing" : "candidate_untrusted";
+            output = QJsonObject{
+                {"schema", "getdoc-native-saveas-pinned-event-lab/2"},
+                {"sessionId", bindingSession},
+                {"tabId", bindingTab},
+                {"fixtureName", fixtureName},
+                {"failureCode", reason},
+                {"phase", phase},
+                {"dialogCount", dialogs},
+                {"onSaveCount", saves},
+                {"dialogSequence",
+                 eventObserver.firstDialogSequence.load(std::memory_order_acquire)},
+                {"onSaveSequence",
+                 eventObserver.firstOnSaveSequence.load(std::memory_order_acquire)},
+                {"invalidDialogObserved", invalid},
+                {"unexpectedOnSaveObserved", unexpected},
+                {"receipt", evidence},
+            };
+        }
+#endif
+        const QByteArray json = QJsonDocument(output).toJson(QJsonDocument::Compact);
         std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()), stdout);
         std::fputc('\n', stdout);
         return exitCode;
