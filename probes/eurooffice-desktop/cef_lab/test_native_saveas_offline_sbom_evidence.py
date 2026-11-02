@@ -130,6 +130,20 @@ class SignedCatalogContracts(unittest.TestCase):
                     expected_catalog_sha256=digest(body),
                     expected_generation=7,legacy_manifest=legacy())
 
+    def test_rfc8032_public_test_vector_when_optional_crypto_present(self):
+        try:
+            sbom._load_ed25519_backend()
+        except ImportError:
+            self.skipTest("No cryptography in offline test environment")
+        public=bytes.fromhex(
+            "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+        signature=bytes.fromhex(
+            "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901"
+            "55cb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")
+        sbom._verify_ed25519(public,signature,b"")
+        with self.assertRaises(sbom.EvidenceError):
+            sbom._verify_ed25519(public,signature,b"tampered")
+
     def test_ed25519_missing_optional_backend_fails_not_assumed_signed(self):
         with patch.object(sbom,"_load_ed25519_backend",
                           side_effect=ImportError("offline backend absent")):
