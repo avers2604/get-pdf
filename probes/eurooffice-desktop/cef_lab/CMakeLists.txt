@@ -92,6 +92,13 @@ option(GETDOC_GD31J27S_ENABLE_THREE_PARTY_PUBLICATION_LAB "Blocked root→broker
 if(GETDOC_GD31J27S_ENABLE_THREE_PARTY_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27S_BLOCKED: deny-only three-party bridge is not a proven system sandbox or SaveAs publisher")
 endif()
+# GD31J27t: the fixed-path synthetic root supervisor FD sender is an
+# internal-only function with an explicit, forgeable lab gate, NOT a root
+# service or attestation. Never expose it to CEF or ordinary OS users.
+option(GETDOC_GD31J27T_ENABLE_ROOT_SUPERVISOR_PUBLICATION_LAB "BLOCKED root supervisor synthetic document publication" OFF)
+if(GETDOC_GD31J27T_ENABLE_ROOT_SUPERVISOR_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27T_BLOCKED: root supervisor service, DAC scope, Astra VM and worker publication not audited")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")

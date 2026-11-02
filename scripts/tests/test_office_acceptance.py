@@ -13,6 +13,23 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27t_root_sender_is_unwired_and_offline(self):
+        steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
+        names=[step.name for step in steps]
+        for name,filename in (
+            ("native-saveas-root-supervisor-tests",
+             "test_native_saveas_root_supervisor.py"),
+            ("native-saveas-root-supervisor-source-tests",
+             "test_native_saveas_root_supervisor_contract.py"),
+        ):
+            self.assertIn(name,names)
+            self.assertLess(names.index(name),names.index("solution-restore"))
+            self.assertIn(filename,next(x for x in steps if x.name==name).command)
+        self.assertIn(
+            "eurooffice-gd31j27t-root-supervisor-fixed-fd-sender-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a"*40,"Linux","GD-31I")["releaseReady"])
+
     def test_gd31j27s_three_party_bridge_remains_offline_denied(self):
         steps=acceptance.build_steps(Path("/get-document"), Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]
