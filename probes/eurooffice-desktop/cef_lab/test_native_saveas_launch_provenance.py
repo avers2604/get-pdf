@@ -124,7 +124,8 @@ class SnapshotTests(unittest.TestCase):
                           side_effect=[p["startTicks"],p["startTicks"]+1]),\
              patch.object(provenance,"_read_proc",return_value=b""),\
              patch.object(provenance,"_hash_executable",return_value=EXE_SHA),\
-             patch.object(provenance,"_hash_fixed_source",return_value=SRC_SHA):
+             patch.object(provenance,"_hash_fixed_source",return_value=SRC_SHA),\
+             patch.object(provenance.os,"readlink",return_value=p["exeTarget"]):
             with self.assertRaises(provenance.ProvenanceError):
                 provenance.inspect_live_process(p)
             guard.close.assert_called_once()
