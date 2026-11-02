@@ -119,10 +119,18 @@ class SnapshotTests(unittest.TestCase):
             reader.assert_not_called()
         guard=MagicMock()
         guard.assert_live.return_value=False
+        def proc_facts(pid,key):
+            values={
+                "cgroup":("0::"+p["cgroup"]+"\\n").replace("\\n","\n").encode("ascii"),
+                "cmdline":b"\\x00".join(x.encode("ascii") for x in p["argv"])+b"\\x00",
+                "status":b"Uid:\\t40002\\t40002\\t40002\\t40002\\n"
+                         b"Gid:\\t40003\\t40003\\t40003\\t40003\\n",
+            }
+            return values[key]
         with patch.object(provenance.pidfd,"pin_broker_process",return_value=guard),\
              patch.object(provenance.audit,"read_broker_start_ticks",
                           side_effect=[p["startTicks"],p["startTicks"]+1]),\
-             patch.object(provenance,"_read_proc",return_value=b""),\
+             patch.object(provenance,"_read_proc",side_effect=proc_facts),\
              patch.object(provenance,"_hash_executable",return_value=EXE_SHA),\
              patch.object(provenance,"_hash_fixed_source",return_value=SRC_SHA),\
              patch.object(provenance.os,"readlink",return_value=p["exeTarget"]):
