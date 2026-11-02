@@ -335,6 +335,9 @@ def main(argv=None):
         _preflight(role)
         if role=="supervisor":
             _supervisor_once()
+            # This marker is only a local operator-facing diagnostic. It is
+            # NOT proof of origin, VM isolation, durable save or attestation.
+            print("GD31J27AH_DENIAL_OBSERVED_NOT_ATTESTED")
         elif role=="broker":
             _broker_once()
         elif role=="worker":
