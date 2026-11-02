@@ -1,0 +1,44 @@
+# GD31J27p: REVIEW ONLY, do not install on user PCs or enable in production.
+# Unlike the old /usr/bin/false specimen, ExecStart names the actual
+# deny-only post-UID connector. However RefuseManualStart, a never-created
+# approval file, and the absence of [Install] keep it disabled by default.
+# /opt/getdoc-lab paths require separate, pinned, root-owned offline staging.
+# A broker-side listening SOCK_SEQPACKET endpoint is NOT supplied here.
+[Unit]
+Description=GET Document synthetic-only worker post-UID dialer (blocked)
+RefuseManualStart=yes
+ConditionPathExists=/run/getdoc-gd31j27p-disposable/APPROVED_ONLY_AFTER_VM_AUDIT
+
+[Service]
+Type=exec
+User=getdoc-lab-saveas-worker
+Group=getdoc-lab-ipc
+UMask=0077
+ExecStart=/usr/bin/python3 -B /opt/getdoc-lab/cef_lab/native_saveas_worker_dialer.py
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateMounts=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+TasksMax=8
+TimeoutStartSec=5s
+TimeoutStopSec=2s
+Restart=no
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+# Intentionally no [Install] or WantedBy. No launcher authority or SaveAs.

@@ -13,6 +13,28 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27p_post_uid_dialer_and_listener_remain_offline_and_blocked(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, filename in (
+            ("native-saveas-post-uid-dialer-tests",
+             "test_native_saveas_worker_dialer.py"),
+            ("native-saveas-post-uid-dialer-source-tests",
+             "test_native_saveas_worker_dialer_contract.py"),
+            ("native-saveas-post-uid-broker-tests",
+             "test_native_saveas_broker_listener.py"),
+            ("native-saveas-post-uid-broker-source-tests",
+             "test_native_saveas_broker_listener_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(filename,
+                          next(x for x in steps if x.name == gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27p-post-uid-broker-worker-socket-lab-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a" * 40, "Linux", "GD-31I")["releaseReady"])
+
     def test_gd31j27o_supervisor_fd3_handoff_is_offline_denial_only(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
         names = [step.name for step in steps]

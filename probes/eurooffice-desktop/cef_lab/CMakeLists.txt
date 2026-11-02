@@ -63,6 +63,14 @@ option(GETDOC_GD31J27O_ENABLE_SUPERVISOR_PUBLICATION_LAB "Blocked Linux/Astra na
 if(GETDOC_GD31J27O_ENABLE_SUPERVISOR_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27O_BLOCKED: procfs observer is not launcher attestation or worker-side publication")
 endif()
+# GD31J27p: a REAL but deny-only post-UID Unix socket connector/listener is
+# staged as source, never installed. The two protected external OS services,
+# uid/gid provisioning and /proc/FD3/SCM_RIGHTS evidence remain untested.
+# No publication worker exists. A CMake flag cannot grant SaveAs rights.
+option(GETDOC_GD31J27P_ENABLE_POST_UID_WORKER_PUBLICATION_LAB "Blocked post-UID real broker/worker handshake for synthetic native SaveAs" OFF)
+if(GETDOC_GD31J27P_ENABLE_POST_UID_WORKER_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27P_BLOCKED: post-UID diagnostic handshake is not worker-side publication or trusted VM isolation")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")

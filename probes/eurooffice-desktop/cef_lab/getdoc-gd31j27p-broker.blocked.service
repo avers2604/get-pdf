@@ -1,0 +1,45 @@
+# GD31J27p review specimen only. DO NOT INSTALL OR ENABLE.
+# systemd starts this process under its FINAL separate broker UID. The
+# Python broker then bind/listen on a private filesystem SOCK_SEQPACKET
+# endpoint; worker connects only AFTER its own UID/GID have been applied.
+# This is a ZERO-RIGHTS diagnostic handshake: no SCM_RIGHTS yet.
+[Unit]
+Description=GET Document disposable broker post-UID listener (blocked)
+RefuseManualStart=yes
+ConditionPathExists=/run/getdoc-gd31j27p-disposable/APPROVED_ONLY_AFTER_VM_AUDIT
+
+[Service]
+Type=exec
+User=getdoc-lab-saveas-broker
+Group=getdoc-lab-ipc
+UMask=0077
+RuntimeDirectory=getdoc-gd31j27p-disposable
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/python3 -B /opt/getdoc-lab/cef_lab/native_saveas_broker_listener.py
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateMounts=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+TasksMax=8
+TimeoutStartSec=5s
+TimeoutStopSec=2s
+Restart=no
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+# No [Install] and no WantedBy. RuntimeDirectory is not a VM attestation.

@@ -24,7 +24,7 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
         cls.policy = (LAB / "native_saveas_policy.h").read_text("utf-8")
 
     def test_all_native_stages_are_explicit_and_nonoptional_manual_gates(self):
-        self.assertEqual(20, len(gate.REQUIRED_MANUAL_GATES))
+        self.assertEqual(21, len(gate.REQUIRED_MANUAL_GATES))
         self.assertEqual(len(gate.REQUIRED_MANUAL_GATES),
                          len(set(gate.REQUIRED_MANUAL_GATES)))
         self.assertTrue(set(gate.REQUIRED_MANUAL_GATES).issubset(
@@ -43,9 +43,11 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
                       gate.REQUIRED_MANUAL_GATES)
         self.assertIn("eurooffice-gd31j27o-supervisor-peercred-pid-start-fd3-handoff-e2e",
                       gate.REQUIRED_MANUAL_GATES)
+        self.assertIn("eurooffice-gd31j27p-post-uid-broker-worker-socket-lab-e2e",
+                      gate.REQUIRED_MANUAL_GATES)
 
     def test_all_fault_scenarios_are_required_and_machine_readable(self):
-        self.assertEqual(23, len(gate.CASES))
+        self.assertEqual(24, len(gate.CASES))
         self.assertEqual(len(gate.CASES), len(set(gate.CASES)))
         for fault in ("source-name-swap-during-linkat",
                       "file-fsync-denied-before-linkat",
@@ -58,6 +60,7 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
         self.assertIn("broker-peercred-one-shot-fd-handoff-no-privileges", gate.CASES)
         self.assertIn("worker-live-proc-status-namespace-mountinfo-caps-deny", gate.CASES)
         self.assertIn("supervisor-peercred-pid-start-exact-fd3-table", gate.CASES)
+        self.assertIn("post-uid-broker-bind-worker-connect-fd3-peercred", gate.CASES)
         self.assertIn("REQUIRED_AUTOMATED_STEPS", self.gate)
 
     def test_even_all_claims_cannot_enable_production_or_release(self):
