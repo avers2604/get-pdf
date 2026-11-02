@@ -16,8 +16,8 @@ public static class OfficeCopyPublisher
     public static void ValidatePortableDestinationFileName(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName) ||
-            fileName.EndsWith('.', StringComparison.Ordinal) ||
-            fileName.EndsWith(' ', StringComparison.Ordinal) ||
+            fileName.EndsWith(".", StringComparison.Ordinal) ||
+            fileName.EndsWith(" ", StringComparison.Ordinal) ||
             fileName.IndexOfAny(['<', '>', ':', '"', '/', '\\', '|', '?', '*']) >= 0 ||
             fileName.Any(char.IsControl))
             throw new ArgumentException(
