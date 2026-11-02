@@ -18,8 +18,10 @@ import sys
 sys.dont_write_bytecode = True
 
 import ctypes
-import errno
-import fcntl
+if sys.platform.startswith("linux"):
+    import fcntl
+else:
+    fcntl = None
 import hashlib
 import json
 import os
@@ -158,6 +160,7 @@ def publish_disposable_fixture(handles, request, *, worker_uid,
     """
     if (operator_vm_gate != VM_TEST_ONLY_EXPLICIT_GATE or
             not sys.platform.startswith("linux") or
+            not hasattr(os, "O_TMPFILE") or
             os.geteuid() == 0 or
             type(worker_uid) is not int or worker_uid != os.geteuid() or
             type(request) is not dict):
