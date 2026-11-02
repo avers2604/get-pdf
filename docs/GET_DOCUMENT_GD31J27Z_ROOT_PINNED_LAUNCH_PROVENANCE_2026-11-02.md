@@ -15,7 +15,7 @@
 - broker — `/opt/getdoc-lab/bin/native_saveas_broker_listener.py`;
 - worker — `/opt/getdoc-lab/bin/native_saveas_fd_worker.py`.
 
-Ожидаемый `argv` строго равен `/usr/bin/python3 -I -S <fixed-source>`; Python interpreter target в `/proc/pid/exe` отдельно привязан к `/usr/bin/python3.X`. Это только **декларативное требование к будущему OS launcher**, сам launcher и зависимости ещё не подготовлены. `-I` и `-S` не доказывают, что все импортируемые файлы/системные .so доверены.
+Ожидаемый `argv` строго равен `/usr/bin/python3 -E -s -S <fixed-source>`; Python interpreter target в `/proc/pid/exe` отдельно привязан к `/usr/bin/python3.X`. Это только **декларативное требование к будущему OS launcher**, сам launcher и зависимости ещё не подготовлены. `-I` и `-S` не доказывают, что все импортируемые файлы/системные .so доверены.
 
 ### Root-owned источник pins
 
