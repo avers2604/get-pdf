@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """GD31J27t — root-owned, fixed-path synthetic FD sender (UNWIRED).
 
-This module has NO main, setuid, subprocess, privileged service installer,
+This module has NO main, setuid, child-process launch, service installer,
 network connection, mkdir/chown/unlink, output write or SaveAs operation.
 An independently reviewed offline Astra/Linux VM supervisor would ALREADY
 be launched under root and hold an ALREADY CONNECTED SOCK_SEQPACKET to the
