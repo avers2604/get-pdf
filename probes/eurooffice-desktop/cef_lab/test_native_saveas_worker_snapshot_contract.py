@@ -54,9 +54,7 @@ class WorkerSnapshotSourceContracts(unittest.TestCase):
 
     def test_failure_never_rolls_back_link_or_approves_business_saves(self):
         self.assertIn('linked = True', self.snapshot)
-        self.assertIn("no automatic deletion", self.snapshot.lower()
-                      if "no automatic deletion" in self.snapshot.lower()
-                      else "no automatic deletion")
+        self.assertIn("never unlink after link", self.snapshot.lower())
         for phrase in (
             '"nativePublicationAuthorized": False',
             '"nativeSaveProven": False',
