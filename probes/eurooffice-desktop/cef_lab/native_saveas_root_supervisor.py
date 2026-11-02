@@ -28,6 +28,7 @@ import struct
 
 import native_saveas_fd_worker as worker
 import native_saveas_root_supervisor_audit as audit
+import native_saveas_pidfd_provenance as pidfd
 
 MANIFEST_SCHEMA = "getdoc-gd31j27t-root-supervisor-synthetic-manifest-lab/1"
 RESULT_SCHEMA = "getdoc-gd31j27t-root-supervisor-send-unattested-lab/1"
@@ -270,10 +271,16 @@ class RootSendOnce:
             audit.require_broker_lifetime(
                 broker_pid=peer_pid,
                 expected_start_ticks=cfg["expectedBrokerStartTicks"])
-        except audit.AuditError as exc:
+            # Opening a pidfd pins the task even if its numeric PID is
+            # recycled after our initial /proc observation. Any unavailable
+            # pidfd API, exit event, or birthtime disagreement must refuse.
+            pinned = pidfd.pin_broker_process(
+                peer_pid, cfg["expectedBrokerStartTicks"])
+        except (audit.AuditError, pidfd.PidfdError) as exc:
             raise SupervisorError("Root or broker lifetime audit refused") from exc
         handles = []
         try:
+            pinned.assert_live()
             sock.settimeout(5.0)
             handles = open_verified_handles(cfg)
             packet = build_inspect_packet(cfg)
@@ -283,6 +290,10 @@ class RootSendOnce:
                             rights.tobytes())])
             if size != len(packet):
                 raise SupervisorError("Ambiguous incomplete FD transfer; no retry")
+            # The fd is held throughout sendmsg, and zero-timeout polling
+            # detects termination without kill/pidfd_getfd/ptrace. A return
+            # from sendmsg never proves receiver publication or a safe retry.
+            pinned.assert_live()
             # After sendmsg the transfer may already have happened. If
             # process identity changes, refuse the receipt and NEVER retry.
             try:
@@ -293,11 +304,12 @@ class RootSendOnce:
                 raise SupervisorError(
                     "Broker process disappeared after FD send; status unknown") from exc
             return denial()
-        except (OSError, socket.timeout) as exc:
-            raise SupervisorError("Synthetic FD transfer failed") from exc
+        except (OSError, socket.timeout, pidfd.PidfdError) as exc:
+            raise SupervisorError("Synthetic FD transfer or pidfd liveness failed") from exc
         finally:
             for fd in handles:
                 try:
                     os.close(fd)
                 except OSError:
                     pass
+            pinned.close()
