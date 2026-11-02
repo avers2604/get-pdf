@@ -241,8 +241,9 @@ def inspect_pinned_digest_snapshot(manifest,snapshot):
 
 def _fixed_components(path):
     """Only absolute known allowlisted files; no relative, magic or symlinks."""
+    module_paths=frozenset(MODULE_DIR+"/"+name+".py" for name in MODULE_NAMES)
     if type(path) is not str or (
-            not path.startswith(MODULE_DIR+"/") and
+            path!=FIXED_MANIFEST and path not in module_paths and
             path not in UNIT_PATHS.values() and not _library_name(path)):
         raise DependencyError("Untrusted filesystem path outside pinned roots")
     items=path.split("/")
