@@ -205,6 +205,7 @@ class SenderBirthtimeGates(unittest.TestCase):
                           return_value=synthetic_root_observed()),\
              patch.object(root.audit,"require_broker_lifetime",
                           side_effect=[False,audit.AuditError("recycled pid")]),\
+             patch.object(root.pidfd,"pin_broker_process") as guard,\
              patch.object(root,"open_verified_handles",return_value=[11,12,13]),\
              patch.object(root.os,"close"):
             with self.assertRaises(root.SupervisorError):
