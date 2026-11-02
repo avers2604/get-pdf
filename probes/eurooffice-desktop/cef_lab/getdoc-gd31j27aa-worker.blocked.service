@@ -1,0 +1,22 @@
+# GD31J27aa uninstalled policy specimen: never install in /etc/systemd/system.
+# Actual trusted launch, package hashes and Astra Linux policy remain UNPROVEN.
+# No [Install], no WantedBy, no auto-enabling, and ExecStart always fails.
+[Unit]
+Description=GETDOC GD31J27aa disposable worker — permanently blocked specimen
+RefuseManualStart=yes
+ConditionPathExists=/run/getdoc-gd31j27aa-disposable/APPROVAL_NEVER_AUTOCREATE
+
+[Service]
+Type=exec
+User=getdoc-lab-worker
+Group=getdoc-lab-ipc
+ExecStart=/usr/bin/false
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateMounts=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
