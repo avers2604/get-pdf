@@ -13,6 +13,23 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ac_offline_wheel_record_and_os_evidence_remain_denied(self):
+        steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
+        names=[step.name for step in steps]
+        for gate,filename in (
+            ("native-saveas-offline-vm-evidence-tests",
+             "test_native_saveas_offline_vm_evidence.py"),
+            ("native-saveas-offline-vm-source-tests",
+             "test_native_saveas_offline_vm_evidence_contract.py"),
+        ):
+            self.assertIn(gate,names)
+            self.assertLess(names.index(gate),names.index("solution-restore"))
+            self.assertIn(filename,next(x for x in steps if x.name==gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27ac-wheel-record-elf-systemd-os-snapshot-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a"*40,"Linux","GD-31I")["releaseReady"])
+
     def test_gd31j27ab_signed_sbom_and_systemd_review_do_not_authorize_release(self):
         steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]

@@ -24,7 +24,7 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
         cls.policy = (LAB / "native_saveas_policy.h").read_text("utf-8")
 
     def test_all_native_stages_are_explicit_and_nonoptional_manual_gates(self):
-        self.assertEqual(33, len(gate.REQUIRED_MANUAL_GATES))
+        self.assertEqual(34, len(gate.REQUIRED_MANUAL_GATES))
         self.assertEqual(len(gate.REQUIRED_MANUAL_GATES),
                          len(set(gate.REQUIRED_MANUAL_GATES)))
         self.assertTrue(set(gate.REQUIRED_MANUAL_GATES).issubset(
@@ -60,9 +60,10 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
         self.assertIn("eurooffice-gd31j27z-root-pinned-exe-cgroup-launch-review-e2e", gate.REQUIRED_MANUAL_GATES)
         self.assertIn("eurooffice-gd31j27aa-dependency-elf-unit-pins-review-e2e", gate.REQUIRED_MANUAL_GATES)
         self.assertIn("eurooffice-gd31j27ab-ed25519-sbom-effective-unit-review-e2e", gate.REQUIRED_MANUAL_GATES)
+        self.assertIn("eurooffice-gd31j27ac-wheel-record-elf-systemd-os-snapshot-e2e", gate.REQUIRED_MANUAL_GATES)
 
     def test_all_fault_scenarios_are_required_and_machine_readable(self):
-        self.assertEqual(36, len(gate.CASES))
+        self.assertEqual(37, len(gate.CASES))
         self.assertEqual(len(gate.CASES), len(set(gate.CASES)))
         for fault in ("source-name-swap-during-linkat",
                       "file-fsync-denied-before-linkat",
@@ -88,6 +89,7 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
         self.assertIn("root-pinned-exe-cgroup-argv-uid-sha-no-launch-authority", gate.CASES)
         self.assertIn("pinned-python-elf-so-unit-import-closure-no-unknown-loads", gate.CASES)
         self.assertIn("detached-ed25519-sbom-key-rotation-digest-mismatch-unit-dropin-deny", gate.CASES)
+        self.assertIn("wheel-record-archive-and-os-observation-mismatch-deny", gate.CASES)
         self.assertIn("REQUIRED_AUTOMATED_STEPS", self.gate)
 
     def test_even_all_claims_cannot_enable_production_or_release(self):
