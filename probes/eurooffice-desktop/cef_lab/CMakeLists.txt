@@ -160,6 +160,13 @@ option(GETDOC_GD31J27AB_ENABLE_SIGNED_SBOM_PUBLICATION_LAB "BLOCKED signed SBOM/
 if(GETDOC_GD31J27AB_ENABLE_SIGNED_SBOM_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27AB_BLOCKED: signed SBOM review cannot authorize worker publication or SaveAs")
 endif()
+# GD31J27ac: wheel RECORD verification and externally supplied Astra/systemd
+# snapshots do not establish capture provenance, complete runtime loaded
+# library closure or sandbox OS attestation. No publication is permitted.
+option(GETDOC_GD31J27AC_ENABLE_OFFLINE_VM_EVIDENCE_PUBLICATION_LAB "BLOCKED wheel/OS evidence-based native SaveAs" OFF)
+if(GETDOC_GD31J27AC_ENABLE_OFFLINE_VM_EVIDENCE_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27AC_BLOCKED: ZIP RECORD and external systemd/ELF observations are not SaveAs authority")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
