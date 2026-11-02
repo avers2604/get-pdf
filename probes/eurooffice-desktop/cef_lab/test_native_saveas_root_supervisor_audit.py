@@ -146,6 +146,14 @@ class ThreePartyPolicyAlignmentTests(unittest.TestCase):
                     audit.inspect_three_party_alignment(*parts)
 
 
+def synthetic_root_observed():
+    return {"state":"requires-independent-review","kernelFactsObserved":True,
+            "rootSandboxAttested":False,"seccompAllowlistAttested":False,
+            "mountRestrictionAttested":False,"nativePublicationAuthorized":False,
+            "launchAuthorized":False,"releaseReady":False,
+            "approvedForProduction":False,"writePermissionGranted":False}
+
+
 class SenderBirthtimeGates(unittest.TestCase):
     def config(self):
         return {"schema":root.MANIFEST_SCHEMA,"workerUid":40002,
@@ -176,6 +184,8 @@ class SenderBirthtimeGates(unittest.TestCase):
         sender=root.RootSendOnce()
         with patch.object(root.os,"getuid",return_value=0),\
              patch.object(root.os,"geteuid",return_value=0),\
+             patch.object(root.audit,"inspect_current_root",
+                          return_value=synthetic_root_observed()),\
              patch.object(root.audit,"require_broker_lifetime",
                           side_effect=audit.AuditError("stale pid")),\
              patch.object(root,"open_verified_handles") as open_fds:
@@ -191,6 +201,8 @@ class SenderBirthtimeGates(unittest.TestCase):
         sender=root.RootSendOnce()
         with patch.object(root.os,"getuid",return_value=0),\
              patch.object(root.os,"geteuid",return_value=0),\
+             patch.object(root.audit,"inspect_current_root",
+                          return_value=synthetic_root_observed()),\
              patch.object(root.audit,"require_broker_lifetime",
                           side_effect=[False,audit.AuditError("recycled pid")]),\
              patch.object(root,"open_verified_handles",return_value=[11,12,13]),\
