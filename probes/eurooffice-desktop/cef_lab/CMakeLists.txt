@@ -114,6 +114,13 @@ option(GETDOC_GD31J27V_ENABLE_PIDFD_PUBLICATION_LAB "BLOCKED experimental pidfd-
 if(GETDOC_GD31J27V_ENABLE_PIDFD_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27V_BLOCKED: pidfd guard is not trusted OS provisioning or worker publication")
 endif()
+# GD31J27w: a broker-held worker pidfd adds a process liveness barrier to
+# the one-shot denial-only SCM_RIGHTS handoff; it does not verify executable
+# provenance, peer socket topology, Astra Linux MAC or sandbox policy.
+option(GETDOC_GD31J27W_ENABLE_WORKER_PIDFD_PUBLICATION_LAB "BLOCKED worker pidfd native SaveAs publication lab" OFF)
+if(GETDOC_GD31J27W_ENABLE_WORKER_PIDFD_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27W_BLOCKED: worker pidfd lifetime does not authorize sandbox publication or real documents")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")

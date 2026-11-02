@@ -87,7 +87,7 @@ class SupervisorBrokerGuardTests(unittest.TestCase):
         with mock.patch.object(
             broker.supervisor_handoff, "read_actual_handoff",
             side_effect=observer.HandoffError("unobservable procfs")
-        ):
+        ), mock.patch.object(broker.pidfd,"pin_worker_process"):
             with self.assertRaises(broker.BrokerError):
                 self._call(session, sock)
         self.assertTrue(session.consumed)
@@ -101,7 +101,7 @@ class SupervisorBrokerGuardTests(unittest.TestCase):
         with mock.patch.object(
             broker.supervisor_handoff, "read_actual_handoff",
             return_value=report
-        ):
+        ), mock.patch.object(broker.pidfd,"pin_worker_process"):
             result = self._call(session, sock)
         self.assertEqual("denied", result["state"])
         self.assertFalse(result["launchAuthorized"])
@@ -118,7 +118,7 @@ class SupervisorBrokerGuardTests(unittest.TestCase):
         with mock.patch.object(
             broker.supervisor_handoff, "read_actual_handoff",
             return_value=forged
-        ):
+        ), mock.patch.object(broker.pidfd,"pin_worker_process"):
             with self.assertRaises(broker.BrokerError):
                 self._call(session, sock)
         self.assertEqual([], sock.sent)
