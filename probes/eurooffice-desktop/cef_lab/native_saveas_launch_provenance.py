@@ -307,6 +307,11 @@ def inspect_live_process(profile):
     """Pin one process with pidfd during all read-only kernel observations."""
     if type(profile) is not dict or set(profile)!=ROLE_FIELDS:
         raise ProvenanceError("Process pin fields not complete")
+    role=next((key for key,expected in CGROUP_PATHS.items()
+               if profile.get("cgroup")==expected),None)
+    if role is None:
+        raise ProvenanceError("Process cgroup role is not independently pinned")
+    _valid_profile(role,profile)
     pid=profile["pid"]
     guard=None
     try:
@@ -321,8 +326,7 @@ def inspect_live_process(profile):
             "status":_read_proc(pid,"status").decode("ascii"),
             "exeTarget":os.readlink(f"/proc/{pid}/exe"),
             "exeSha256":_hash_executable(pid,profile["exeTarget"]),
-            "scriptSha256":_hash_fixed_source(
-                "worker" if profile["cgroup"]==CGROUP_PATHS["worker"] else "broker"),
+            "scriptSha256":_hash_fixed_source(role),
         }
         report=inspect_snapshot(profile,snapshot)
         if audit.read_broker_start_ticks(pid)!=profile["startTicks"]:
