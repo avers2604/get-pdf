@@ -134,3 +134,13 @@ def pin_broker_process(pid,expected_start_ticks):
                 os.close(fd)
             except OSError:
                 pass
+
+
+def pin_worker_process(pid,expected_start_ticks):
+    """Reuse exact pidfd/birth-time checks for the distinct-UID worker.
+
+    The shared audit.read_broker_start_ticks only reads Linux /proc/<pid>/stat;
+    it does not grant broker rights or imply that cross-UID /proc is readable.
+    There is no fallback to weaker checks when the worker is inaccessible.
+    """
+    return pin_broker_process(pid,expected_start_ticks)
