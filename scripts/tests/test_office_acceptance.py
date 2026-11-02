@@ -13,6 +13,24 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27q_worker_anonymous_snapshot_remains_manual_lab_only(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, filename in (
+            ("native-saveas-worker-anonymous-snapshot-linux-tests",
+             "test_native_saveas_worker_snapshot.py"),
+            ("native-saveas-worker-snapshot-source-tests",
+             "test_native_saveas_worker_snapshot_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(filename,
+                          next(item for item in steps if item.name == gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27q-worker-anonymous-snapshot-fsync-linkat-crash-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a" * 40, "Linux", "GD-31I")["releaseReady"])
+
     def test_gd31j27p_post_uid_dialer_and_listener_remain_offline_and_blocked(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
         names = [step.name for step in steps]
