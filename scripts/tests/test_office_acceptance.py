@@ -13,6 +13,23 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ad_preopened_proc_elf_source_only_requires_vm_evidence(self):
+        steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
+        names=[step.name for step in steps]
+        for gate,filename in (
+            ("native-saveas-proc-maps-elf-tests",
+             "test_native_saveas_proc_maps_elf_collector.py"),
+            ("native-saveas-proc-maps-elf-source-tests",
+             "test_native_saveas_proc_maps_elf_contract.py"),
+        ):
+            self.assertIn(gate,names)
+            self.assertLess(names.index(gate),names.index("solution-restore"))
+            self.assertIn(filename,next(x for x in steps if x.name==gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27ad-preopened-proc-maps-elf64-deny-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a"*40,"Linux","GD-31I")["releaseReady"])
+
     def test_gd31j27ac_offline_wheel_record_and_os_evidence_remain_denied(self):
         steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]

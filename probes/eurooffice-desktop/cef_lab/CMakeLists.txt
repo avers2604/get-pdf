@@ -167,6 +167,13 @@ option(GETDOC_GD31J27AC_ENABLE_OFFLINE_VM_EVIDENCE_PUBLICATION_LAB "BLOCKED whee
 if(GETDOC_GD31J27AC_ENABLE_OFFLINE_VM_EVIDENCE_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27AC_BLOCKED: ZIP RECORD and external systemd/ELF observations are not SaveAs authority")
 endif()
+# GD31J27ad: preopened Linux /proc maps and ELF64 PT_DYNAMIC bytes provide
+# only necessary read-only facts. FD origin, launch, effective systemd,
+# complete native/Python dependencies and Astra MAC are NOT attested.
+option(GETDOC_GD31J27AD_ENABLE_PREOPENED_MAPS_ELF_PUBLICATION_LAB "BLOCKED native SaveAs with collected maps/ELF evidence" OFF)
+if(GETDOC_GD31J27AD_ENABLE_PREOPENED_MAPS_ELF_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27AD_BLOCKED: preopened OS evidence cannot authorize file publication or SaveAs")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")

@@ -63,6 +63,7 @@ CASES = (
     "pinned-python-elf-so-unit-import-closure-no-unknown-loads",
     "detached-ed25519-sbom-key-rotation-digest-mismatch-unit-dropin-deny",
     "wheel-record-archive-and-os-observation-mismatch-deny",
+    "preopened-proc-maps-elf-needed-fd-origin-failclosed",
     "scratch-and-final-on-different-filesystems",
     "file-fsync-denied-before-linkat",
     "directory-fsync-denied-after-linkat",
@@ -110,6 +111,7 @@ REQUIRED_MANUAL_GATES = (
     "eurooffice-gd31j27aa-dependency-elf-unit-pins-review-e2e",
     "eurooffice-gd31j27ab-ed25519-sbom-effective-unit-review-e2e",
     "eurooffice-gd31j27ac-wheel-record-elf-systemd-os-snapshot-e2e",
+    "eurooffice-gd31j27ad-preopened-proc-maps-elf64-deny-e2e",
 )
 REQUIRED_AUTOMATED_STEPS = tuple(step.name for step in
     acceptance.build_steps(Path("/unused"), Path("/offline-feed"), "Linux"))
