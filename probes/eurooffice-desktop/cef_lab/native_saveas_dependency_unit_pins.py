@@ -239,6 +239,22 @@ def inspect_pinned_digest_snapshot(manifest,snapshot):
     return {**denial(),"pinnedFilesObserved":True}
 
 
+
+def compare_observed_library_paths(manifest,mapped_shared_objects):
+    """Check declared ELF mappings from an INDEPENDENT snapshot.
+
+    This accepts no process ID and cannot read /proc/PID/maps. A caller
+    cannot use it as evidence that all DT_NEEDED/dlopen paths were collected.
+    Such evidence requires a separate OS-isolated offline VM review.
+    """
+    m=validate_manifest(manifest)
+    if (type(mapped_shared_objects) not in (tuple,list) or
+            any(type(item) is not str for item in mapped_shared_objects) or
+            tuple(mapped_shared_objects)!=tuple(sorted(m["sharedObjects"]))):
+        raise DependencyError("Unknown or missing dynamic shared object path")
+    return {**denial(),"pinnedFilesObserved":False}
+
+
 def _fixed_components(path):
     """Only absolute known allowlisted files; no relative, magic or symlinks."""
     module_paths=frozenset(MODULE_DIR+"/"+name+".py" for name in MODULE_NAMES)
