@@ -145,6 +145,13 @@ option(GETDOC_GD31J27Z_ENABLE_LAUNCH_PROVENANCE_PUBLICATION_LAB "BLOCKED launch 
 if(GETDOC_GD31J27Z_ENABLE_LAUNCH_PROVENANCE_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27Z_BLOCKED: pinned executable facts do not authorize worker publication or production files")
 endif()
+# GD31J27aa: a root-pinned finite source/.so allowlist and nonstartable
+# systemd specimen are only offline facts, not validated Python import
+# closure, actual loader mappings, signatures, Astra MAC/BPF or trusted launch.
+option(GETDOC_GD31J27AA_ENABLE_DEPENDENCY_UNIT_PUBLICATION_LAB "BLOCKED pinned Python/ELF/systemd native SaveAs" OFF)
+if(GETDOC_GD31J27AA_ENABLE_DEPENDENCY_UNIT_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27AA_BLOCKED: source/ELF/unit pins cannot authorize SaveAs or worker publication")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
