@@ -27,6 +27,7 @@ import stat
 import struct
 
 import native_saveas_fd_worker as worker
+import native_saveas_root_supervisor_audit as audit
 
 MANIFEST_SCHEMA = "getdoc-gd31j27t-root-supervisor-synthetic-manifest-lab/1"
 RESULT_SCHEMA = "getdoc-gd31j27t-root-supervisor-send-unattested-lab/1"
@@ -54,13 +55,14 @@ def _unique(pairs):
 def validate_manifest(data: dict) -> dict:
     fields = {
         "schema", "workerUid", "brokerUid", "brokerGid",
-        "expectedBrokerPid", "fixtureName", "fixtureDigests",
+        "expectedBrokerPid", "expectedBrokerStartTicks", "fixtureName", "fixtureDigests",
         "sessionId", "tabId", "operation", "publishEnabled",
         "laboratoryOnly",
     }
     if type(data) is not dict or set(data) != fields:
         raise SupervisorError("Unrecognized root supervisor manifest")
-    numbers = ("workerUid", "brokerUid", "brokerGid", "expectedBrokerPid")
+    numbers = ("workerUid", "brokerUid", "brokerGid", "expectedBrokerPid",
+               "expectedBrokerStartTicks")
     if (data["schema"] != MANIFEST_SCHEMA or
             any(type(data[k]) is not int or data[k] <= 0 for k in numbers) or
             data["workerUid"] == data["brokerUid"] or
@@ -251,6 +253,25 @@ class RootSendOnce:
                 peer_uid != cfg["brokerUid"] or
                 peer_gid != cfg["brokerGid"]):
             raise SupervisorError("Connected broker identity differs from pin")
+        try:
+            # Necessary root OS observation, NOT publication or launcher
+            # attestation. An inaccessible /proc or excessive capabilities
+            # must block FD opening instead of silently degrading checks.
+            observed = audit.inspect_current_root()
+            if (type(observed) is not dict or
+                    observed.get("state") != "requires-independent-review" or
+                    observed.get("kernelFactsObserved") is not True or
+                    any(observed.get(key) is not False for key in (
+                        "rootSandboxAttested", "seccompAllowlistAttested",
+                        "mountRestrictionAttested", "nativePublicationAuthorized",
+                        "launchAuthorized", "releaseReady",
+                        "approvedForProduction", "writePermissionGranted"))):
+                raise SupervisorError("Kernel root audit does not permit FD access")
+            audit.require_broker_lifetime(
+                broker_pid=peer_pid,
+                expected_start_ticks=cfg["expectedBrokerStartTicks"])
+        except audit.AuditError as exc:
+            raise SupervisorError("Root or broker lifetime audit refused") from exc
         handles = []
         try:
             sock.settimeout(5.0)
@@ -262,6 +283,15 @@ class RootSendOnce:
                             rights.tobytes())])
             if size != len(packet):
                 raise SupervisorError("Ambiguous incomplete FD transfer; no retry")
+            # After sendmsg the transfer may already have happened. If
+            # process identity changes, refuse the receipt and NEVER retry.
+            try:
+                audit.require_broker_lifetime(
+                    broker_pid=peer_pid,
+                    expected_start_ticks=cfg["expectedBrokerStartTicks"])
+            except audit.AuditError as exc:
+                raise SupervisorError(
+                    "Broker process disappeared after FD send; status unknown") from exc
             return denial()
         except (OSError, socket.timeout) as exc:
             raise SupervisorError("Synthetic FD transfer failed") from exc
