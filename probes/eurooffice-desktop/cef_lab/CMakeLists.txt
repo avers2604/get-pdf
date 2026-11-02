@@ -174,6 +174,14 @@ option(GETDOC_GD31J27AD_ENABLE_PREOPENED_MAPS_ELF_PUBLICATION_LAB "BLOCKED nativ
 if(GETDOC_GD31J27AD_ENABLE_PREOPENED_MAPS_ELF_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27AD_BLOCKED: preopened OS evidence cannot authorize file publication or SaveAs")
 endif()
+
+# GD31J27ae: fixed /proc FD path and pinned kernel process+namespace
+# observations are necessary only; root UID and links do NOT prove
+# trustworthy origin, effective systemd policy or Astra MAC isolation.
+option(GETDOC_GD31J27AE_ENABLE_FD_ORIGIN_PUBLICATION_LAB "BLOCKED kernel FD provenance native SaveAs" OFF)
+if(GETDOC_GD31J27AE_ENABLE_FD_ORIGIN_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27AE_BLOCKED: observed proc FD/namespace/ELF identities are not native SaveAs authority")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
