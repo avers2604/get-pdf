@@ -95,7 +95,7 @@ def parse_pinned_maps(data, *, executable, allowed_elf):
         raise CollectorError("Unbounded Linux maps records")
     observed=set()
     executable_found=False
-    previous_start=-1
+    previous_end=0
     for line in lines:
         fields=line.split(None,5)
         if len(fields) not in (5,6):
@@ -105,9 +105,9 @@ def parse_pinned_maps(data, *, executable, allowed_elf):
         if match is None:
             raise CollectorError("Malformed Linux memory map metadata")
         start,end=int(match.group(1),16),int(match.group(2),16)
-        if not (previous_start<start<end<2**64):
+        if not (previous_end<=start<end<2**64):
             raise CollectorError("Overlapping or unsorted memory map")
-        previous_start=start
+        previous_end=end
         inode=int(match.group(6))
         if len(fields)==5:
             if inode!=0:
