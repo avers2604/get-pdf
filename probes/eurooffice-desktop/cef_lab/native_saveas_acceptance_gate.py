@@ -60,6 +60,7 @@ CASES = (
     "socket-peerpidfd-kernel-connected-worker-identity-no-fallback",
     "fd3-nonce-inode-rights-free-no-proven-executable",
     "root-pinned-exe-cgroup-argv-uid-sha-no-launch-authority",
+    "pinned-python-elf-so-unit-import-closure-no-unknown-loads",
     "scratch-and-final-on-different-filesystems",
     "file-fsync-denied-before-linkat",
     "directory-fsync-denied-after-linkat",
@@ -104,6 +105,7 @@ REQUIRED_MANUAL_GATES = (
     "eurooffice-gd31j27x-socket-peerpidfd-identity-e2e",
     "eurooffice-gd31j27y-fd3-nonce-proc-inode-rights-free-e2e",
     "eurooffice-gd31j27z-root-pinned-exe-cgroup-launch-review-e2e",
+    "eurooffice-gd31j27aa-dependency-elf-unit-pins-review-e2e",
 )
 REQUIRED_AUTOMATED_STEPS = tuple(step.name for step in
     acceptance.build_steps(Path("/unused"), Path("/offline-feed"), "Linux"))
