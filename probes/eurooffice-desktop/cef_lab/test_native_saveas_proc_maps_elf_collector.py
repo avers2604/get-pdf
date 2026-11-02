@@ -158,17 +158,36 @@ class FixedPreopenedFds(unittest.TestCase):
                     collector.capture_preopened_once(**props)
                 reader.assert_not_called()
 
+    def test_preopened_fd_not_regular_or_not_readonly_refused_before_read(self):
+        import stat
+        for mode,access in ((stat.S_IFSOCK,os.O_RDONLY),
+                            (stat.S_IFREG,os.O_WRONLY),
+                            (stat.S_IFREG,os.O_RDWR)):
+            fake=type("Meta",(),{"st_mode":mode})()
+            with self.subTest(mode=mode,access=access),\
+                 patch.object(collector.os,"fstat",return_value=fake),\
+                 patch.object(collector.fcntl,"fcntl",return_value=access),\
+                 patch.object(collector.os,"read") as reader:
+                with self.assertRaises(collector.CollectorError):
+                    collector._read_bounded_preopened_fd(17,20)
+                reader.assert_not_called()
+
     def test_bounded_reader_does_not_open_or_close_owned_fd(self):
+        import stat
+        fake=type("Meta",(),{"st_mode":stat.S_IFREG})()
         with patch.object(collector.os,"read",
                           side_effect=[b"a"*5,b""]) as read,\
+             patch.object(collector.os,"fstat",return_value=fake),\
+             patch.object(collector.fcntl,"fcntl",return_value=os.O_RDONLY),\
              patch.object(collector.os,"open",create=True) as opened,\
              patch.object(collector.os,"close") as closed:
             self.assertEqual(b"a"*5,collector._read_bounded_preopened_fd(17,10))
             read.assert_called()
             opened.assert_not_called()
             closed.assert_not_called()
-        with patch.object(collector.os,"read",
-                          return_value=b"x"*11):
+        with patch.object(collector.os,"read",return_value=b"x"*11),\
+             patch.object(collector.os,"fstat",return_value=fake),\
+             patch.object(collector.fcntl,"fcntl",return_value=os.O_RDONLY):
             with self.assertRaises(collector.CollectorError):
                 collector._read_bounded_preopened_fd(17,10)
 
