@@ -78,6 +78,13 @@ option(GETDOC_GD31J27Q_ENABLE_ANONYMOUS_WORKER_PUBLICATION_LAB "Blocked syntheti
 if(GETDOC_GD31J27Q_ENABLE_ANONYMOUS_WORKER_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27Q_BLOCKED: helper is not IPC-wired, isolated, tested or authorized for user documents")
 endif()
+# GD31J27r: root-supervisor FD relay exists only as a deny-only preopened
+# descriptor API. The privileged provisioning supervisor is not deployed,
+# SO_PEERCRED and /proc cross-UID audits have not passed a disposable VM.
+option(GETDOC_GD31J27R_ENABLE_TRUSTED_FD_RELAY_PUBLICATION_LAB "BLOCKED root supervisor to worker synthetic SaveAs relay" OFF)
+if(GETDOC_GD31J27R_ENABLE_TRUSTED_FD_RELAY_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27R_BLOCKED: no audited root supervisor, offline VM FD transfer or approved worker publication")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")

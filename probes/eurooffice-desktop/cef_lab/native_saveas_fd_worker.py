@@ -151,7 +151,8 @@ def _fd_check(fd: int, *, expect_dir: bool, euid: int):
                 (meta.st_mode & 0o777) != 0o700 or meta.st_nlink < 2):
             raise WorkerError("Worker output directory not private to UID")
     else:
-        if (not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1 or
+        if (not stat.S_ISREG(meta.st_mode) or
+                meta.st_uid != euid or meta.st_nlink != 1 or
                 meta.st_mode & 0o022 or
                 not 0 < meta.st_size <= MAX_FILE_BYTES):
             raise WorkerError("Synthetic input FD is not a stable regular file")
@@ -195,6 +196,21 @@ def inspect_fds(handles, request, *, worker_uid: int):
         raise WorkerError("Worker input and output directory scope mismatch")
     _read_marker(scratch, PRIVATE_MARKER, PRIVATE_BYTES, worker_uid)
     _read_marker(output, OUTPUT_MARKER, OUTPUT_BYTES, worker_uid)
+    # GD31J27r: the source FD is not sufficient. A valid hash on an outside
+    # worker-owned file must NOT be accepted in place of the exact allowed
+    # fixture NAME in the already pinned private scratch dirfd.
+    try:
+        named_before = os.stat(request["fixtureName"], dir_fd=scratch,
+                               follow_symlinks=False)
+    except OSError as exc:
+        raise WorkerError("Allowed source fixture not in private scratch") from exc
+    if (not stat.S_ISREG(named_before.st_mode) or
+            named_before.st_uid != worker_uid or
+            (named_before.st_dev, named_before.st_ino) != (src.st_dev, src.st_ino) or
+            (named_before.st_size, named_before.st_mtime_ns,
+             named_before.st_ctime_ns) !=
+            (src.st_size, src.st_mtime_ns, src.st_ctime_ns)):
+        raise WorkerError("Received source does not match exact fixture name")
     name = request["expectedFinalName"]
     try:
         os.stat(name, dir_fd=output, follow_symlinks=False)
@@ -207,6 +223,17 @@ def inspect_fds(handles, request, *, worker_uid: int):
     digest = _digest_open_fd(source, src)
     if digest != request["sourceSha256"]:
         raise WorkerError("Synthetic source FD hash mismatch")
+    try:
+        named_after = os.stat(request["fixtureName"], dir_fd=scratch,
+                              follow_symlinks=False)
+    except OSError as exc:
+        raise WorkerError("Synthetic fixture name changed during inspection") from exc
+    if (not stat.S_ISREG(named_after.st_mode) or
+            (named_after.st_dev, named_after.st_ino, named_after.st_size,
+             named_after.st_mtime_ns, named_after.st_ctime_ns) !=
+            (named_before.st_dev, named_before.st_ino, named_before.st_size,
+             named_before.st_mtime_ns, named_before.st_ctime_ns)):
+        raise WorkerError("Synthetic fixture name replaced during inspection")
     return {
         "operation": "inspect_only", "sourceSha256": digest,
         "writePermissionGranted": False, "laboratoryOnly": True,
