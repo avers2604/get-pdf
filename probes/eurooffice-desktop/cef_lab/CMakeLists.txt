@@ -182,6 +182,14 @@ option(GETDOC_GD31J27AE_ENABLE_FD_ORIGIN_PUBLICATION_LAB "BLOCKED kernel FD prov
 if(GETDOC_GD31J27AE_ENABLE_FD_ORIGIN_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27AE_BLOCKED: observed proc FD/namespace/ELF identities are not native SaveAs authority")
 endif()
+
+# GD31J27af: optional root-only read-only disposable VM FD preopen pilot.
+# Fixed /proc/PID/maps and ELF allowlist, held pidfd, no launcher or SaveAs.
+# Even actual kernel data does NOT attest supervisor provenance/Astra MAC.
+option(GETDOC_GD31J27AF_ENABLE_VM_PREOPEN_PUBLICATION_LAB "BLOCKED fixed FD preopen native SaveAs" OFF)
+if(GETDOC_GD31J27AF_ENABLE_VM_PREOPEN_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27AF_BLOCKED: disposable VM read-only FD provisioning never authorizes production SaveAs")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
