@@ -41,11 +41,17 @@ class SocketMock:
         self.sent.append(packet)
 
 class Fd3ChallengeTest(unittest.TestCase):
+    def setUp(self):
+        p=patch.object(proof.os,"geteuid",return_value=40001)
+        p.start()
+        self.addCleanup(p.stop)
+
     def test_worker_receives_challenge_only_on_exact_fd3_then_echoes_inode(self):
         received=proof.CHALLENGE_PREFIX+NONCE
         channel=SocketMock(input_packet=received)
         fake=type("Meta",(),{"st_ino":INODE,"st_dev":9,"st_mode":stat.S_IFSOCK})()
-        with patch.object(proof.os,"fstat",return_value=fake):
+        with patch.object(proof.os,"fstat",return_value=fake),\
+             patch.object(proof.os,"geteuid",return_value=40002):
             report=proof.respond_fd3_once(channel,expected_broker_pid=22000,
                                           expected_broker_uid=40001)
         self.assertEqual(proof.ACK_PREFIX+NONCE+struct.pack("!Q",INODE),
