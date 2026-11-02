@@ -107,6 +107,13 @@ option(GETDOC_GD31J27U_ENABLE_ROOT_AUDITED_PUBLICATION_LAB "Blocked root-broker 
 if(GETDOC_GD31J27U_ENABLE_ROOT_AUDITED_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27U_BLOCKED: /proc observations do not attest root sandbox, DAC scope, worker publication or VM E2E")
 endif()
+# GD31J27v: Linux pidfd kernel reference and nonblocking exit poll are
+# prerequisites only. They never authenticate root binary, Astra MAC/ACL,
+# seccomp BPF, mount contents or proof of successful SaveAs.
+option(GETDOC_GD31J27V_ENABLE_PIDFD_PUBLICATION_LAB "BLOCKED experimental pidfd-based native SaveAs" OFF)
+if(GETDOC_GD31J27V_ENABLE_PIDFD_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27V_BLOCKED: pidfd guard is not trusted OS provisioning or worker publication")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
