@@ -121,6 +121,14 @@ option(GETDOC_GD31J27W_ENABLE_WORKER_PIDFD_PUBLICATION_LAB "BLOCKED worker pidfd
 if(GETDOC_GD31J27W_ENABLE_WORKER_PIDFD_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27W_BLOCKED: worker pidfd lifetime does not authorize sandbox publication or real documents")
 endif()
+# GD31J27x: SO_PEERPIDFD (Linux >=6.5 on approved UAPI architectures)
+# ties a kernel process reference to an ACTUAL connected Unix socket peer.
+# It does NOT prove peer FD3 endpoint pairing, executable provenance, Astra
+# MAC, mount/sandbox isolation or native SaveAs. Fail if unavailable.
+option(GETDOC_GD31J27X_ENABLE_SOCKET_PEER_PUBLICATION_LAB "BLOCKED socket SO_PEERPIDFD native SaveAs publication" OFF)
+if(GETDOC_GD31J27X_ENABLE_SOCKET_PEER_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27X_BLOCKED: kernel SO_PEERPIDFD is not OS launcher attestation or worker-side publication")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
