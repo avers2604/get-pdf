@@ -70,8 +70,11 @@ class WorkerPidfdBrokerTests(unittest.TestCase):
         def observed(*args,**kwargs):
             ordered.append("kernel-review")
             return kernel_observation() if report is None else report
+        def pin_process(*args):
+            ordered.append("pin")
+            return guard
         with mock.patch.object(broker.pidfd,"pin_worker_process",
-                               return_value=guard) as pin,\
+                               side_effect=pin_process) as pin,\
              mock.patch.object(broker.supervisor_handoff,"read_actual_handoff",
                                side_effect=observed):
             result=broker.handoff_after_kernel_review(
@@ -87,7 +90,7 @@ class WorkerPidfdBrokerTests(unittest.TestCase):
         guard=Guard(ordered)
         session,result=self.run_bridge(guard,ordered)
         self.assertEqual(
-            ["kernel-review","check","send","check","close"],
+            ["pin","kernel-review","check","send","check","close"],
             ordered)
         self.assertEqual(2,guard.checks)
         self.assertEqual(1,guard.closed)
