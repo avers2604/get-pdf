@@ -1,0 +1,40 @@
+# GD31J27t REVIEW SPECIMEN ONLY, not a working root service.
+# The actual module native_saveas_root_supervisor.py has NO main().
+# This specimen deliberately has ExecStart=/usr/bin/false and no [Install].
+# Root ownership alone is NOT peer identity or approved security boundary.
+# Reading worker-owned 0700 directories requires separately audited DAC
+# access AND an isolated mount namespace. No capabilities are granted here.
+[Unit]
+Description=GET Document offline root FD supervisor — BLOCKED specimen
+RefuseManualStart=yes
+ConditionPathExists=/run/getdoc-gd31j27t-disposable/APPROVAL_NEVER_AUTOCREATE
+
+[Service]
+Type=exec
+User=root
+Group=root
+ExecStart=/usr/bin/false
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateMounts=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+AmbientCapabilities=
+TasksMax=8
+TimeoutStartSec=5s
+Restart=no
+StandardInput=null
+StandardOutput=null
+StandardError=journal
+# NO [Install]; no WantedBy. This cannot open worker-owned 0700 dirs.
