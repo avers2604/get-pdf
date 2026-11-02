@@ -169,6 +169,28 @@ class TrustedFdProvisioningTests(unittest.TestCase):
                         independent_fixture_hashes=pins(),
                         approved_disposable_vm=True)
 
+    def test_unknown_ancillary_before_rights_closes_every_received_fd(self):
+        class UnexpectedFirst(SupervisorChannel):
+            def recvmsg(self, size, control_size, flags):
+                transferred = [os.dup(fd) for fd in self.handles]
+                self.last_received = transferred
+                return self.payload, [
+                    (socket.SOL_SOCKET, 0x7fff, b"unsupported"),
+                    (socket.SOL_SOCKET, socket.SCM_RIGHTS,
+                     array.array("i", transferred).tobytes()),
+                ], 0, None
+
+        channel = UnexpectedFirst(packet(), self.handles, uid=0)
+        with self.assertRaises(provision.ProvisioningError):
+            provision.receive_pinned_roles(
+                channel, trusted_supervisor_uid=0,
+                expected_supervisor_pid=777, worker_uid=os.geteuid(),
+                independent_fixture_hashes=pins(),
+                approved_disposable_vm=True)
+        for fd in channel.last_received:
+            with self.assertRaises(OSError):
+                os.fstat(fd)
+
     def test_relay_must_consume_session_and_never_grant_on_bad_supervisor(self):
         import native_saveas_fd_broker as broker
         session = broker.BrokerSession()

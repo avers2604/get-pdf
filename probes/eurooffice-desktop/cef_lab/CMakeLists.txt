@@ -85,6 +85,13 @@ option(GETDOC_GD31J27R_ENABLE_TRUSTED_FD_RELAY_PUBLICATION_LAB "BLOCKED root sup
 if(GETDOC_GD31J27R_ENABLE_TRUSTED_FD_RELAY_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27R_BLOCKED: no audited root supervisor, offline VM FD transfer or approved worker publication")
 endif()
+# GD31J27s: exact 3-party relay is callable solely from an uninstalled,
+# diagnostic-only internal API. No root supervisor launcher, trusted mount
+# policy or real Astra/Linux VM three-process proof; no production publication.
+option(GETDOC_GD31J27S_ENABLE_THREE_PARTY_PUBLICATION_LAB "Blocked root→broker→worker native SaveAs publication" OFF)
+if(GETDOC_GD31J27S_ENABLE_THREE_PARTY_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27S_BLOCKED: deny-only three-party bridge is not a proven system sandbox or SaveAs publisher")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")

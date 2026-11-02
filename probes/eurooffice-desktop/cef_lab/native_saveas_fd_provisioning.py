@@ -14,9 +14,12 @@ from __future__ import annotations
 import sys
 sys.dont_write_bytecode = True
 import array
-import fcntl
 import os
 import socket
+if sys.platform.startswith("linux"):
+    import fcntl
+else:
+    fcntl = None  # Source-only tests can import; runtime is Linux-only.
 import stat
 import struct
 
@@ -41,7 +44,8 @@ def close_received_fds(handles):
 
 def verify_pinned_handles(handles, request, *, worker_uid, independent_fixture_hashes):
     """Read-only worker-owned FD audit, no openat inside 0700 dirs."""
-    if (type(worker_uid) is not int or worker_uid <= 0 or
+    if (not sys.platform.startswith("linux") or
+            type(worker_uid) is not int or worker_uid <= 0 or
             type(handles) not in (list, tuple) or len(handles) != ROLE_COUNT or
             any(type(fd) is not int or fd < 0 for fd in handles) or
             len(set(handles)) != ROLE_COUNT or type(request) is not dict or
@@ -104,14 +108,21 @@ def _received_exact_three(sock):
             worker.MAX_REQUEST_BYTES + 1,
             socket.CMSG_SPACE(ROLE_COUNT * transferred.itemsize),
             socket.MSG_CMSG_CLOEXEC)
+        bad_control = False
         for level, kind, data in ancillary:
             if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS:
-                if len(data) % transferred.itemsize:
-                    raise ProvisioningError("Misaligned SCM_RIGHTS control")
-                transferred.frombytes(data)
+                complete_len = (len(data) // transferred.itemsize) * transferred.itemsize
+                if complete_len:
+                    transferred.frombytes(data[:complete_len])
+                if complete_len != len(data):
+                    bad_control = True
             else:
-                raise ProvisioningError("Unexpected SCM ancillary data")
-        if ((flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC)) or
+                # Do not raise until every SCM_RIGHTS block has been
+                # harvested: recvmsg already delivered the descriptors
+                # and early exit would leak later ancillary FDs.
+                bad_control = True
+        if (bad_control or
+                (flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC)) or
                 len(transferred) != ROLE_COUNT or
                 len(payload) > worker.MAX_REQUEST_BYTES or
                 len(set(transferred)) != ROLE_COUNT):
