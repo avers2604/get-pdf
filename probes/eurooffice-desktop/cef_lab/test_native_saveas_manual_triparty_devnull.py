@@ -98,6 +98,24 @@ class TripartyManualVMTests(unittest.TestCase):
             with self.assertRaises(lab.LabError):
                 lab._check_fd_roles([8,9,10])
 
+    def test_invalid_scm_rights_packet_closes_every_received_fd(self):
+        three=array.array("i",[8,9,10]).tobytes()
+        packet=[(socket.SOL_SOCKET,socket.SCM_RIGHTS,three)]
+        sock=MockSocket()
+        sock.recvmsg=lambda size,ancsize:(b"bad-packet",packet,0,None)
+        with patch.object(lab.os,"close") as close:
+            with self.assertRaises(lab.LabError):
+                lab._recv_three(sock)
+            self.assertEqual({8,9,10},{x.args[0] for x in close.call_args_list})
+            self.assertEqual(3,close.call_count)
+
+    def test_short_sendmsg_is_denied_without_retry(self):
+        sock=MockSocket()
+        sock.sendmsg=lambda parts,control:len(lab.REQUEST)-1
+        with patch.object(lab,"_check_fd_roles",return_value=(8,9,10)):
+            with self.assertRaises(lab.LabError):
+                lab._send_exact_three(sock,[8,9,10])
+
     def test_supervisor_sends_only_fixed_deny_packet(self):
         sock=MockSocket(peer_uid=44001)
         with patch.object(lab,"_check_fd_roles",return_value=(8,9,10)):
