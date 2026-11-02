@@ -146,6 +146,31 @@ class SnapshotTests(unittest.TestCase):
                 provenance.inspect_live_process(p)
             guard.close.assert_called_once()
 
+    def test_command_line_swap_during_hash_is_denied(self):
+        p=manifest()["profiles"]["worker"]
+        cmd=bytes([0]).join(x.encode("ascii") for x in p["argv"])+bytes([0])
+        counts={"cmdline":0}
+        def changing_proc(pid,key):
+            if key=="cmdline":
+                counts["cmdline"]+=1
+                return cmd if counts["cmdline"]==1 else b"/tmp/evil"+bytes([0])
+            if key=="cgroup":
+                return ("0::"+p["cgroup"]+"\n").encode("ascii")
+            return (b"Uid:\t40002\t40002\t40002\t40002\n"
+                    b"Gid:\t40003\t40003\t40003\t40003\n")
+        guard=MagicMock()
+        with patch.object(provenance.pidfd,"pin_broker_process",return_value=guard),\
+             patch.object(provenance.audit,"read_broker_start_ticks",
+                          return_value=p["startTicks"]),\
+             patch.object(provenance,"_read_proc",side_effect=changing_proc),\
+             patch.object(provenance,"_hash_executable",return_value=EXE_SHA),\
+             patch.object(provenance,"_hash_fixed_source",return_value=SRC_SHA),\
+             patch.object(provenance.os,"readlink",return_value=p["exeTarget"]):
+            with self.assertRaises(provenance.ProvenanceError):
+                provenance.inspect_live_process(p)
+            self.assertEqual(2,counts["cmdline"])
+            guard.close.assert_called_once()
+
     def test_negative_process_attestation_report_always_false(self):
         report=provenance.denial()
         for key in ("workerExecutableAttested","brokerExecutableAttested",
