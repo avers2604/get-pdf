@@ -108,14 +108,21 @@ def _received_exact_three(sock):
             worker.MAX_REQUEST_BYTES + 1,
             socket.CMSG_SPACE(ROLE_COUNT * transferred.itemsize),
             socket.MSG_CMSG_CLOEXEC)
+        bad_control = False
         for level, kind, data in ancillary:
             if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS:
-                if len(data) % transferred.itemsize:
-                    raise ProvisioningError("Misaligned SCM_RIGHTS control")
-                transferred.frombytes(data)
+                complete_len = (len(data) // transferred.itemsize) * transferred.itemsize
+                if complete_len:
+                    transferred.frombytes(data[:complete_len])
+                if complete_len != len(data):
+                    bad_control = True
             else:
-                raise ProvisioningError("Unexpected SCM ancillary data")
-        if ((flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC)) or
+                # Do not raise until every SCM_RIGHTS block has been
+                # harvested: recvmsg already delivered the descriptors
+                # and early exit would leak later ancillary FDs.
+                bad_control = True
+        if (bad_control or
+                (flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC)) or
                 len(transferred) != ROLE_COUNT or
                 len(payload) > worker.MAX_REQUEST_BYTES or
                 len(set(transferred)) != ROLE_COUNT):
