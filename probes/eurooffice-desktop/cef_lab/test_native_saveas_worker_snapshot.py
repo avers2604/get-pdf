@@ -37,8 +37,8 @@ def request(**changes):
     return result
 
 
-@unittest.skipUnless(sys.platform.startswith("linux"),
-                     "Linux O_TMPFILE and procfs regression requires disposable VM")
+@unittest.skipUnless(sys.platform.startswith("linux") and os.geteuid() != 0,
+                     "Linux non-root O_TMPFILE/procfs regression requires disposable VM")
 class AnonymousSnapshotTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="getdoc-gd31j27q-")
@@ -94,6 +94,36 @@ class AnonymousSnapshotTests(unittest.TestCase):
                 self.handles, request(), worker_uid=os.geteuid(),
                 operator_vm_gate=snapshot.VM_TEST_ONLY_EXPLICIT_GATE)
         self.assertEqual(b"KEEP_EXISTING_SYNTHETIC_FILE", final.read_bytes())
+
+    def test_directory_fsync_error_keeps_final_for_manual_review(self):
+        from unittest import mock
+        final = self.output / DESTINATION
+        original_fsync = os.fsync
+        output_fd = self.handles[2]
+        def fail_only_final_directory(fd):
+            if fd == output_fd:
+                raise OSError(5, "synthetic directory fsync fault")
+            return original_fsync(fd)
+        with mock.patch.object(snapshot.os, "fsync",
+                               side_effect=fail_only_final_directory):
+            with self.assertRaises(snapshot.SnapshotError):
+                snapshot.publish_disposable_fixture(
+                    self.handles, request(), worker_uid=os.geteuid(),
+                    operator_vm_gate=snapshot.VM_TEST_ONLY_EXPLICIT_GATE)
+        # Success is uncertain. Never automatically unlink an already visible
+        # file, including if its directory fsync syscall has failed.
+        self.assertTrue(final.exists())
+        self.assertEqual(PAYLOAD, final.read_bytes())
+
+    def test_source_name_swapped_to_symlink_does_not_publish(self):
+        old = self.scratch / "safe-synthetic-original"
+        self.source.rename(old)
+        self.source.symlink_to(old)
+        with self.assertRaises(snapshot.SnapshotError):
+            snapshot.publish_disposable_fixture(
+                self.handles, request(), worker_uid=os.geteuid(),
+                operator_vm_gate=snapshot.VM_TEST_ONLY_EXPLICIT_GATE)
+        self.assertFalse((self.output / DESTINATION).exists())
 
     def test_missing_marker_or_wrong_sha_never_creates_final(self):
         for bad in (request(sourceSha256="b" * 64),
