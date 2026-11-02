@@ -72,6 +72,8 @@ class SupervisorChannel:
                      "SCM_RIGHTS Linux-only test fixture")
 class TrustedFdProvisioningTests(unittest.TestCase):
     def setUp(self):
+        if os.geteuid() == 0:
+            self.skipTest("Unprivileged synthetic worker UID required")
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.source = root / "gd31j6_writer.docx"
