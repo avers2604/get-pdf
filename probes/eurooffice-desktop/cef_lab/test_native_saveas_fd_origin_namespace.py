@@ -219,6 +219,37 @@ class OriginTests(TestCase):
         self.assertEqual(1,events.count("broker.close"))
         self.assertEqual(1,events.count("worker.close"))
 
+    def test_elf_mutates_after_parser_and_is_refused(self):
+        args=inputs()
+        events=[]
+        fd_targets={"/proc/self/fd/14":"/proc/32001/maps",
+                    "/proc/self/fd/15":"/proc/33001/maps",
+                    "/proc/self/fd/16":LIB}
+        def ns(path):
+            return SimpleNamespace(st_ino=next(
+                args["expected_namespaces"][role][name]
+                for role,pid in args["expected_pids"].items()
+                for name in ("mnt","net","pid")
+                if path==f"/proc/{pid}/ns/{name}"))
+        with patch.object(origin.os,"geteuid",return_value=0),\
+             patch.object(origin.pidfd,"pin_broker_process",
+                          return_value=Guard("broker",events)),\
+             patch.object(origin.pidfd,"pin_worker_process",
+                          return_value=Guard("worker",events)),\
+             patch.object(origin.os,"readlink",side_effect=lambda p:fd_targets[p]),\
+             patch.object(origin.os,"stat",side_effect=ns),\
+             patch.object(origin,"_hash_root_elf_fd",
+                          side_effect=[SHA,"f"*64]) as hashed,\
+             patch.object(origin.maps,"capture_preopened_once",
+                          return_value={**maps.denial(),"kernelMapFactsObserved":True,
+                                        "elfNeededFactsObserved":True}) as capture:
+            with self.assertRaises(origin.OriginError):
+                origin.review_fd_origins_once(**args)
+            capture.assert_called_once()
+            self.assertEqual(2,hashed.call_count)
+        self.assertEqual(1,events.count("broker.close"))
+        self.assertEqual(1,events.count("worker.close"))
+
     def test_readonly_root_elf_hash_requires_stable_inode_and_no_write(self):
         meta=SimpleNamespace(st_mode=stat.S_IFREG|0o644,st_uid=0,
                              st_nlink=1,st_size=len(b"synthetic fixed ELF"),
