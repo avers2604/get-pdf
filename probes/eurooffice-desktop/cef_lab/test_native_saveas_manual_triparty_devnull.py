@@ -80,9 +80,15 @@ class TripartyManualVMTests(unittest.TestCase):
         controls=[(socket.SOL_SOCKET,socket.SCM_RIGHTS,params)]
         mode=stat.S_IFCHR|0o666
         fake=SimpleNamespace(st_mode=mode,st_rdev=259)
+        def readonly_cloexec(_fd,cmd):
+            if cmd==lab.fcntl.F_GETFL:
+                return os.O_RDONLY
+            if cmd==lab.fcntl.F_GETFD:
+                return lab.fcntl.FD_CLOEXEC
+            raise AssertionError("Unexpected fcntl command")
         with patch.object(lab.os,"fstat",return_value=fake),\
              patch.object(lab.os,"stat",return_value=fake),\
-             patch.object(lab.fcntl,"fcntl",return_value=os.O_RDONLY):
+             patch.object(lab.fcntl,"fcntl",side_effect=readonly_cloexec):
             self.assertEqual((8,9,10),lab._check_fd_roles([8,9,10]))
             self.assertEqual((8,9,10),lab._extract_exact_rights(controls,0))
         for xs in ([8,9],[8,9,9],[0,9,10],[-1,9,10]):
@@ -94,7 +100,14 @@ class TripartyManualVMTests(unittest.TestCase):
             lab._extract_exact_rights(controls+controls,0)
         with patch.object(lab.os,"fstat",return_value=fake),\
              patch.object(lab.os,"stat",return_value=fake),\
-             patch.object(lab.fcntl,"fcntl",return_value=os.O_WRONLY):
+             patch.object(lab.fcntl,"fcntl",side_effect=lambda fd,cmd: (
+                 os.O_WRONLY if cmd==lab.fcntl.F_GETFL else lab.fcntl.FD_CLOEXEC)):
+            with self.assertRaises(lab.LabError):
+                lab._check_fd_roles([8,9,10])
+        # Read-only is insufficient if MSG_CMSG_CLOEXEC was ignored or stripped.
+        with patch.object(lab.os,"fstat",return_value=fake),\
+             patch.object(lab.os,"stat",return_value=fake),\
+             patch.object(lab.fcntl,"fcntl",return_value=os.O_RDONLY):
             with self.assertRaises(lab.LabError):
                 lab._check_fd_roles([8,9,10])
 
@@ -109,7 +122,23 @@ class TripartyManualVMTests(unittest.TestCase):
         three=array.array("i",[8,9,10]).tobytes()
         packet=[(socket.SOL_SOCKET,socket.SCM_RIGHTS,three)]
         sock=MockSocket()
-        sock.recvmsg=lambda size,ancsize:(b"bad-packet",packet,0,None)
+        sock.recvmsg=lambda size,ancsize,flags:(b"bad-packet",packet,0,None)
+        with patch.object(lab.os,"close") as close:
+            with self.assertRaises(lab.LabError):
+                lab._recv_three(sock)
+            self.assertEqual({8,9,10},{x.args[0] for x in close.call_args_list})
+            self.assertEqual(3,close.call_count)
+
+    def test_truncated_ancillary_still_closes_complete_received_fds(self):
+        # Regression: the kernel can install a subset of SCM_RIGHTS handles
+        # even when control bytes are truncated or have an incomplete tail.
+        three=array.array("i",[8,9,10]).tobytes()
+        packet=[(socket.SOL_SOCKET,socket.SCM_RIGHTS,three+b"\xff")]
+        sock=MockSocket()
+        def malformed_recv(size,ancsize,flags):
+            self.assertEqual(socket.MSG_CMSG_CLOEXEC,flags)
+            return lab.REQUEST,packet,socket.MSG_CTRUNC,None
+        sock.recvmsg=malformed_recv
         with patch.object(lab.os,"close") as close:
             with self.assertRaises(lab.LabError):
                 lab._recv_three(sock)
