@@ -72,7 +72,7 @@ def _valid_profile(role,info):
             any(type(info[key]) is not str or not SHA.fullmatch(info[key]) or
                 info[key]=="0"*64 for key in ("exeSha256","scriptSha256")) or
             type(info["argv"]) is not list or
-            info["argv"]!=["/usr/bin/python3","-I","-S",SCRIPT_PATHS[role]]):
+            info["argv"]!=["/usr/bin/python3","-E","-s","-S",SCRIPT_PATHS[role]]):
         raise ProvenanceError("Untrusted process lifetime, executable or cgroup pin")
     return info
 
