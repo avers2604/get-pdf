@@ -13,6 +13,23 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27w_worker_pidfd_handoff_requires_manual_vm_denial(self):
+        steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
+        names=[step.name for step in steps]
+        for name,filename in (
+            ("native-saveas-worker-pidfd-handoff-tests",
+             "test_native_saveas_worker_pidfd_handoff.py"),
+            ("native-saveas-worker-pidfd-source-tests",
+             "test_native_saveas_worker_pidfd_handoff_contract.py"),
+        ):
+            self.assertIn(name,names)
+            self.assertLess(names.index(name),names.index("solution-restore"))
+            self.assertIn(filename,next(x for x in steps if x.name==name).command)
+        self.assertIn(
+            "eurooffice-gd31j27w-worker-pidfd-scm-rights-deny-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a"*40,"Linux","GD-31I")["releaseReady"])
+
     def test_gd31j27v_pidfd_provenance_remains_offline_and_denied(self):
         steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]
