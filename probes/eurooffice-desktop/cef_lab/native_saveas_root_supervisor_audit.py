@@ -8,6 +8,7 @@ Requires independent disposable Astra VM audit even on positive observations.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -117,3 +118,46 @@ def inspect_current_root():
         root_mount_ns_inode=mounts["mnt"],host_mount_ns_inode=host["mnt"],
         root_net_ns_inode=mounts["net"],host_net_ns_inode=host["net"],
     )
+
+
+def inspect_three_party_alignment(root_config,dialer_config,bridge_config):
+    """Independent read-only consistency check, NOT OS identity proof.
+
+    Exact source schemas are validated by their own modules before comparing
+    root/broker/worker UID/GID and inspect-only flags. No service or file is
+    opened and no root permissions are granted by this report.
+    """
+    import native_saveas_root_supervisor as root
+    import native_saveas_worker_dialer as dialer
+    import native_saveas_three_party_bridge as bridge
+    try:
+        root_cfg=root.validate_manifest(root_config)
+        worker_cfg=dialer.parse_static_policy(
+            (json.dumps(dialer_config,separators=(",",":"))+"\n").encode("ascii"))
+        broker_cfg=bridge.parse_static_policy(bridge_config)
+    except (root.SupervisorError,dialer.DialerError,bridge.BridgeError,
+            UnicodeError,TypeError,ValueError) as exc:
+        raise AuditError("Cross-service manifest or schema rejected") from exc
+    if (root_cfg["workerUid"]!=worker_cfg["workerUid"] or
+            root_cfg["workerUid"]!=broker_cfg["workerUid"] or
+            root_cfg["brokerUid"]!=worker_cfg["brokerUid"] or
+            root_cfg["brokerUid"]!=broker_cfg["brokerUid"] or
+            root_cfg["brokerGid"]!=worker_cfg["ipcGid"] or
+            root_cfg["brokerGid"]!=worker_cfg["workerGid"] or
+            root_cfg["brokerGid"]!=broker_cfg["brokerGid"] or
+            broker_cfg["supervisorUid"]!=0 or
+            worker_cfg["publishEnabled"] is not False or
+            broker_cfg["allowPublication"] is not False):
+        raise AuditError("Three-party separate-UID configuration mismatch")
+    return {
+        "schema":SCHEMA,"state":"requires-independent-review",
+        "configurationFieldsAligned":True,
+        "rootSandboxAttested":False,
+        "brokerProcessPinnedAttested":False,
+        "nativePublicationAuthorized":False,
+        "launchAuthorized":False,
+        "writePermissionGranted":False,
+        "releaseReady":False,
+        "approvedForProduction":False,
+        "laboratoryOnly":True,
+    }
