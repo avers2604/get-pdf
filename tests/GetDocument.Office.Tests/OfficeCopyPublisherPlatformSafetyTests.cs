@@ -43,6 +43,21 @@ public sealed class OfficeCopyPublisherPlatformSafetyTests
     }
 
     [TestMethod]
+    public async Task ConcurrentDestinationCreationNeverOverwritesAnotherWritersCopy()
+    {
+        using var fixture = new Scratch();
+        string target = Path.Combine(fixture.Root, "same.docx");
+        await Assert.ThrowsExactlyAsync<IOException>(() =>
+            OfficeCopyPublisher.PublishAsync(target, async staged =>
+            {
+                await File.WriteAllTextAsync(staged, "OUR COPY");
+                await File.WriteAllTextAsync(target, "COLLEAGUE COPY");
+            }));
+        Assert.AreEqual("COLLEAGUE COPY", await File.ReadAllTextAsync(target));
+        Assert.AreEqual(1, Directory.GetFiles(fixture.Root).Length);
+    }
+
+    [TestMethod]
     public async Task NativeExportCannotPublishSymlinkToAnotherFile()
     {
         using var fixture = new Scratch();
