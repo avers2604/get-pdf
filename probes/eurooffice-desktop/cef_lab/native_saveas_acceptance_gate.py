@@ -117,6 +117,7 @@ REQUIRED_MANUAL_GATES = (
     "eurooffice-gd31j27ad-preopened-proc-maps-elf64-deny-e2e",
     "eurooffice-gd31j27ae-pidfd-fd-origin-namespace-elf-hash-e2e",
     "eurooffice-gd31j27af-real-fixed-fd-proc-elf-readonly-e2e",
+    "eurooffice-gd31j27ag-independent-triparty-denial-trace-vm-e2e",
 )
 REQUIRED_AUTOMATED_STEPS = tuple(step.name for step in
     acceptance.build_steps(Path("/unused"), Path("/offline-feed"), "Linux"))
