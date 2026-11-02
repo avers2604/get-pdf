@@ -57,6 +57,7 @@ CASES = (
     "root-broker-pid-reuse-dac-caps-mountns-deny",
     "broker-pidfd-exit-poll-unsupported-kernel-no-fallback",
     "worker-pidfd-death-before-after-scm-rights-no-replay",
+    "socket-peerpidfd-kernel-connected-worker-identity-no-fallback",
     "scratch-and-final-on-different-filesystems",
     "file-fsync-denied-before-linkat",
     "directory-fsync-denied-after-linkat",
@@ -98,6 +99,7 @@ REQUIRED_MANUAL_GATES = (
     "eurooffice-gd31j27u-root-broker-pid-dac-namespace-audit-e2e",
     "eurooffice-gd31j27v-pidfd-broker-liveness-identity-e2e",
     "eurooffice-gd31j27w-worker-pidfd-scm-rights-deny-e2e",
+    "eurooffice-gd31j27x-socket-peerpidfd-identity-e2e",
 )
 REQUIRED_AUTOMATED_STEPS = tuple(step.name for step in
     acceptance.build_steps(Path("/unused"), Path("/offline-feed"), "Linux"))
