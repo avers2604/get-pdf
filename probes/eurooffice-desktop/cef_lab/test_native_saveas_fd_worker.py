@@ -106,7 +106,7 @@ class FdWorkerProtocolTests(unittest.TestCase):
             output.mkdir(mode=0o700)
             (private / worker.PRIVATE_MARKER).write_bytes(worker.PRIVATE_BYTES)
             (output / worker.OUTPUT_MARKER).write_bytes(worker.OUTPUT_BYTES)
-            input_file = root / FIXTURE
+            input_file = private / FIXTURE
             input_file.write_bytes(BYTES)
             src = os.open(input_file, os.O_RDONLY | os.O_CLOEXEC)
             src_dir = os.open(private, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
@@ -134,7 +134,7 @@ class FdWorkerProtocolTests(unittest.TestCase):
             private.mkdir(mode=0o700); output.mkdir(mode=0o700)
             (private / worker.PRIVATE_MARKER).write_bytes(worker.PRIVATE_BYTES)
             (output / worker.OUTPUT_MARKER).write_bytes(worker.OUTPUT_BYTES)
-            src_path = root / FIXTURE
+            src_path = private / FIXTURE
             src_path.write_bytes(BYTES)
             src = os.open(src_path, os.O_RDWR | os.O_CLOEXEC)
             scratch_fd = os.open(private, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
@@ -153,6 +153,34 @@ class FdWorkerProtocolTests(unittest.TestCase):
                                        worker_uid=os.geteuid())
             finally:
                 os.close(src); os.close(scratch_fd); os.close(output_fd)
+
+    def test_source_fd_must_match_allowlisted_name_within_private_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            private = root / "gd31j26-private-ABCDEF"
+            output = root / "gd31j25-output"
+            private.mkdir(mode=0o700)
+            output.mkdir(mode=0o700)
+            (private / worker.PRIVATE_MARKER).write_bytes(worker.PRIVATE_BYTES)
+            (output / worker.OUTPUT_MARKER).write_bytes(worker.OUTPUT_BYTES)
+            outsider = root / FIXTURE
+            outsider.write_bytes(BYTES)
+            src = os.open(outsider, os.O_RDONLY | os.O_CLOEXEC)
+            scratch = os.open(private, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            out = os.open(output, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            try:
+                with self.assertRaises(worker.WorkerError):
+                    worker.inspect_fds((src, scratch, out),
+                                       worker.parse_request(manifest()),
+                                       worker_uid=os.geteuid())
+                local = private / FIXTURE
+                local.symlink_to(outsider)
+                with self.assertRaises(worker.WorkerError):
+                    worker.inspect_fds((src, scratch, out),
+                                       worker.parse_request(manifest()),
+                                       worker_uid=os.geteuid())
+            finally:
+                os.close(src); os.close(scratch); os.close(out)
 
     def test_same_uid_unix_peer_never_receives_worker_permission(self):
         if not sys.platform.startswith("linux") or not hasattr(socket, "SO_PEERCRED"):
