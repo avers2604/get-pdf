@@ -13,6 +13,23 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ag_offline_triparty_trace_never_marks_release(self):
+        steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
+        names=[step.name for step in steps]
+        for name,filename in (
+            ("native-saveas-three-party-trace-tests",
+             "test_native_saveas_three_party_offline_trace.py"),
+            ("native-saveas-three-party-trace-source-tests",
+             "test_native_saveas_three_party_offline_trace_contract.py"),
+        ):
+            self.assertIn(name,names)
+            self.assertLess(names.index(name),names.index("solution-restore"))
+            self.assertIn(filename,next(s for s in steps if s.name==name).command)
+        self.assertIn(
+            "eurooffice-gd31j27ag-independent-triparty-denial-trace-vm-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a"*40,"Linux","GD-31I")["releaseReady"])
+
     def test_gd31j27af_vm_fd_preopen_never_authorizes_release(self):
         steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]
