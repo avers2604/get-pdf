@@ -24,7 +24,7 @@ class ThreePartyBridgeSourceTests(unittest.TestCase):
         for needle in (
             "def bridge_inspect_only_once(", "provisioning.relay_pinned_once(",
             "session=broker.BrokerSession()", "session.consumed=True",
-            '"mode" != "inspect_only"', "allowPublication",
+            'data["mode"] != "inspect_only"', "allowPublication",
             '"nativePublicationAuthorized":False',
             '"nativeSaveProven":False',
             '"documentVerified":False',
