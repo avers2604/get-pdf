@@ -117,6 +117,16 @@ def worker_identity_matches(cfg):
 
 
 def _read_pinned_policy() -> dict:
+    # O_NOFOLLOW protects the last component; also pin BOTH fixed parent
+    # directories against symlinks and group/world write before opening.
+    try:
+        for directory in ("/etc", "/etc/getdoc-lab"):
+            meta = os.lstat(directory)
+            if (not stat.S_ISDIR(meta.st_mode) or meta.st_uid != 0 or
+                    meta.st_mode & 0o022):
+                raise DialerError("Untrusted static worker-policy directory")
+    except OSError as exc:
+        raise DialerError("Root-owned policy directory unavailable") from exc
     flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
     try:
         fd = os.open(FIXED_CONFIG, flags)
