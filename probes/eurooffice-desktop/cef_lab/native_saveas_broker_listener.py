@@ -140,6 +140,26 @@ def listen_once(policy) -> int:
     return 2
 
 
+def bridge_accepted_diagnostic_only(supervisor_channel, worker_channel,
+                                    strict_bridge_policy, *, pinned_hashes,
+                                    approved_disposable_vm,
+                                    observed_broker_uid, observed_broker_gid):
+    """EXPLICIT internal test-only hook; never called by listen_once/main.
+
+    The OS must independently establish and verify BOTH connected sockets,
+    actual distinct UIDs, worker PID/starttime and the pinned synthetic SHA.
+    No file publication is enabled by attaching this method to the listener.
+    """
+    import native_saveas_three_party_bridge as three_party
+    return three_party.bridge_inspect_only_once(
+        strict_bridge_policy, supervisor_channel, worker_channel,
+        pinned_hashes=pinned_hashes,
+        approved_disposable_vm=approved_disposable_vm,
+        observed_broker_uid=observed_broker_uid,
+        observed_broker_gid=observed_broker_gid,
+    )
+
+
 def main(argv=None):
     args = sys.argv[1:] if argv is None else argv
     if args or not sys.platform.startswith("linux"):
