@@ -46,13 +46,25 @@ def parse_static_policy(data):
     return data
 
 
+def expected_upstream_denial_for_contract():
+    """Exact expected upstream fields; DENIAL ONLY. Never trust JSON claims."""
+    return {
+        "schema": provisioning.SCHEMA, "state": "denied",
+        "workerPreflightAttested": False,
+        "nativeSaveProven": False, "documentVerified": False,
+        "saveVerified": False, "releaseReady": False,
+        "approvedForProduction": False, "writePermissionGranted": False,
+        "laboratoryOnly": True,
+        "launchAuthorized": False, "kernelIsolationAttested": False,
+        "brokerHandshakeAttested": False,
+        "nativePublicationAuthorized": False,
+        "trustedSupervisorAttested": False,
+    }
+
+
 def _exact_denial(result):
-    if (type(result) is not dict or result.get("state") != "denied" or
-            any(result.get(name) is not False for name in (
-                "trustedSupervisorAttested", "nativePublicationAuthorized",
-                "writePermissionGranted", "releaseReady",
-                "approvedForProduction"))):
-        raise BridgeError("Unexpected privileged relay status")
+    if type(result) is not dict or result != expected_upstream_denial_for_contract():
+        raise BridgeError("Unapproved or malformed three-party relay result")
 
 
 def bridge_inspect_only_once(policy, supervisor_socket, worker_socket, *,
