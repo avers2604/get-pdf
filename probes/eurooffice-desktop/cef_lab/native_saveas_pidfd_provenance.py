@@ -81,7 +81,11 @@ class PinnedBrokerPidfd:
                 raise PidfdError("Kernel pidfd close failed") from exc
 
     def __enter__(self):
-        self.assert_live()
+        try:
+            self.assert_live()
+        except BaseException:
+            self.close()
+            raise
         return self
 
     def __exit__(self,exc_type,exc,tb):
@@ -108,6 +112,7 @@ def pin_broker_process(pid,expected_start_ticks):
     if initial!=expected_start_ticks:
         raise PidfdError("Broker PID reused before pidfd acquisition")
     fd=-1
+    completed=False
     try:
         fd=os.pidfd_open(pid,0)
         if type(fd) is not int or fd<3:
@@ -116,13 +121,14 @@ def pin_broker_process(pid,expected_start_ticks):
             raise PidfdError("Broker pidfd may leak to child process")
         handle=PinnedBrokerPidfd(pid,expected_start_ticks,fd)
         handle.assert_live()
+        completed=True
         return handle
     except (OSError,ValueError,AttributeError) as exc:
         if isinstance(exc,PidfdError):
             raise
         raise PidfdError("Cannot pin broker with Linux pidfd") from exc
     finally:
-        if fd>=0 and "handle" not in locals():
+        if fd>=0 and not completed:
             # A pidfd must not survive a failed acquisition.
             try:
                 os.close(fd)
