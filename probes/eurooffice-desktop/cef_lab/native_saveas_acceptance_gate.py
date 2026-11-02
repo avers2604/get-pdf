@@ -53,6 +53,7 @@ CASES = (
     "worker-anonymous-snapshot-crash-fsync-linkat-unknown-outcome",
     "root-supervisor-scm-rights-worker-owned-fd-relay-deny",
     "three-party-root-broker-worker-session-fd-close-denial",
+    "root-fixed-manifest-synthetic-fd-sender-no-extra-dac",
     "scratch-and-final-on-different-filesystems",
     "file-fsync-denied-before-linkat",
     "directory-fsync-denied-after-linkat",
@@ -90,6 +91,7 @@ REQUIRED_MANUAL_GATES = (
     "eurooffice-gd31j27q-worker-anonymous-snapshot-fsync-linkat-crash-e2e",
     "eurooffice-gd31j27r-root-supervisor-worker-owned-fd-relay-e2e",
     "eurooffice-gd31j27s-three-party-denial-bridge-fd-lifecycle-e2e",
+    "eurooffice-gd31j27t-root-supervisor-fixed-fd-sender-e2e",
 )
 REQUIRED_AUTOMATED_STEPS = tuple(step.name for step in
     acceptance.build_steps(Path("/unused"), Path("/offline-feed"), "Linux"))
