@@ -137,6 +137,14 @@ option(GETDOC_GD31J27Y_ENABLE_FD3_PROVEN_PUBLICATION_LAB "BLOCKED FD3 challenge 
 if(GETDOC_GD31J27Y_ENABLE_FD3_PROVEN_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27Y_BLOCKED: FD3 nonce proof cannot attest trusted worker code, Astra MAC or native SaveAs")
 endif()
+# GD31J27z: read-only fixed root-owned launch manifest, exact binary/source
+# SHA256, cgroup v2 and argv are necessary facts, not independent binary
+# signing or complete Python dependency provenance. Not executable proof
+# of Astra MAC, FS isolation, seccomp BPF, or a working root supervisor.
+option(GETDOC_GD31J27Z_ENABLE_LAUNCH_PROVENANCE_PUBLICATION_LAB "BLOCKED launch provenance-based native SaveAs" OFF)
+if(GETDOC_GD31J27Z_ENABLE_LAUNCH_PROVENANCE_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27Z_BLOCKED: pinned executable facts do not authorize worker publication or production files")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
