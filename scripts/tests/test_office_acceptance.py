@@ -13,6 +13,23 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ae_fd_origin_namespace_remains_unwired_and_denied(self):
+        steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
+        names=[step.name for step in steps]
+        for name,filename in (
+            ("native-saveas-fd-origin-namespace-tests",
+             "test_native_saveas_fd_origin_namespace.py"),
+            ("native-saveas-fd-origin-namespace-source-tests",
+             "test_native_saveas_fd_origin_namespace_contract.py"),
+        ):
+            self.assertIn(name,names)
+            self.assertLess(names.index(name),names.index("solution-restore"))
+            self.assertIn(filename,next(s for s in steps if s.name==name).command)
+        self.assertIn(
+            "eurooffice-gd31j27ae-pidfd-fd-origin-namespace-elf-hash-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a"*40,"Linux","GD-31I")["releaseReady"])
+
     def test_gd31j27ad_preopened_proc_elf_source_only_requires_vm_evidence(self):
         steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]
