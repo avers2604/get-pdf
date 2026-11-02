@@ -147,6 +147,19 @@ class SocketPeerPidfdTests(unittest.TestCase):
                                      expected_worker_start_ticks=123456)
             close.assert_called_once_with(71)
 
+    def test_closed_stdio_refused_before_kernel_allocates_a_new_descriptor(self):
+        sock=FakeSocket()
+        with mock.patch.object(peer.platform,"machine",return_value="x86_64"),\
+             mock.patch.object(peer.os,"fstat",side_effect=OSError(9,"closed stdio")),\
+             mock.patch.object(peer.os,"close") as close:
+            with self.assertRaises(peer.PeerPidfdError):
+                peer.pin_socket_peer(sock,expected_worker_pid=33001,
+                                     expected_worker_uid=40002,
+                                     broker_uid=40001,
+                                     expected_worker_start_ticks=123456)
+            self.assertEqual(1,len(sock.options))
+            close.assert_not_called()
+
     def test_bool_or_missing_pin_is_refused(self):
         for args in (
             {"expected_worker_pid":True},
