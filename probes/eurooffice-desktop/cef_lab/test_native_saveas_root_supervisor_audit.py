@@ -91,6 +91,61 @@ class RootSandboxEvidenceTests(unittest.TestCase):
             audit.require_broker_lifetime(broker_pid=0,expected_start_ticks=123456)
 
 
+class ThreePartyPolicyAlignmentTests(unittest.TestCase):
+    def policies(self):
+        import native_saveas_worker_dialer as dialer
+        import native_saveas_three_party_bridge as bridge
+        root_cfg={
+            "schema":"getdoc-gd31j27t-root-supervisor-synthetic-manifest-lab/1",
+            "workerUid":40002,"brokerUid":40001,"brokerGid":40003,
+            "expectedBrokerPid":32001,"expectedBrokerStartTicks":123456,
+            "fixtureName":"gd31j6_writer.docx",
+            "fixtureDigests":{"gd31j6_writer.docx":"a"*64,
+                             "gd31j6_calc.xlsx":"b"*64,
+                             "gd31j6_impress.pptx":"c"*64},
+            "sessionId":"102030405060708090a0b0c0d0e0f010",
+            "tabId":"f010e0d0c0b0a0908070605040302010",
+            "operation":"inspect_only","publishEnabled":False,
+            "laboratoryOnly":True,
+        }
+        dial={
+            "schema":dialer.CONFIG_SCHEMA,
+            "workerUid":40002,"workerGid":40003,
+            "brokerUid":40001,"ipcGid":40003,
+            "socketPath":dialer.FIXED_SOCKET,"mode":"diagnostic-only",
+            "laboratoryOnly":True,"publishEnabled":False,
+        }
+        br={
+            "schema":bridge.POLICY_SCHEMA,"mode":"inspect_only",
+            "laboratoryOnly":True,"workerUid":40002,"brokerUid":40001,
+            "brokerGid":40003,"supervisorUid":0,
+            "expectedSupervisorPid":33001,"expectedWorkerPid":33002,
+            "expectedWorkerStartTicks":123457,"allowPublication":False,
+        }
+        return root_cfg,dial,br
+
+    def test_matching_policies_still_have_no_os_attestation(self):
+        r,d,b=self.policies()
+        result=audit.inspect_three_party_alignment(r,d,b)
+        self.assertEqual("requires-independent-review",result["state"])
+        self.assertFalse(result["rootSandboxAttested"])
+        self.assertFalse(result["launchAuthorized"])
+        self.assertFalse(result["releaseReady"])
+
+    def test_uid_gid_and_unsupported_flags_mismatch_fail_closed(self):
+        for index,field,value in (
+            (0,"workerUid",40005),(0,"brokerGid",40004),
+            (1,"ipcGid",40004),(1,"workerUid",40006),
+            (2,"brokerUid",40002),(2,"supervisorUid",1),
+            (2,"allowPublication",True),(0,"publishEnabled",True),
+        ):
+            with self.subTest(index=index,field=field):
+                parts=list(self.policies())
+                parts[index]={**parts[index],field:value}
+                with self.assertRaises(audit.AuditError):
+                    audit.inspect_three_party_alignment(*parts)
+
+
 class SenderBirthtimeGates(unittest.TestCase):
     def config(self):
         return {"schema":root.MANIFEST_SCHEMA,"workerUid":40002,
