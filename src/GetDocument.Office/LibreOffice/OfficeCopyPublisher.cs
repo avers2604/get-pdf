@@ -85,7 +85,14 @@ public static class OfficeCopyPublisher
         }
         finally
         {
-            try { if (File.Exists(staging) || File.GetAttributes(staging).HasFlag(FileAttributes.ReparsePoint)) File.Delete(staging); }
+            try
+            {
+                // File.Exists can return false for a dangling symbolic link.
+                // Remove the link itself, never recursively remove directories.
+                var attributes = File.GetAttributes(staging);
+                if ((attributes & FileAttributes.Directory) == 0)
+                    File.Delete(staging);
+            }
             catch (FileNotFoundException) { }
             catch (DirectoryNotFoundException) { }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
