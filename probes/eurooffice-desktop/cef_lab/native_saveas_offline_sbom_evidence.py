@@ -14,6 +14,7 @@ This module never confers full attestation, launch or SaveAs permission.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import hmac
 import json
@@ -257,6 +258,44 @@ def inspect_effective_unit_snapshot(catalog,snapshot):
                 snapshot[role]!=expected_effective_unit(role)):
             raise EvidenceError("Effective systemd state outside blocked allowlist")
     return {**denial(),"effectiveUnitFactsObserved":True}
+
+
+
+def compare_local_import_graph(catalog,source_bytes):
+    """Compare all declared local AST edges from independently pinned bytes.
+
+    The source SHA must match the *signed* catalog; only the four pinned
+    local sources are accepted. Dynamic/native imports remain unproven.
+    """
+    value=validate_catalog(catalog)
+    if (type(source_bytes) is not dict or
+            set(source_bytes)!=set(previous.MODULE_NAMES)):
+        raise EvidenceError("Missing or additional local Python sources")
+    for name in previous.MODULE_NAMES:
+        raw=source_bytes[name]
+        if type(raw) is not bytes or not raw:
+            raise EvidenceError("Invalid offline local source content")
+        if hashlib.sha256(raw).hexdigest()!=value["modules"][name]:
+            raise EvidenceError("Local source does not match signed catalog")
+        try:
+            previous.check_static_imports(raw,previous.MODULE_NAMES)
+            root=ast.parse(raw.decode("utf-8"),mode="exec")
+        except (previous.DependencyError,UnicodeError,SyntaxError) as exc:
+            raise EvidenceError("Unable to inspect pinned local Python imports") from exc
+        local=set()
+        for node in ast.walk(root):
+            if isinstance(node,ast.Import):
+                local.update(
+                    item.name.split(".",1)[0]
+                    for item in node.names
+                    if item.name.split(".",1)[0] in previous.MODULE_NAMES)
+            elif isinstance(node,ast.ImportFrom):
+                origin=(node.module or "").split(".",1)[0]
+                if origin in previous.MODULE_NAMES:
+                    local.add(origin)
+        if sorted(local)!=value["importEdges"][name]:
+            raise EvidenceError("Signed import edges omit or add a local dependency")
+    return {**denial(),"staticImportFactsObserved":True}
 
 
 def compare_inventory(catalog,wheels,elf_mappings):
