@@ -15,7 +15,14 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import struct
+import sys
+
+if sys.platform.startswith("linux"):
+    import fcntl
+else:
+    fcntl=None
 
 REPORT_SCHEMA="getdoc-gd31j27ad-preopened-kernel-maps-elf-review-denied/1"
 MAX_MAPS_BYTES=256*1024
@@ -246,6 +253,15 @@ def _read_bounded_preopened_fd(fd,limit):
     if (type(fd) is not int or fd<3 or
             type(limit) is not int or not 1<=limit<=MAX_ELF_BYTES):
         raise CollectorError("Unpinned externally opened OS descriptor")
+    if not sys.platform.startswith("linux") or fcntl is None:
+        raise CollectorError("Only Linux supports this preopened FD review")
+    try:
+        metadata=os.fstat(fd)
+        access=fcntl.fcntl(fd,fcntl.F_GETFL) & os.O_ACCMODE
+    except (OSError,ValueError) as exc:
+        raise CollectorError("Preopened OS evidence metadata inaccessible") from exc
+    if not stat.S_ISREG(metadata.st_mode) or access!=os.O_RDONLY:
+        raise CollectorError("Only read-only regular proc/ELF evidence is accepted")
     body=bytearray()
     try:
         while len(body)<=limit:
