@@ -51,6 +51,7 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
                       gate.REQUIRED_MANUAL_GATES)
         self.assertIn("eurooffice-gd31j27s-three-party-denial-bridge-fd-lifecycle-e2e",
                       gate.REQUIRED_MANUAL_GATES)
+        self.assertIn("eurooffice-gd31j27t-root-supervisor-fixed-fd-sender-e2e", gate.REQUIRED_MANUAL_GATES)
 
     def test_all_fault_scenarios_are_required_and_machine_readable(self):
         self.assertEqual(28, len(gate.CASES))
@@ -70,6 +71,7 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
         self.assertIn("worker-anonymous-snapshot-crash-fsync-linkat-unknown-outcome", gate.CASES)
         self.assertIn("root-supervisor-scm-rights-worker-owned-fd-relay-deny", gate.CASES)
         self.assertIn("three-party-root-broker-worker-session-fd-close-denial", gate.CASES)
+        self.assertIn("root-fixed-manifest-synthetic-fd-sender-no-extra-dac", gate.CASES)
         self.assertIn("REQUIRED_AUTOMATED_STEPS", self.gate)
 
     def test_even_all_claims_cannot_enable_production_or_release(self):
