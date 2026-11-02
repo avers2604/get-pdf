@@ -226,6 +226,10 @@ def review_fd_origins_once(*,proc_map_fds,elf_fds,expected_pids,
             raise OriginError("Underlying collector returned unsafe authority")
         _kernel_fd_targets(proc_map_fds,elf_fds,expected_pids)
         _namespace_snapshot(expected_pids,expected_namespaces)
+        for path in sorted(expected_elf_paths):
+            actual=_hash_root_elf_fd(elf_fds[path])
+            if not hmac.compare_digest(actual,expected_elf_sha256[path]):
+                raise OriginError("Root ELF changed during kernel evidence capture")
         for role in ROLES:
             guards[role].assert_live()
         return {**denial(),"kernelFdPathObserved":True,
