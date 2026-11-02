@@ -116,8 +116,16 @@ def pin_socket_peer(sock, *, expected_worker_pid, expected_worker_uid,
         if (pid != expected_worker_pid or uid != expected_worker_uid or
                 gid <= 0):
             raise PeerPidfdError("Kernel socket peer is not the pinned worker")
+        # SO_PEERPIDFD installs a NEW fd in this process. Refuse before
+        # asking the kernel for it if any stdio slot is free: otherwise
+        # the new pidfd might silently occupy descriptor 0, 1 or 2.
+        try:
+            for std_fd in (0, 1, 2):
+                os.fstat(std_fd)
+        except OSError as exc:
+            raise PeerPidfdError("Unprotected broker stdio FD table") from exc
         # The kernel installs a NEW pidfd in our descriptor table. It must
-        # be closed on EVERY path, including on a malformed return.
+        # be closed on EVERY path when it is outside the reserved stdio slots.
         raw_fd = sock.getsockopt(socket.SOL_SOCKET,
                                   LINUX_SO_PEERPIDFD, _FD_SIZE)
         if type(raw_fd) is not bytes or len(raw_fd) != _FD_SIZE:
