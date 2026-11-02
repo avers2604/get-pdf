@@ -74,6 +74,7 @@ MANUAL_GATES = (
     "eurooffice-gd31j27ab-ed25519-sbom-effective-unit-review-e2e",
     "eurooffice-gd31j27ac-wheel-record-elf-systemd-os-snapshot-e2e",
     "eurooffice-gd31j27ad-preopened-proc-maps-elf64-deny-e2e",
+    "eurooffice-gd31j27ae-pidfd-fd-origin-namespace-elf-hash-e2e",
     "eurooffice-cef-authenticated-caret-ime-candidates",
     "eurooffice-windows-x11-osr-or-uno-fallback",
     "eurooffice-server-2-5-10-user-coediting",
