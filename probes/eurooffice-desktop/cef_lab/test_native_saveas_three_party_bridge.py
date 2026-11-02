@@ -78,9 +78,7 @@ class BridgeDenyOnlyTests(unittest.TestCase):
             self.assertEqual(1, relay.call_count)
 
     def test_diagnostic_bridge_output_cannot_claim_release_or_publication(self):
-        fixed={"state":"denied","nativePublicationAuthorized":False,
-               "writePermissionGranted":False,"releaseReady":False,
-               "approvedForProduction":False,"trustedSupervisorAttested":False}
+        fixed=bridge.expected_upstream_denial_for_contract()
         with patch.object(bridge.provisioning, "relay_pinned_once",return_value=fixed) as relay:
             response=bridge.bridge_inspect_only_once(
                 policy(),StubSocket(),StubSocket(),pinned_hashes=pins(),
@@ -93,6 +91,16 @@ class BridgeDenyOnlyTests(unittest.TestCase):
             self.assertFalse(response["releaseReady"])
             self.assertFalse(response["workerIsolationAttested"])
             self.assertEqual(1,relay.call_count)
+
+    def test_unexpected_permission_key_in_relay_result_is_rejected(self):
+        fake=bridge.expected_upstream_denial_for_contract()
+        fake["publishToWorm"]=True
+        with patch.object(bridge.provisioning,"relay_pinned_once",return_value=fake):
+            with self.assertRaises(bridge.BridgeError):
+                bridge.bridge_inspect_only_once(
+                    policy(),StubSocket(),StubSocket(),pinned_hashes=pins(),
+                    approved_disposable_vm=True,
+                    observed_broker_uid=40001,observed_broker_gid=40003)
 
     def test_listener_adapter_is_explicit_and_never_used_by_default_main(self):
         import native_saveas_broker_listener as listener
@@ -108,9 +116,8 @@ class BridgeDenyOnlyTests(unittest.TestCase):
             run.assert_called_once()
 
     def test_forged_positive_relay_result_always_refuses(self):
-        fake={"state":"denied","nativePublicationAuthorized":False,
-              "writePermissionGranted":False,"releaseReady":True,
-              "approvedForProduction":False,"trustedSupervisorAttested":False}
+        fake=bridge.expected_upstream_denial_for_contract()
+        fake["releaseReady"]=True
         with patch.object(bridge.provisioning,"relay_pinned_once",return_value=fake):
             with self.assertRaises(bridge.BridgeError):
                 bridge.bridge_inspect_only_once(
