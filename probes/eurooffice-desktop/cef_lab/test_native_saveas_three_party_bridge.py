@@ -43,6 +43,7 @@ class StubSocket:
     def shutdown(self, how):
         self.shutdowns.append(how)
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "Linux-only SOCK_SEQPACKET denial relay")
 class BridgeDenyOnlyTests(unittest.TestCase):
     def test_exact_policy_rejects_improper_accounts_or_writes(self):
         self.assertEqual("inspect_only", bridge.parse_static_policy(policy())["mode"])
