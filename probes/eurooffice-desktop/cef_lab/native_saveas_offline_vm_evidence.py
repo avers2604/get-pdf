@@ -64,6 +64,7 @@ def denial():
 def _safe_archive_path(value):
     if (type(value) is not str or
             len(value)>255 or not value or
+            not re.fullmatch(r"[A-Za-z0-9_+./-]+",value,re.ASCII) or
             "\\" in value or "\x00" in value or
             value.startswith("/") or value.endswith("/") or
             "//" in value or any(
@@ -150,6 +151,7 @@ def inspect_wheel_record(wheel_bytes,expected_filename,expected_sha256):
                     continue
                 if (not dig.startswith("sha256=") or
                         not BASE64_DIGEST.fullmatch(dig[len("sha256="):]) or
+                        not 1<=len(size)<=10 or
                         not size.isdecimal() or str(int(size))!=size):
                     raise VmEvidenceError("Wheel RECORD lacks strict SHA/size")
                 expected=base64.urlsafe_b64encode(
@@ -228,6 +230,7 @@ def review_offline_vm_evidence(
             legacy_manifest=legacy_manifest)
         catalog=sbom.parse_catalog(catalog_raw)
         if (type(wheel_archives) is not dict or
+                not catalog["wheels"] or
                 set(wheel_archives)!={x["filename"] for x in catalog["wheels"]}):
             raise VmEvidenceError("Wheel archives missing or unexpectedly supplied")
         for item in catalog["wheels"]:
