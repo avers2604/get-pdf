@@ -129,6 +129,14 @@ option(GETDOC_GD31J27X_ENABLE_SOCKET_PEER_PUBLICATION_LAB "BLOCKED socket SO_PEE
 if(GETDOC_GD31J27X_ENABLE_SOCKET_PEER_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27X_BLOCKED: kernel SO_PEERPIDFD is not OS launcher attestation or worker-side publication")
 endif()
+# GD31J27y: FD3 one-time nonce + kernel proc inode pre/post evidence is a
+# diagnostic-only protocol in two EXPLICIT lab functions, not the normal
+# worker/broker main. Worker executable provenance and socket pairing are
+# NOT independently attested; no SaveAs or production flag may be granted.
+option(GETDOC_GD31J27Y_ENABLE_FD3_PROVEN_PUBLICATION_LAB "BLOCKED FD3 challenge native document publication" OFF)
+if(GETDOC_GD31J27Y_ENABLE_FD3_PROVEN_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27Y_BLOCKED: FD3 nonce proof cannot attest trusted worker code, Astra MAC or native SaveAs")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
