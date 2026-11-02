@@ -154,6 +154,31 @@ class RootSupervisorContract(unittest.TestCase):
             with self.assertRaises(root.SupervisorError):
                 session.send(sock,cfg,gate=root.VM_TEST_ONLY_GATE)
 
+    @unittest.skipUnless(sys.platform.startswith("linux") and os.geteuid()!=0,
+                         "Only unprivileged Linux synthetic stub")
+    def test_partial_send_is_never_replayed_and_closes_every_fd(self):
+        with tempfile.TemporaryDirectory() as temp:
+            handles=[]
+            for i in range(3):
+                p=Path(temp)/("fixture"+str(i))
+                p.write_bytes(b"synthetic")
+                handles.append(os.open(p,os.O_RDONLY|os.O_CLOEXEC))
+            cfg=config(worker_uid=os.geteuid())
+            sock=FakeBroker()
+            sock.sendmsg=lambda parts,ancillary: len(parts[0])-1
+            session=root.RootSendOnce()
+            with patch.object(root.os,"getuid",return_value=0),\
+                 patch.object(root.os,"geteuid",return_value=0),\
+                 patch.object(root,"open_verified_handles",return_value=handles):
+                with self.assertRaises(root.SupervisorError):
+                    session.send(sock,cfg,gate=root.VM_TEST_ONLY_GATE)
+            self.assertTrue(session.consumed)
+            for fd in handles:
+                with self.assertRaises(OSError):
+                    os.fstat(fd)
+            with self.assertRaises(root.SupervisorError):
+                session.send(sock,cfg,gate=root.VM_TEST_ONLY_GATE)
+
     def test_fixed_path_policy_has_no_arbitrary_user_document_path(self):
         self.assertTrue(root.FIXED_BASE.startswith("/run/getdoc-gd31j27t-"))
         self.assertEqual("gd31j26-private-ABCDEF",root.SCRATCH)
