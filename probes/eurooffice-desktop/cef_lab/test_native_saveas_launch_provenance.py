@@ -28,7 +28,7 @@ def manifest():
             "cgroup":provenance.CGROUP_PATHS[role],
             "exeTarget":"/usr/bin/python3.11","exeSha256":EXE_SHA,
             "scriptSha256":SRC_SHA,
-            "argv":["/usr/bin/python3","-I","-S",path],
+            "argv":["/usr/bin/python3","-E","-s","-S",path],
         }
     return {
         "schema":provenance.MANIFEST_SCHEMA,"laboratoryOnly":True,
