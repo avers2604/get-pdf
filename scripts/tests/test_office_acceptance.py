@@ -13,6 +13,23 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27r_supervisor_fd_relay_is_offline_and_deny_only(self):
+        steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
+        names = [step.name for step in steps]
+        for gate, filename in (
+            ("native-saveas-fd-provisioning-linux-tests",
+             "test_native_saveas_fd_provisioning.py"),
+            ("native-saveas-fd-provisioning-source-tests",
+             "test_native_saveas_fd_provisioning_contract.py"),
+        ):
+            self.assertIn(gate, names)
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            self.assertIn(filename, next(x for x in steps if x.name == gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27r-root-supervisor-worker-owned-fd-relay-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a" * 40, "Linux", "GD-31I")["releaseReady"])
+
     def test_gd31j27q_worker_anonymous_snapshot_remains_manual_lab_only(self):
         steps = acceptance.build_steps(Path("/get-document"), Path("/offline-feed"), "Linux")
         names = [step.name for step in steps]
