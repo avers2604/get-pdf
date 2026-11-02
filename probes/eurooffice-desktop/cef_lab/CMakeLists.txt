@@ -71,6 +71,13 @@ option(GETDOC_GD31J27P_ENABLE_POST_UID_WORKER_PUBLICATION_LAB "Blocked post-UID 
 if(GETDOC_GD31J27P_ENABLE_POST_UID_WORKER_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27P_BLOCKED: post-UID diagnostic handshake is not worker-side publication or trusted VM isolation")
 endif()
+# GD31J27q: anonymous snapshot helper is an internal synthetic fixture
+# algorithm, not the IPC endpoint. No trusted supervisor has passed real
+# preopened FD roles; worker and broker remain denial-only by design.
+option(GETDOC_GD31J27Q_ENABLE_ANONYMOUS_WORKER_PUBLICATION_LAB "Blocked synthetic worker O_TMPFILE publication without VM audit" OFF)
+if(GETDOC_GD31J27Q_ENABLE_ANONYMOUS_WORKER_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27Q_BLOCKED: helper is not IPC-wired, isolated, tested or authorized for user documents")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
