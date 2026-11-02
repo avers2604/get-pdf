@@ -152,6 +152,14 @@ option(GETDOC_GD31J27AA_ENABLE_DEPENDENCY_UNIT_PUBLICATION_LAB "BLOCKED pinned P
 if(GETDOC_GD31J27AA_ENABLE_DEPENDENCY_UNIT_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27AA_BLOCKED: source/ELF/unit pins cannot authorize SaveAs or worker publication")
 endif()
+# GD31J27ab: detached Ed25519 catalog + pinned offline Python wheel/ELF
+# inventory and external effective-systemd snapshots are review data only.
+# Cryptographic verification cannot itself attest trusted key provisioning,
+# transitive imports, runtime loader identity, Astra MAC or saved documents.
+option(GETDOC_GD31J27AB_ENABLE_SIGNED_SBOM_PUBLICATION_LAB "BLOCKED signed SBOM/effective unit native SaveAs lab" OFF)
+if(GETDOC_GD31J27AB_ENABLE_SIGNED_SBOM_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27AB_BLOCKED: signed SBOM review cannot authorize worker publication or SaveAs")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")

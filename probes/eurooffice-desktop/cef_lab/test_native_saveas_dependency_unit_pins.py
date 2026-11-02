@@ -24,6 +24,8 @@ MODULES={
 }
 UNIT_TEMPLATE=b"""[Unit]
 Description=GETDOC synthetic lab denial-only
+RefuseManualStart=yes
+ConditionPathExists=/run/getdoc-gd31j27aa-disposable/APPROVAL_NEVER_AUTOCREATE
 [Service]
 Type=exec
 User=getdoc-lab-broker
@@ -38,7 +40,6 @@ RestrictAddressFamilies=AF_UNIX
 RestrictSUIDSGID=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
-RefuseManualStart=yes
 """
 UNIT_WORKER=UNIT_TEMPLATE.replace(b"getdoc-lab-broker",b"getdoc-lab-worker")
 
