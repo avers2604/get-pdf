@@ -4,8 +4,7 @@
 Requires two already connected OS AF_UNIX SOCK_SEQPACKET sockets:
 root supervisor -> broker, and worker -> broker (post UID switch).
 The external root supervisor, worker UID provisioning, socket ownership
-and mount policies are NOT implemented or attested here. No listeners,
-subprocesses, filesystem writes, SaveAs, or user-document APIs.
+and mount policies are NOT implemented or attested here. No listeners, child process creation, filesystem writes, SaveAs, or user-document APIs.
 
 This is a bridge for an offline disposable Linux VM acceptance experiment
 only. No call from the installed broker/worker CLI or Qt/CEF host.
