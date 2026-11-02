@@ -30,6 +30,7 @@ else:
 import native_saveas_fd_worker as worker
 import native_saveas_supervisor_handoff as supervisor_handoff
 import native_saveas_pidfd_provenance as pidfd
+import native_saveas_socket_peerpidfd as socket_peer
 
 BROKER_SCHEMA = "getdoc-gd31j27m-external-fd-broker-denial-lab/1"
 MAX_REPLY_BYTES = 2048
@@ -198,7 +199,17 @@ def handoff_after_kernel_review(session: BrokerSession, sock: socket.socket,
     if not isinstance(session, BrokerSession) or session.consumed:
         raise BrokerError("External broker session unavailable or already consumed")
     pinned = None
+    peer_reference = None
     try:
+        # This pidfd originates from the socket's ACTUAL kernel peer.
+        # A numeric PID pin alone cannot provide this link.
+        peer_reference = socket_peer.pin_socket_peer(
+            sock,
+            expected_worker_pid=expected_worker_pid,
+            expected_worker_uid=expected_worker_uid,
+            broker_uid=broker_uid,
+            expected_worker_start_ticks=expected_worker_start_ticks,
+        )
         pinned = pidfd.pin_worker_process(
             expected_worker_pid, expected_worker_start_ticks)
         observation = supervisor_handoff.read_actual_handoff(
@@ -219,6 +230,7 @@ def handoff_after_kernel_review(session: BrokerSession, sock: socket.socket,
                     "approvedForProduction", "writePermissionGranted",
                     "releaseReady"))):
             raise BrokerError("Kernel worker observation is not denial-only")
+        peer_reference.assert_live()
         pinned.assert_live()
         result = session.handoff(
             sock, packet, fds,
@@ -231,6 +243,7 @@ def handoff_after_kernel_review(session: BrokerSession, sock: socket.socket,
         # The same pidfd MUST still refer to a running process here.
         # Receiving "denied" is not proof of durable file creation.
         pinned.assert_live()
+        peer_reference.assert_live()
         expected = {
             "schema": BROKER_SCHEMA,
             "state": "denied",
@@ -252,18 +265,27 @@ def handoff_after_kernel_review(session: BrokerSession, sock: socket.socket,
             "brokerHandshakeAttested": False,
             "nativePublicationAuthorized": False,
         }
-    except (pidfd.PidfdError, supervisor_handoff.HandoffError,
-            BrokerError, OSError, ValueError) as exc:
+    except (pidfd.PidfdError, socket_peer.PeerPidfdError,
+            supervisor_handoff.HandoffError, BrokerError,
+            OSError, ValueError) as exc:
         session.consumed = True
         if isinstance(exc, BrokerError):
             raise
         raise BrokerError("Worker pidfd or kernel handoff refused; no replay") from exc
     finally:
+        close_failed = False
+        # Close BOTH references even if either close fails. No kernel
+        # descriptor may outlive the one-shot diagnostic exchange.
         if pinned is not None:
-            # This reference must not survive the one-shot exchange. If
-            # close fails, refuse rather than report a successful exchange.
             try:
                 pinned.close()
-            except pidfd.PidfdError as exc:
-                session.consumed = True
-                raise BrokerError("Worker pidfd close failed") from exc
+            except (pidfd.PidfdError, OSError):
+                close_failed = True
+        if peer_reference is not None:
+            try:
+                peer_reference.close()
+            except (socket_peer.PeerPidfdError, OSError):
+                close_failed = True
+        if close_failed:
+            session.consumed = True
+            raise BrokerError("Kernel process references could not be closed")

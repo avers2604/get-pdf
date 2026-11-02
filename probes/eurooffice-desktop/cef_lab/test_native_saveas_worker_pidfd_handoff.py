@@ -65,6 +65,14 @@ class Guard:
 
 
 class WorkerPidfdBrokerTests(unittest.TestCase):
+    def setUp(self):
+        socket_guard=mock.Mock()
+        socket_guard.assert_live.return_value=False
+        patcher=mock.patch.object(broker.socket_peer,"pin_socket_peer",
+                                  return_value=socket_guard)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def run_bridge(self,guard,ordered,report=None):
         session=FakeSession(ordered)
         def observed(*args,**kwargs):

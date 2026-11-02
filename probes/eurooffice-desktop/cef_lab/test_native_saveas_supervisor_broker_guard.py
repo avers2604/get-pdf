@@ -47,6 +47,12 @@ def request():
                      "Unprivileged Linux sandbox broker only")
 class SupervisorBrokerGuardTests(unittest.TestCase):
     def setUp(self):
+        socket_guard = mock.Mock()
+        socket_guard.assert_live.return_value = False
+        patcher = mock.patch.object(broker.socket_peer, "pin_socket_peer",
+                                    return_value=socket_guard)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         source = root / "gd31j6_writer.docx"

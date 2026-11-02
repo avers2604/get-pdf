@@ -13,6 +13,24 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27x_socket_peerpidfd_remains_offline(self):
+        steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
+        names=[step.name for step in steps]
+        for gate,filename in (
+            ("native-saveas-socket-peerpidfd-kernel-tests",
+             "test_native_saveas_socket_peerpidfd.py"),
+            ("native-saveas-socket-peerpidfd-broker-tests",
+             "test_native_saveas_socket_peerpidfd_broker.py"),
+            ("native-saveas-socket-peerpidfd-source-tests",
+             "test_native_saveas_socket_peerpidfd_contract.py"),
+        ):
+            self.assertIn(gate,names)
+            self.assertLess(names.index(gate),names.index("solution-restore"))
+            self.assertIn(filename,next(x for x in steps if x.name==gate).command)
+        self.assertIn("eurooffice-gd31j27x-socket-peerpidfd-identity-e2e",
+                      acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a"*40,"Linux","GD-31I")["releaseReady"])
+
     def test_gd31j27w_worker_pidfd_handoff_requires_manual_vm_denial(self):
         steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]
