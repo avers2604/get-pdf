@@ -98,6 +98,13 @@ class TripartyManualVMTests(unittest.TestCase):
             with self.assertRaises(lab.LabError):
                 lab._check_fd_roles([8,9,10])
 
+    def test_unavailable_close_on_exec_kernel_rights_is_denied_before_receive(self):
+        sock=MockSocket()
+        with patch.object(lab.socket,"MSG_CMSG_CLOEXEC",None):
+            # Undefined or noninteger CMSG_CLOEXEC must fail, not downgrade.
+            with self.assertRaises((lab.LabError,TypeError)):
+                lab._recv_three(sock)
+
     def test_invalid_scm_rights_packet_closes_every_received_fd(self):
         three=array.array("i",[8,9,10]).tobytes()
         packet=[(socket.SOL_SOCKET,socket.SCM_RIGHTS,three)]
