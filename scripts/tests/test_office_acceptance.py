@@ -13,6 +13,25 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27y_fd3_challenge_remains_offline_and_denied(self):
+        steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
+        names=[step.name for step in steps]
+        for gate,filename in (
+            ("native-saveas-fd3-challenge-tests",
+             "test_native_saveas_fd3_challenge.py"),
+            ("native-saveas-fd3-challenge-flow-tests",
+             "test_native_saveas_fd3_challenge_flow.py"),
+            ("native-saveas-fd3-challenge-contract-tests",
+             "test_native_saveas_fd3_challenge_contract.py"),
+        ):
+            self.assertIn(gate,names)
+            self.assertLess(names.index(gate),names.index("solution-restore"))
+            self.assertIn(filename,next(x for x in steps if x.name==gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27y-fd3-nonce-proc-inode-rights-free-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a"*40,"Linux","GD-31I")["releaseReady"])
+
     def test_gd31j27x_socket_peerpidfd_remains_offline(self):
         steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]
