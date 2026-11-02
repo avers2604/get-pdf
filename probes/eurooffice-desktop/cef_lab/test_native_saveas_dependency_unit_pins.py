@@ -28,7 +28,7 @@ Description=GETDOC synthetic lab denial-only
 Type=exec
 User=getdoc-lab-broker
 Group=getdoc-lab-ipc
-ExecStart=/usr/bin/python3 -E -s -S /opt/getdoc-lab/bin/native_saveas_broker_listener.py
+ExecStart=/usr/bin/false
 NoNewPrivileges=yes
 PrivateNetwork=yes
 PrivateMounts=yes
@@ -40,7 +40,7 @@ CapabilityBoundingSet=
 AmbientCapabilities=
 RefuseManualStart=yes
 """
-UNIT_WORKER=UNIT_TEMPLATE.replace(b"getdoc-lab-broker",b"getdoc-lab-worker").replace(b"native_saveas_broker_listener",b"native_saveas_fd_worker")
+UNIT_WORKER=UNIT_TEMPLATE.replace(b"getdoc-lab-broker",b"getdoc-lab-worker")
 
 def manifest():
     return {
@@ -117,6 +117,7 @@ class DependencyPinTests(unittest.TestCase):
             (b"CapabilityBoundingSet=",b"CapabilityBoundingSet=CAP_SYS_ADMIN"),
             (b"RefuseManualStart=yes",b"RefuseManualStart=no"),
             (b"User=getdoc-lab-broker",b"User=root"),
+            (b"ExecStart=/usr/bin/false",b"ExecStart=/usr/bin/python3 -c print(1)"),
         ):
             data=UNIT_TEMPLATE.replace(old,new)
             with self.subTest(new=new),self.assertRaises(pins.DependencyError):
