@@ -114,8 +114,8 @@ def inspect_wheel_record(wheel_bytes,expected_filename,expected_sha256):
                          not in (0,stat.S_IFREG))):
                     raise VmEvidenceError("Wheel contains unsupported file or link")
                 total+=item.file_size
-                if item.file_size>MAX_UNCOMPRESSED_BYTES or
-                        total>MAX_UNCOMPRESSED_BYTES:
+                if (item.file_size>MAX_UNCOMPRESSED_BYTES or
+                        total>MAX_UNCOMPRESSED_BYTES):
                     raise VmEvidenceError("Wheel decompressed size exceeds limit")
             if len(names)!=len(set(names)) or names.count(record_name)!=1:
                 raise VmEvidenceError("Wheel entries or RECORD are duplicated")
@@ -148,9 +148,9 @@ def inspect_wheel_record(wheel_bytes,expected_filename,expected_sha256):
                     if dig or size:
                         raise VmEvidenceError("Wheel RECORD must not self-hash")
                     continue
-                if not dig.startswith("sha256=") or not BASE64_DIGEST.fullmatch(
-                        dig[len("sha256="):]) or
-                        not size.isdecimal() or str(int(size))!=size:
+                if (not dig.startswith("sha256=") or
+                        not BASE64_DIGEST.fullmatch(dig[len("sha256="):]) or
+                        not size.isdecimal() or str(int(size))!=size):
                     raise VmEvidenceError("Wheel RECORD lacks strict SHA/size")
                 expected=base64.urlsafe_b64encode(
                     hashlib.sha256(file_bytes[name]).digest()).rstrip(b"=").decode()
