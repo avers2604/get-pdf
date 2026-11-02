@@ -32,6 +32,8 @@ class ManualTripartySourceContract(unittest.TestCase):
             'socket.SO_PEERCRED',
             'socket.SCM_RIGHTS',
             'socket.MSG_TRUNC|socket.MSG_CTRUNC',
+            'fcntl.F_GETFD', 'fcntl.FD_CLOEXEC',
+            'complete_bytes=(len(raw)//size)*size',
             'stat.S_ISCHR(data.st_mode)',
             'data.st_rdev!=reference.st_rdev',
             'os.O_NOFOLLOW',

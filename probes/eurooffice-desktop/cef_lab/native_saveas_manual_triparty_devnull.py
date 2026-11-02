@@ -146,9 +146,11 @@ def _check_fd_roles(handles):
         for fd in handles:
             data=os.fstat(fd)
             flags=fcntl.fcntl(fd,fcntl.F_GETFL)
+            fdflags=fcntl.fcntl(fd,fcntl.F_GETFD)
             if (not stat.S_ISCHR(data.st_mode) or
                     data.st_rdev!=reference.st_rdev or
-                    flags & os.O_ACCMODE!=os.O_RDONLY):
+                    flags & os.O_ACCMODE!=os.O_RDONLY or
+                    not (fdflags & fcntl.FD_CLOEXEC)):
                 raise LabError("FD is not the pinned read-only null device")
     except OSError as exc:
         raise LabError("Untrusted synthetic device file descriptor") from exc
@@ -178,9 +180,12 @@ def _extract_any_rights(ancillary):
     for level,kind,raw in ancillary:
         if level==socket.SOL_SOCKET and kind==socket.SCM_RIGHTS:
             size=array.array("i").itemsize
-            if len(raw)%size==0:
+            # A truncated control message may still contain installed FDs.
+            # Recover every complete integer for mandatory close-on-denial.
+            complete_bytes=(len(raw)//size)*size
+            if complete_bytes:
                 a=array.array("i")
-                a.frombytes(raw)
+                a.frombytes(raw[:complete_bytes])
                 found.extend(a.tolist())
     return found
 
