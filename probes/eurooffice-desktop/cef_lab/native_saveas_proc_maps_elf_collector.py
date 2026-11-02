@@ -98,7 +98,7 @@ def parse_pinned_maps(data, *, executable, allowed_elf):
         if match is None:
             raise CollectorError("Malformed Linux memory map metadata")
         start,end=int(match.group(1),16),int(match.group(2),16)
-        if not 0<=previous_start<start<end<2**64:
+        if not (previous_start<start<end<2**64):
             raise CollectorError("Overlapping or unsorted memory map")
         previous_start=start
         inode=int(match.group(6))
@@ -162,8 +162,8 @@ def parse_elf64_needed(data, *, expected_machine):
                     raise CollectorError("Unsupported ELF LOAD segment")
                 loads.append((offset,vaddr,filesz))
             elif kind==2:
-                if dynamic is not None or not 16<=filesz<=MAX_DYNAMIC*16 or
-                        filesz%16!=0:
+                if (dynamic is not None or
+                        not 16<=filesz<=MAX_DYNAMIC*16 or filesz%16!=0):
                     raise CollectorError("Ambiguous ELF dynamic segment")
                 dynamic=(offset,filesz)
     except struct.error as exc:
