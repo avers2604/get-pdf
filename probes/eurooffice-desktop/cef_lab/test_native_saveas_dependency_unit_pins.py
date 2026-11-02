@@ -123,6 +123,27 @@ class DependencyPinTests(unittest.TestCase):
             with self.subTest(new=new),self.assertRaises(pins.DependencyError):
                 pins.verify_unit_bytes("broker",data,m)
 
+    def test_fixed_file_allowlist_contains_only_manifest_source_unit_or_lib(self):
+        valid=[
+            pins.FIXED_MANIFEST,
+            pins.MODULE_DIR+"/native_saveas_fd_worker.py",
+            pins.UNIT_PATHS["broker"],
+            "/usr/lib/x86_64-linux-gnu/libc.so.6",
+        ]
+        for value in valid:
+            with self.subTest(value=value):
+                self.assertTrue(pins._fixed_components(value))
+        for bad in (
+            pins.MODULE_DIR+"/unknown.py",
+            pins.MODULE_DIR+"/../secrets.conf",
+            "/etc/passwd",
+            "/tmp/user.docx",
+            "/proc/self/maps",
+            "/etc/systemd/system/random.service",
+        ):
+            with self.subTest(bad=bad),self.assertRaises(pins.DependencyError):
+                pins._fixed_components(bad)
+
     def test_dynamic_loaded_library_is_not_claimed_verified_by_source_allowlist(self):
         m=manifest()
         snapshot={**{pins.MODULE_DIR+"/"+key+".py":digest
