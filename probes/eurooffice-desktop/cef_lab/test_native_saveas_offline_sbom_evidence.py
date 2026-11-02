@@ -158,6 +158,24 @@ class SignedCatalogContracts(unittest.TestCase):
         with self.assertRaises(sbom.EvidenceError):
             sbom.compare_legacy_pins(c,bad)
 
+    def test_declared_local_import_edges_require_matching_source_sha_and_ast(self):
+        c=catalog()
+        src={name:b"import os\n" for name in c["modules"]}
+        src["native_saveas_broker_listener"]=b"import native_saveas_fd_worker\n"
+        c["importEdges"]["native_saveas_broker_listener"]=["native_saveas_fd_worker"]
+        c["modules"]={name:digest(body) for name,body in src.items()}
+        report=sbom.compare_local_import_graph(c,src)
+        self.assertTrue(report["staticImportFactsObserved"])
+        self.assertFalse(report["dependencyClosureAttested"])
+        bad=json.loads(json.dumps(c))
+        bad["importEdges"]["native_saveas_broker_listener"]=[]
+        with self.assertRaises(sbom.EvidenceError):
+            sbom.compare_local_import_graph(bad,src)
+        src_bad=dict(src)
+        src_bad["native_saveas_fd_worker"]=b"import malicious_plugin\n"
+        with self.assertRaises(sbom.EvidenceError):
+            sbom.compare_local_import_graph(c,src_bad)
+
     def test_effective_service_unit_fields_require_nonstartable_exact_snapshot(self):
         c=catalog()
         observations={role:sbom.expected_effective_unit(role)
