@@ -73,6 +73,16 @@ class KernelMapsTests(unittest.TestCase):
             with self.subTest(content=body[-50:]),self.assertRaises(collector.CollectorError):
                 collector.parse_pinned_maps(body,executable=EXE,allowed_elf={LIB})
 
+    def test_overlapping_sorted_memory_ranges_are_not_separate_vm_areas(self):
+        overlapped=(
+            "00400000-00410000 r-xp 00000000 08:01 101 "+EXE+"\n"
+            "0040f000-00420000 r--p 0000f000 08:01 101 "+EXE+"\n"
+            "7f100000-7f102000 r-xp 00000000 08:01 202 "+LIB+"\n"
+        ).encode("ascii")
+        with self.assertRaises(collector.CollectorError):
+            collector.parse_pinned_maps(overlapped,executable=EXE,
+                                        allowed_elf={LIB})
+
     def test_missing_library_mismatched_pid_or_empty_maps_refused(self):
         no_lib=("00400000-00410000 r-xp 00000000 08:01 101 "+EXE+"\n").encode()
         for body in (b"",no_lib):
