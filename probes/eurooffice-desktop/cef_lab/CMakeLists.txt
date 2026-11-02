@@ -197,6 +197,14 @@ option(GETDOC_GD31J27AG_ENABLE_TRACE_PUBLICATION_LAB "BLOCKED synthetic trace-ba
 if(GETDOC_GD31J27AG_ENABLE_TRACE_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27AG_BLOCKED: a replayable synthetic trace cannot authorize native SaveAs")
 endif()
+
+# GD31J27ah: manually launched in a separately provisioned disposable
+# offline Astra VM. Real distinct-UID Unix SCM_RIGHTS transport transfers
+# ONLY read-only /dev/null FDs; never documents or file publication.
+option(GETDOC_GD31J27AH_ENABLE_MANUAL_IPC_PUBLICATION_LAB "BLOCKED manual three-process IPC-based native SaveAs" OFF)
+if(GETDOC_GD31J27AH_ENABLE_MANUAL_IPC_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27AH_BLOCKED: observing denied /dev/null IPC is never native SaveAs authority")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
