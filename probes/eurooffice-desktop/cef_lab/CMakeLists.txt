@@ -99,6 +99,14 @@ option(GETDOC_GD31J27T_ENABLE_ROOT_SUPERVISOR_PUBLICATION_LAB "BLOCKED root supe
 if(GETDOC_GD31J27T_ENABLE_ROOT_SUPERVISOR_PUBLICATION_LAB)
   message(FATAL_ERROR "GD31J27T_BLOCKED: root supervisor service, DAC scope, Astra VM and worker publication not audited")
 endif()
+# GD31J27u: /proc PID birthtime, root capability/namespace evidence and
+# cross-service policy consistency are NECESSARY, NOT independent OS trust.
+# Actual systemd root permission, pinned file/mount and Astra Linux MAC
+# remain unvalidated. Deny native document publication via build config.
+option(GETDOC_GD31J27U_ENABLE_ROOT_AUDITED_PUBLICATION_LAB "Blocked root-broker OS birthtime/DAC audit for native SaveAs" OFF)
+if(GETDOC_GD31J27U_ENABLE_ROOT_AUDITED_PUBLICATION_LAB)
+  message(FATAL_ERROR "GD31J27U_BLOCKED: /proc observations do not attest root sandbox, DAC scope, worker publication or VM E2E")
+endif()
 if(GETDOC_GD31J27C_ENABLE_NATIVE_EVENT_V2_LAB)
   if(NOT GETDOC_GD31J26_ENABLE_NATIVE_SAVEAS_LAB)
     message(FATAL_ERROR "GD-31J.27c requires the approved GD-31J.26 synthetic SaveAs lab.")
