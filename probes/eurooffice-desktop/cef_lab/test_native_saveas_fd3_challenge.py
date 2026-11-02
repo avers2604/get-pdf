@@ -73,7 +73,8 @@ class Fd3ChallengeTest(unittest.TestCase):
             SocketMock(input_packet=proof.CHALLENGE_PREFIX+b"\x00"*32),
         ]
         fake=type("Meta",(),{"st_ino":INODE,"st_dev":9,"st_mode":stat.S_IFSOCK})()
-        with patch.object(proof.os,"fstat",return_value=fake):
+        with patch.object(proof.os,"fstat",return_value=fake),\
+             patch.object(proof.os,"geteuid",return_value=40002):
             for channel in cases:
                 with self.subTest(channel=channel),self.assertRaises(proof.Fd3ChallengeError):
                     proof.respond_fd3_once(channel,expected_broker_pid=22000,
