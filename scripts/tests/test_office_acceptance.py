@@ -13,6 +13,23 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ah_manual_ipc_uses_only_offline_mock_tests_before_restore(self):
+        steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
+        names=[step.name for step in steps]
+        for name,filename in (
+            ("native-saveas-manual-triparty-tests",
+             "test_native_saveas_manual_triparty_devnull.py"),
+            ("native-saveas-manual-triparty-source-tests",
+             "test_native_saveas_manual_triparty_contract.py"),
+        ):
+            self.assertIn(name,names)
+            self.assertLess(names.index(name),names.index("solution-restore"))
+            self.assertIn(filename,next(s for s in steps if s.name==name).command)
+        self.assertIn(
+            "eurooffice-gd31j27ah-distinct-uid-devnull-scm-rights-manual-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a"*40,"Linux","GD-31I")["releaseReady"])
+
     def test_gd31j27ag_offline_triparty_trace_never_marks_release(self):
         steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]
