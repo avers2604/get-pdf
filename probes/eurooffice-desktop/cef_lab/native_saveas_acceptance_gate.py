@@ -66,6 +66,7 @@ CASES = (
     "preopened-proc-maps-elf-needed-fd-origin-failclosed",
     "pidfd-fd-target-namespace-swap-elf-sha-no-launch-authority",
     "disposable-vm-proc-fixed-preopen-path-symlink-fd-cleanup-deny",
+    "triparty-trace-replay-duplicate-write-claim-deny",
     "scratch-and-final-on-different-filesystems",
     "file-fsync-denied-before-linkat",
     "directory-fsync-denied-after-linkat",
