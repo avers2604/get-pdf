@@ -94,6 +94,19 @@ class BridgeDenyOnlyTests(unittest.TestCase):
             self.assertFalse(response["workerIsolationAttested"])
             self.assertEqual(1,relay.call_count)
 
+    def test_listener_adapter_is_explicit_and_never_used_by_default_main(self):
+        import native_saveas_broker_listener as listener
+        c=policy()
+        # The public normal listener still invokes its old deny-only path.
+        with patch.object(bridge,"bridge_inspect_only_once",return_value={
+            "state":"denied","releaseReady":False}) as run:
+            result=listener.bridge_accepted_diagnostic_only(
+                StubSocket(),StubSocket(),c,pinned_hashes=pins(),
+                approved_disposable_vm=True,
+                observed_broker_uid=40001,observed_broker_gid=40003)
+            self.assertEqual("denied",result["state"])
+            run.assert_called_once()
+
     def test_forged_positive_relay_result_always_refuses(self):
         fake={"state":"denied","nativePublicationAuthorized":False,
               "writePermissionGranted":False,"releaseReady":True,
