@@ -77,6 +77,7 @@ MANUAL_GATES = (
     "eurooffice-gd31j27ae-pidfd-fd-origin-namespace-elf-hash-e2e",
     "eurooffice-gd31j27af-real-fixed-fd-proc-elf-readonly-e2e",
     "eurooffice-gd31j27ag-independent-triparty-denial-trace-vm-e2e",
+    "eurooffice-gd31j27ah-distinct-uid-devnull-scm-rights-manual-e2e",
     "eurooffice-cef-authenticated-caret-ime-candidates",
     "eurooffice-windows-x11-osr-or-uno-fallback",
     "eurooffice-server-2-5-10-user-coediting",
