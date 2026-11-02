@@ -187,8 +187,11 @@ def _extract_any_rights(ancillary):
 
 def _recv_three(sock):
     _check_transport(sock)
+    if not hasattr(socket,"MSG_CMSG_CLOEXEC"):
+        raise LabError("Kernel close-on-exec rights receive unsupported")
     raw,anc,flags,_=sock.recvmsg(
-        len(REQUEST)+1,socket.CMSG_SPACE(3*array.array("i").itemsize))
+        len(REQUEST)+1,socket.CMSG_SPACE(3*array.array("i").itemsize),
+        socket.MSG_CMSG_CLOEXEC)
     received=_extract_any_rights(anc)
     try:
         if raw!=REQUEST:
