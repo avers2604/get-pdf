@@ -152,7 +152,8 @@ class RootSupervisorContract(unittest.TestCase):
                  patch.object(root,"open_verified_handles",return_value=handles),\
                  patch.object(root.audit,"inspect_current_root",
                               return_value=synthetic_root_kernel_observation()),\
-                 patch.object(root.audit,"require_broker_lifetime",return_value=False):
+                 patch.object(root.audit,"require_broker_lifetime",return_value=False),\
+                 patch.object(root.pidfd,"pin_broker_process") as pinned_guard:
                 outcome=session.send(sock,cfg,gate=root.VM_TEST_ONLY_GATE)
             self.assertEqual("sent-unattested",outcome["state"])
             self.assertTrue(session.consumed)
@@ -188,7 +189,8 @@ class RootSupervisorContract(unittest.TestCase):
                  patch.object(root,"open_verified_handles",return_value=handles),\
                  patch.object(root.audit,"inspect_current_root",
                               return_value=synthetic_root_kernel_observation()),\
-                 patch.object(root.audit,"require_broker_lifetime",return_value=False):
+                 patch.object(root.audit,"require_broker_lifetime",return_value=False),\
+                 patch.object(root.pidfd,"pin_broker_process") as pinned_guard:
                 with self.assertRaises(root.SupervisorError):
                     session.send(sock,cfg,gate=root.VM_TEST_ONLY_GATE)
             self.assertTrue(session.consumed)
