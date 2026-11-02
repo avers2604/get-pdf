@@ -30,6 +30,7 @@ def config(worker_uid=40002):
         "brokerUid":40001,
         "brokerGid":40003,
         "expectedBrokerPid":32001,
+        "expectedBrokerStartTicks":123456,
         "fixtureName":"gd31j6_writer.docx",
         "fixtureDigests":{
             "gd31j6_writer.docx":DIGEST,
@@ -63,6 +64,16 @@ class FakeBroker:
         return sum(len(item) for item in buffers)
 
 
+def synthetic_root_kernel_observation():
+    return {
+        "state":"requires-independent-review","kernelFactsObserved":True,
+        "rootSandboxAttested":False,"seccompAllowlistAttested":False,
+        "mountRestrictionAttested":False,"nativePublicationAuthorized":False,
+        "launchAuthorized":False,"releaseReady":False,
+        "approvedForProduction":False,"writePermissionGranted":False,
+    }
+
+
 class RootSupervisorContract(unittest.TestCase):
     def test_exact_manifest_and_bounded_inspect_only_packet(self):
         cfg=root.parse_manifest(manifest_bytes(config()))
@@ -81,6 +92,8 @@ class RootSupervisorContract(unittest.TestCase):
             {**config(),"brokerUid":0},
             {**config(),"brokerGid":0},
             {**config(),"expectedBrokerPid":0},
+            {**config(),"expectedBrokerStartTicks":0},
+            {**config(),"expectedBrokerStartTicks":True},
             {**config(),"fixtureName":"../../private.docx"},
             {**config(),"fixtureDigests":{"gd31j6_writer.docx":DIGEST}},
             {**config(),"sessionId":config()["tabId"]},
@@ -136,7 +149,10 @@ class RootSupervisorContract(unittest.TestCase):
             session=root.RootSendOnce()
             with patch.object(root.os,"geteuid",return_value=0),\
                  patch.object(root.os,"getuid",return_value=0),\
-                 patch.object(root,"open_verified_handles",return_value=handles):
+                 patch.object(root,"open_verified_handles",return_value=handles),\
+                 patch.object(root.audit,"inspect_current_root",
+                              return_value=synthetic_root_kernel_observation()),\
+                 patch.object(root.audit,"require_broker_lifetime",return_value=False):
                 outcome=session.send(sock,cfg,gate=root.VM_TEST_ONLY_GATE)
             self.assertEqual("sent-unattested",outcome["state"])
             self.assertTrue(session.consumed)
@@ -169,7 +185,10 @@ class RootSupervisorContract(unittest.TestCase):
             session=root.RootSendOnce()
             with patch.object(root.os,"getuid",return_value=0),\
                  patch.object(root.os,"geteuid",return_value=0),\
-                 patch.object(root,"open_verified_handles",return_value=handles):
+                 patch.object(root,"open_verified_handles",return_value=handles),\
+                 patch.object(root.audit,"inspect_current_root",
+                              return_value=synthetic_root_kernel_observation()),\
+                 patch.object(root.audit,"require_broker_lifetime",return_value=False):
                 with self.assertRaises(root.SupervisorError):
                     session.send(sock,cfg,gate=root.VM_TEST_ONLY_GATE)
             self.assertTrue(session.consumed)
