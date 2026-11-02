@@ -14,9 +14,12 @@ from __future__ import annotations
 import sys
 sys.dont_write_bytecode = True
 import array
-import fcntl
 import os
 import socket
+if sys.platform.startswith("linux"):
+    import fcntl
+else:
+    fcntl = None  # Source-only tests can import; runtime is Linux-only.
 import stat
 import struct
 
@@ -41,7 +44,8 @@ def close_received_fds(handles):
 
 def verify_pinned_handles(handles, request, *, worker_uid, independent_fixture_hashes):
     """Read-only worker-owned FD audit, no openat inside 0700 dirs."""
-    if (type(worker_uid) is not int or worker_uid <= 0 or
+    if (not sys.platform.startswith("linux") or
+            type(worker_uid) is not int or worker_uid <= 0 or
             type(handles) not in (list, tuple) or len(handles) != ROLE_COUNT or
             any(type(fd) is not int or fd < 0 for fd in handles) or
             len(set(handles)) != ROLE_COUNT or type(request) is not dict or
