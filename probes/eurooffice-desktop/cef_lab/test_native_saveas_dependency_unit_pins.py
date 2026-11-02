@@ -144,6 +144,21 @@ class DependencyPinTests(unittest.TestCase):
             with self.subTest(bad=bad),self.assertRaises(pins.DependencyError):
                 pins._fixed_components(bad)
 
+    def test_unlisted_runtime_shared_object_is_refused_not_silently_ignored(self):
+        m=manifest()
+        paths=tuple(sorted(m["sharedObjects"]))
+        report=pins.compare_observed_library_paths(m,paths)
+        self.assertEqual("requires-independent-review",report["state"])
+        self.assertIs(report["runtimeLibrariesAttested"],False)
+        for maps in (
+            (),
+            paths+("/tmp/plugin.so",),
+            ("/usr/lib/x86_64-linux-gnu/libother.so.1",),
+            ("/usr/lib/x86_64-linux-gnu/libc.so.6 (deleted)",),
+        ):
+            with self.subTest(maps=maps),self.assertRaises(pins.DependencyError):
+                pins.compare_observed_library_paths(m,maps)
+
     def test_dynamic_loaded_library_is_not_claimed_verified_by_source_allowlist(self):
         m=manifest()
         snapshot={**{pins.MODULE_DIR+"/"+key+".py":digest
