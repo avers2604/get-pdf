@@ -329,6 +329,14 @@ def inspect_live_process(profile):
             "scriptSha256":_hash_fixed_source(role),
         }
         report=inspect_snapshot(profile,snapshot)
+        # Re-observe the kernel command line, cgroup, owner identifiers and
+        # executable link AFTER digesting both files. PID birthtime alone
+        # cannot detect execve or cgroup changes in an existing process.
+        if (snapshot["cmdline"]!=_read_proc(pid,"cmdline") or
+                snapshot["cgroup"].encode("ascii")!=_read_proc(pid,"cgroup") or
+                snapshot["status"].encode("ascii")!=_read_proc(pid,"status") or
+                snapshot["exeTarget"]!=os.readlink(f"/proc/{pid}/exe")):
+            raise ProvenanceError("Process execution or cgroup changed during review")
         if audit.read_broker_start_ticks(pid)!=profile["startTicks"]:
             raise ProvenanceError("Process birth time changed after executable check")
         guard.assert_live()
