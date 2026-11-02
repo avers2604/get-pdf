@@ -13,6 +13,25 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27v_pidfd_provenance_remains_offline_and_denied(self):
+        steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
+        names=[step.name for step in steps]
+        for gate,filename in (
+            ("native-saveas-broker-pidfd-tests",
+             "test_native_saveas_pidfd_provenance.py"),
+            ("native-saveas-broker-pidfd-sender-tests",
+             "test_native_saveas_root_sender_pidfd_guard.py"),
+            ("native-saveas-broker-pidfd-source-tests",
+             "test_native_saveas_pidfd_source_contract.py"),
+        ):
+            self.assertIn(gate,names)
+            self.assertLess(names.index(gate),names.index("solution-restore"))
+            self.assertIn(filename,next(x for x in steps if x.name==gate).command)
+        self.assertIn(
+            "eurooffice-gd31j27v-pidfd-broker-liveness-identity-e2e",
+            acceptance.MANUAL_GATES)
+        self.assertFalse(acceptance.new_report("a"*40,"Linux","GD-31I")["releaseReady"])
+
     def test_gd31j27u_root_lifetime_and_dac_review_are_offline_only(self):
         steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]
