@@ -24,7 +24,7 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
         cls.policy = (LAB / "native_saveas_policy.h").read_text("utf-8")
 
     def test_all_native_stages_are_explicit_and_nonoptional_manual_gates(self):
-        self.assertEqual(24, len(gate.REQUIRED_MANUAL_GATES))
+        self.assertEqual(25, len(gate.REQUIRED_MANUAL_GATES))
         self.assertEqual(len(gate.REQUIRED_MANUAL_GATES),
                          len(set(gate.REQUIRED_MANUAL_GATES)))
         self.assertTrue(set(gate.REQUIRED_MANUAL_GATES).issubset(
@@ -53,7 +53,7 @@ class NativeSaveAsAcceptanceSourceContractTests(unittest.TestCase):
                       gate.REQUIRED_MANUAL_GATES)
 
     def test_all_fault_scenarios_are_required_and_machine_readable(self):
-        self.assertEqual(27, len(gate.CASES))
+        self.assertEqual(28, len(gate.CASES))
         self.assertEqual(len(gate.CASES), len(set(gate.CASES)))
         for fault in ("source-name-swap-during-linkat",
                       "file-fsync-denied-before-linkat",
