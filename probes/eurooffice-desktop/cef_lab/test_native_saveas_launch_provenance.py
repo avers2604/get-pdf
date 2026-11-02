@@ -109,6 +109,14 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaises(provenance.ProvenanceError):
             provenance.inspect_snapshot(profile,{**snapshot,"untrusted":True})
 
+    def test_direct_live_inspection_rejects_unpinned_role_before_pidfd(self):
+        p=dict(manifest()["profiles"]["worker"])
+        p["cgroup"]="/tmp/fake.service"
+        with patch.object(provenance.pidfd,"pin_broker_process") as opened:
+            with self.assertRaises(provenance.ProvenanceError):
+                provenance.inspect_live_process(p)
+            opened.assert_not_called()
+
     def test_nonroot_cross_uid_proc_access_and_changed_starttime_always_block(self):
         p=manifest()["profiles"]["worker"]
         with patch.object(provenance.pidfd,"pin_broker_process",
