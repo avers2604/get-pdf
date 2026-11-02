@@ -29,6 +29,7 @@ else:
 
 import native_saveas_fd_worker as worker
 import native_saveas_supervisor_handoff as supervisor_handoff
+import native_saveas_pidfd_provenance as pidfd
 
 BROKER_SCHEMA = "getdoc-gd31j27m-external-fd-broker-denial-lab/1"
 MAX_REPLY_BYTES = 2048
@@ -187,16 +188,19 @@ def handoff_after_kernel_review(session: BrokerSession, sock: socket.socket,
                                 expected_worker_start_ticks: int,
                                 approved_disposable_vm: bool,
                                 approved_fixture_hashes: dict):
-    """Only a DENY-ONLY diagnostic transfer after external kernel preflight.
+    """Deny-only worker handoff with held kernel pidfd across SCM_RIGHTS.
 
-    Unlike the legacy GD31J27m lab handoff, this entrypoint requires actual
-    worker PID lifetime + exact FD3 inventory observed via kernel procfs.
-    Its return is NEVER a permission to launch, save, publish or release.
-    If the procfs observation cannot be performed across UIDs, refuse.
+    First pin the OS process identity. Then verify real kernel FD3/status/
+    namespace facts (which can fail due to cross-UID /proc restrictions).
+    Keep the pidfd open during sendmsg AND recvmsg. No PID-only fallback.
+    A worker exit after sendmsg means UNKNOWN transfer, never a retry.
     """
     if not isinstance(session, BrokerSession) or session.consumed:
         raise BrokerError("External broker session unavailable or already consumed")
+    pinned = None
     try:
+        pinned = pidfd.pin_worker_process(
+            expected_worker_pid, expected_worker_start_ticks)
         observation = supervisor_handoff.read_actual_handoff(
             sock,
             expected_worker_pid=expected_worker_pid,
@@ -214,23 +218,52 @@ def handoff_after_kernel_review(session: BrokerSession, sock: socket.socket,
                     "brokerHandshakeAttested", "nativePublicationAuthorized",
                     "approvedForProduction", "writePermissionGranted",
                     "releaseReady"))):
-            raise BrokerError("Supervisor observation is not a denial-only gate")
-    except (supervisor_handoff.HandoffError, BrokerError, OSError) as exc:
+            raise BrokerError("Kernel worker observation is not denial-only")
+        pinned.assert_live()
+        result = session.handoff(
+            sock, packet, fds,
+            broker_uid=broker_uid,
+            expected_worker_uid=expected_worker_uid,
+            approved_disposable_vm=approved_disposable_vm,
+            approved_fixture_hashes=approved_fixture_hashes,
+        )
+        # Handoff completed a single sendmsg and read one denied reply.
+        # The same pidfd MUST still refer to a running process here.
+        # Receiving "denied" is not proof of durable file creation.
+        pinned.assert_live()
+        expected = {
+            "schema": BROKER_SCHEMA,
+            "state": "denied",
+            "workerPreflightAttested": False,
+            "nativeSaveProven": False,
+            "documentVerified": False,
+            "saveVerified": False,
+            "releaseReady": False,
+            "approvedForProduction": False,
+            "writePermissionGranted": False,
+            "laboratoryOnly": True,
+        }
+        if type(result) is not dict or result != expected:
+            raise BrokerError("Unexpected worker handoff authority or denial schema")
+        return {
+            **result,
+            "launchAuthorized": False,
+            "kernelIsolationAttested": False,
+            "brokerHandshakeAttested": False,
+            "nativePublicationAuthorized": False,
+        }
+    except (pidfd.PidfdError, supervisor_handoff.HandoffError,
+            BrokerError, OSError, ValueError) as exc:
         session.consumed = True
-        raise BrokerError("External Linux worker handoff not independently observable") from exc
-    result = session.handoff(
-        sock, packet, fds,
-        broker_uid=broker_uid,
-        expected_worker_uid=expected_worker_uid,
-        approved_disposable_vm=approved_disposable_vm,
-        approved_fixture_hashes=approved_fixture_hashes,
-    )
-    # Even positive observation + a well-formed worker denial have not
-    # verified isolation, authenticity, saved content, or publication.
-    return {
-        **result,
-        "launchAuthorized": False,
-        "kernelIsolationAttested": False,
-        "brokerHandshakeAttested": False,
-        "nativePublicationAuthorized": False,
-    }
+        if isinstance(exc, BrokerError):
+            raise
+        raise BrokerError("Worker pidfd or kernel handoff refused; no replay") from exc
+    finally:
+        if pinned is not None:
+            # This reference must not survive the one-shot exchange. If
+            # close fails, refuse rather than report a successful exchange.
+            try:
+                pinned.close()
+            except pidfd.PidfdError as exc:
+                session.consumed = True
+                raise BrokerError("Worker pidfd close failed") from exc
