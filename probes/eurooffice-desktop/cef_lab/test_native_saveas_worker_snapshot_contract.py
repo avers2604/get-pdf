@@ -22,7 +22,7 @@ class WorkerSnapshotSourceContracts(unittest.TestCase):
 
     def test_never_publish_original_sdk_fd_or_named_fallback(self):
         for token in (
-            "os.O_TMPFILE", "os.O_RDWR", "os.O_CLOEXEC",
+            'getattr(os, "O_TMPFILE", 0)', "os.O_RDWR", "os.O_CLOEXEC",
             "os.fsync(writer)", "os.fchmod(writer, 0o400)",
             "os.close(writer)", "writer = -1",
             "reader = os.open(str(writer), os.O_RDONLY",
