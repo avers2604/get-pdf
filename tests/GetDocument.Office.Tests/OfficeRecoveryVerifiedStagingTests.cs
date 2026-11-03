@@ -26,7 +26,7 @@ public sealed class OfficeRecoveryVerifiedStagingTests
         RecoveryStagedCopyReceipt receipt = await session.StageToAsync(
             staging, fixture.Sha256, ".docx");
 
-        Assert.AreEqual(fixture.Bytes.Length, receipt.Length);
+        Assert.AreEqual((long)fixture.Bytes.Length, receipt.Length);
         Assert.AreEqual(fixture.Sha256, receipt.Sha256);
         Assert.AreEqual(".docx", receipt.Extension);
         CollectionAssert.AreEqual(fixture.Bytes, staging.ToArray());
