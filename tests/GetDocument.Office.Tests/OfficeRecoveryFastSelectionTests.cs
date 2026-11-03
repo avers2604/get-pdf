@@ -168,12 +168,27 @@ public sealed class OfficeRecoveryFastSelectionTests
         string manifest = Path.ChangeExtension(copy.FilePath, ".json");
         long originalLength = new FileInfo(copy.FilePath).Length;
 
+        bool writerDenied = false;
         OfficeRecoveryCopy? result = store.ReadValidCopyWithPostHashMutation(
-            fixture.Source, manifest,
-            path => File.AppendAllText(path, "SYNTHETIC_AFTER_HASH"));
+            fixture.Source, manifest, path =>
+            {
+                // Windows FileShare.Read can deny the attempted write while
+                // the same input handle stays open. POSIX/SMB may permit it;
+                // in that case the changed content must not be accepted.
+                try { File.AppendAllText(path, "SYNTHETIC_AFTER_HASH"); }
+                catch (IOException) { writerDenied = true; }
+            });
 
-        Assert.IsNull(result);
-        Assert.IsTrue(new FileInfo(copy.FilePath).Length > originalLength);
+        if (writerDenied)
+        {
+            Assert.IsNotNull(result, "A blocked write leaves the verified snapshot unchanged.");
+            Assert.AreEqual(originalLength, new FileInfo(copy.FilePath).Length);
+        }
+        else
+        {
+            Assert.IsNull(result, "If a concurrent write succeeds, the snapshot must fail verification.");
+            Assert.IsTrue(new FileInfo(copy.FilePath).Length > originalLength);
+        }
         Assert.IsTrue(File.Exists(manifest));
         Assert.IsTrue(File.Exists(fixture.Source));
     }

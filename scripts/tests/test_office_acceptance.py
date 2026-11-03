@@ -13,6 +13,25 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27bb_single_stream_needs_windows_astra_smb_runtime_proof(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            source = "recovery-single-stream-source-tests"
+            self.assertEqual(1, names.count(source))
+            self.assertLess(names.index(source), names.index("solution-restore"))
+            target = next(s for s in steps if s.name == source)
+            self.assertIn("test_recovery_single_stream_contract.py", target.command)
+
+            report = acceptance.new_report("b" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27bb-single-stream-windows-ntfs-manual-e2e",
+                "gd31j27bb-single-stream-astra-smb-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27ba_concurrent_manifest_and_copy_checks_need_platform_proof(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)

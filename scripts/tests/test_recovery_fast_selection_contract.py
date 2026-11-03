@@ -23,6 +23,9 @@ class RecoveryFastSelectionSourceContract(unittest.TestCase):
         cls.copy = cls.store.split("private OfficeRecoveryCopy? ReadValidCopy(", 1)[1].split(
             "private void Prune(", 1
         )[0]
+        cls.verify = cls.store.split("internal static bool VerifyOpenedPackage(", 1)[1].split(
+            "private static async Task<string> VerifyAndHashExportAsync(", 1
+        )[0]
 
     def test_complete_enumeration_precedes_candidate_verification(self):
         self.assertIn("enumerateManifests(folder)", self.find)
@@ -56,26 +59,29 @@ class RecoveryFastSelectionSourceContract(unittest.TestCase):
         self.assertIn("ReadValidCopy(source, extension, entry.Path)", self.find)
         self.assertIn("var manifest = ReadManifest(manifestPath);", self.copy)
         self.assertIn("string.Equals(manifest.SourcePath, source, PathComparison)", self.copy)
-        self.assertIn("if (!string.Equals(sha, manifest.Sha256, StringComparison.OrdinalIgnoreCase))", self.copy)
-        self.assertIn("EnsureValidPackage(copy, extension);", self.copy)
+        self.assertIn("VerifyOpenedPackage(input, extension, manifest.Sha256,", self.copy)
+        self.assertIn("SHA256.HashData(input)", self.verify)
+        self.assertIn("EnsureValidPackage(input, extension);", self.verify)
 
     def test_sha_fast_rejection_preserves_link_and_size_guards(self):
         expected = (
             "var info = new FileInfo(copy);",
             "!info.Exists || info.Length == 0 || info.Length > MaxCopyBytes",
             "IsLinkedFile(info)",
-            "string sha = HashFile(copy);",
-            "EnsureValidPackage(copy, extension);",
+            "using var input = OpenRecoveryReadStream(copy);",
+            "VerifyOpenedPackage(input, extension, manifest.Sha256,",
         )
         for marker in expected:
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.copy)
         self.assertLess(self.copy.index("IsLinkedFile(info)"),
-                        self.copy.index("string sha = HashFile(copy);"))
-        self.assertLess(self.copy.index("string sha = HashFile(copy);"),
-                        self.copy.index("EnsureValidPackage(copy, extension);"))
-        self.assertLess(self.copy.index("if (!string.Equals(sha, manifest.Sha256"),
-                        self.copy.index("EnsureValidPackage(copy, extension);"))
+                        self.copy.index("using var input = OpenRecoveryReadStream(copy);"))
+        self.assertLess(self.copy.index("using var input = OpenRecoveryReadStream(copy);"),
+                        self.copy.index("VerifyOpenedPackage(input, extension, manifest.Sha256,"))
+        self.assertLess(self.verify.index("SHA256.HashData(input)"),
+                        self.verify.index("EnsureValidPackage(input, extension);"))
+        self.assertLess(self.verify.index("string.Equals(sha, expectedSha, StringComparison.OrdinalIgnoreCase)"),
+                        self.verify.index("EnsureValidPackage(input, extension);"))
         self.assertNotIn("static readonly Dictionary<", self.copy)
 
     def test_copy_size_and_manifest_counts_are_bounded(self):
