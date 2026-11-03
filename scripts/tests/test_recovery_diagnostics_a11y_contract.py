@@ -43,7 +43,8 @@ class RecoveryA11ySourceContract(unittest.TestCase):
         self.assertIn("Focusable = true;", self.pane)
         self.assertIn("AttachedToVisualTree +=", self.pane)
         self.assertIn("Focus();", self.pane)
-        self.assertIn("CloseRecoveryDiagnostics(id);", self.window)
+        self.assertIn("CloseRecoveryDiagnostics(id, restoreSourceSelection: false);",
+                      self.window)
         self.assertIn("_lifetime.Cancel();", self.pane)
 
     def test_dynamic_live_region_name_tracks_real_summary_not_constant(self):

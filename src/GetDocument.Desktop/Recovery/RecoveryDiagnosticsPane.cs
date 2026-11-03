@@ -32,6 +32,9 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
     // Do not inspect a hidden tab; only the selected tab may run enumeration.
     private bool _suspended = true;
     private bool _resumePending;
+    // With slow SMB enumerations, a canceled worker may outlive the view.
+    // Keep the lifetime CTS alive until its last asynchronous continuation.
+    private bool _lifetimeDisposed;
     private bool _busy;
     private bool _disposed;
 
@@ -46,7 +49,7 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
         // this read-only surface, not its temporarily disabled refresh button.
         AttachedToVisualTree += (_, _) =>
         {
-            if (!_disposed) Focus();
+            if (!_disposed && !_suspended) Focus();
         };
         KeyDown += OnPaneKeyDown;
 
@@ -181,6 +184,9 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
     {
         if (_disposed || !_suspended) return;
         _suspended = false;
+        // If the pane is already attached, focus this selected surface.
+        // Otherwise AttachedToVisualTree will focus it after attachment.
+        Focus();
         if (_busy)
         {
             _resumePending = true;
@@ -242,7 +248,9 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
             if (ReferenceEquals(_activeInspection, inspection))
                 _activeInspection = null;
             _busy = false;
-            if (!_disposed)
+            if (_disposed)
+                DisposeLifetime();
+            else
                 _refresh.IsEnabled = !_suspended;
 
             // A user may switch back while the cancelled background task is
@@ -372,6 +380,13 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
     private static IBrush Brush(string key) =>
         (IBrush)Application.Current!.FindResource(key)!;
 
+    private void DisposeLifetime()
+    {
+        if (_lifetimeDisposed) return;
+        _lifetimeDisposed = true;
+        _lifetime.Dispose();
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -380,6 +395,9 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
         _resumePending = false;
         _activeInspection?.Cancel();
         _lifetime.Cancel();
-        _lifetime.Dispose();
+        // Do NOT block window shutdown waiting for an OS/SMB call.
+        // A still-running inspection owns a linked cancellation registration;
+        // it releases the lifetime source when its continuation completes.
+        if (!_busy) DisposeLifetime();
     }
 }
