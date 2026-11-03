@@ -78,6 +78,7 @@ MANUAL_GATES = (
     "eurooffice-gd31j27af-real-fixed-fd-proc-elf-readonly-e2e",
     "eurooffice-gd31j27ag-independent-triparty-denial-trace-vm-e2e",
     "eurooffice-gd31j27ah-distinct-uid-devnull-scm-rights-manual-e2e",
+    "eurooffice-gd31j27ak-windows-currentuser-pid-denial-manual-e2e",
     "eurooffice-cef-authenticated-caret-ime-candidates",
     "eurooffice-windows-x11-osr-or-uno-fallback",
     "eurooffice-server-2-5-10-user-coediting",
@@ -109,6 +110,10 @@ def build_steps(root: Path, feed: Path, host: str,
                     [sys.executable, "-m", "unittest", "discover",
                      "-s", "scripts/tests",
                      "-p", "test_lo_save_receipt_contract.py"]),
+        CommandStep("windows-named-pipe-denial-source-tests",
+                    [sys.executable, "-m", "unittest", "discover",
+                     "-s", "probes/windows-saveas-denial",
+                     "-p", "test_windows_named_pipe_denial_source.py"]),
         CommandStep("native-probe-mock-tests",
                     [sys.executable, "-m", "unittest", "discover", "-s",
                      "probes/eurooffice-desktop", "-p", "test_mock_host.py"]),
@@ -528,7 +533,14 @@ def build_steps(root: Path, feed: Path, host: str,
             project=project))
     if host == "Windows":
         worker = "src/GetDocument.PrintWindows/GetDocument.PrintWindows.csproj"
+        win_denial = "probes/windows-saveas-denial/GetDocWindowsPipeDenialLab.csproj"
         steps.extend([
+            CommandStep("windows-denial-probe-restore",
+                        ["dotnet", "restore", win_denial, "--source", str(feed),
+                         "-p:NuGetAudit=false"]),
+            CommandStep("windows-denial-probe-build",
+                        ["dotnet", "build", win_denial, "-c", "Release",
+                         "--no-restore"]),
             CommandStep("windows-print-worker-restore",
                         ["dotnet", "restore", worker, "--source", str(feed), "-p:NuGetAudit=false"]),
             CommandStep("windows-print-worker-build",

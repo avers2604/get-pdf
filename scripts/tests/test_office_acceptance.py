@@ -13,6 +13,36 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ak_windows_pipe_denial_requires_real_manual_acceptance(self):
+        linux = acceptance.build_steps(Path("/get-document"),
+                                        Path("/offline-feed"), "Linux")
+        windows = acceptance.build_steps(Path("C:/get-document"),
+                                          Path("C:/offline-feed"), "Windows")
+        for steps in (linux, windows):
+            names = [s.name for s in steps]
+            self.assertIn("windows-named-pipe-denial-source-tests", names)
+            self.assertLess(names.index("windows-named-pipe-denial-source-tests"),
+                            names.index("solution-restore"))
+            self.assertIn("test_windows_named_pipe_denial_source.py",
+                next(s for s in steps if s.name ==
+                     "windows-named-pipe-denial-source-tests").command)
+        names = [s.name for s in windows]
+        self.assertIn("windows-denial-probe-restore", names)
+        self.assertIn("windows-denial-probe-build", names)
+        self.assertLess(names.index("windows-denial-probe-restore"),
+                        names.index("windows-denial-probe-build"))
+        self.assertNotIn("windows-denial-probe-build",
+                         [s.name for s in linux])
+        self.assertIn(
+            "eurooffice-gd31j27ak-windows-currentuser-pid-denial-manual-e2e",
+            acceptance.MANUAL_GATES)
+        report = acceptance.new_report("a" * 40, "Windows", "GD-31I")
+        self.assertEqual(
+            "not-run",
+            report["manualAcceptance"][
+                "eurooffice-gd31j27ak-windows-currentuser-pid-denial-manual-e2e"])
+        self.assertFalse(report["releaseReady"])
+
     def test_gd31j27ah_manual_ipc_uses_only_offline_mock_tests_before_restore(self):
         steps=acceptance.build_steps(Path("/get-document"),Path("/offline-feed"),"Linux")
         names=[step.name for step in steps]
