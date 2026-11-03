@@ -13,6 +13,26 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ap_recovery_ui_is_source_gated_and_requires_manual_os_checks(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"),
+                                           Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            name = "recovery-diagnostics-ui-source-tests"
+            self.assertIn(name, names)
+            self.assertLess(names.index(name), names.index("solution-restore"))
+            self.assertIn(
+                "test_recovery_diagnostics_ui_contract.py",
+                next(s for s in steps if s.name == name).command)
+            report = acceptance.new_report("c" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27ap-recovery-diagnostics-windows-desktop-manual-e2e",
+                "gd31j27ap-recovery-diagnostics-linux-astra-desktop-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27ao_recovery_inspection_is_source_gated_and_not_release_ready(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
