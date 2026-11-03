@@ -74,14 +74,14 @@ class RecoveryDiagnosticsSourceContract(unittest.TestCase):
             "_items.Add(view);",
             "_tabs.SelectedItem = view;",
             "CloseRecoveryDiagnostics(sourceId)",
-            "CloseRecoveryDiagnostics(id);",
+            "CloseRecoveryDiagnostics(id, restoreSourceSelection: false);",
             "foreach (var inspection in _recoveryTabs.Values)",
             "_recoveryTabs.FirstOrDefault(",
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.window)
         self.assertIn("CloseRecoveryDiagnostics(recovery.Key)", self.window)
-        self.assertIn("_ = pane.RefreshAsync();", self.window)
+        self.assertIn("inspection.ResumeInspection();", self.window)
 
 
 if __name__ == "__main__":

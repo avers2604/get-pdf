@@ -27,6 +27,11 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
     private readonly TextBlock _details = new() { TextWrapping = TextWrapping.Wrap };
     private readonly StackPanel _entries = new() { Spacing = 10 };
     private readonly Button _refresh = new() { Content = "Обновить сведения" };
+    private CancellationTokenSource? _activeInspection;
+    // A diagnostics tab may exist without being the selected document view.
+    // Do not inspect a hidden tab; only the selected tab may run enumeration.
+    private bool _suspended = true;
+    private bool _resumePending;
     private bool _busy;
     private bool _disposed;
 
@@ -151,11 +156,51 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
             _summary, "Состояние диагностики: " + _summary.Text + ". " + _details.Text);
     }
 
+    /// <summary>
+    /// Called when a different tab becomes active. Cancel only this scan,
+    /// never remove any file or invalidate the whole per-user recovery store.
+    /// </summary>
+    internal void SuspendInspection()
+    {
+        if (_disposed || _suspended) return;
+        _suspended = true;
+        _resumePending = false;
+        _activeInspection?.Cancel();
+        _refresh.IsEnabled = false;
+        _summary.Foreground = Brush("GetMutedBrush");
+        _summary.Text = "Проверка приостановлена";
+        _details.Text = "Вкладка неактивна. При возвращении сведения будут проверены заново.";
+        UpdateAccessibleStatus();
+    }
+
+    /// <summary>
+    /// Resuming during cancellation defers the new scan until its old task
+    /// has exited. Repeated selection events must not launch duplicate work.
+    /// </summary>
+    internal void ResumeInspection()
+    {
+        if (_disposed || !_suspended) return;
+        _suspended = false;
+        if (_busy)
+        {
+            _resumePending = true;
+            _summary.Text = "Подготовка повторной проверки…";
+            _details.Text = "Завершается предыдущая проверка; сведения пока не обновлены.";
+            UpdateAccessibleStatus();
+            return;
+        }
+
+        _ = RefreshAsync();
+    }
+
     internal async Task RefreshAsync()
     {
-        if (_disposed || _busy) return;
+        if (_disposed || _busy || _suspended) return;
         _busy = true;
-        CancellationToken token = _lifetime.Token;
+        using var inspection = CancellationTokenSource.CreateLinkedTokenSource(
+            _lifetime.Token);
+        _activeInspection = inspection;
+        CancellationToken token = inspection.Token;
         _refresh.IsEnabled = false;
         _summary.Foreground = Brush("GetNavyBrush");
         _summary.Text = "Проверка временных объектов…";
@@ -171,18 +216,21 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
                 () => _store.InspectIncomplete(
                     _sourcePath, cancellationToken: token),
                 token);
-            if (_disposed || token.IsCancellationRequested) return;
+            // Stale results from a deselected pane can never be presented as
+            // a fresh, selected-tab observation.
+            if (_disposed || _suspended || token.IsCancellationRequested) return;
             Render(result);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            // Closing the tab does not imply a completed inspection.
+            // Cancellation means "not checked", never "no temporary files".
+            // Suspend/Dispose own the explicit state and must not be undone.
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or
                                    UnauthorizedAccessException or ArgumentException or
                                    NotSupportedException or System.Security.SecurityException)
         {
-            if (_disposed) return;
+            if (_disposed || _suspended || token.IsCancellationRequested) return;
             _summary.Text = "Не удалось проверить временные файлы";
             _summary.Foreground = Brush("GetRedBrush");
             _details.Text = "Доступ или безопасность каталога не подтверждены. " +
@@ -191,8 +239,19 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
         }
         finally
         {
+            if (ReferenceEquals(_activeInspection, inspection))
+                _activeInspection = null;
             _busy = false;
-            if (!_disposed) _refresh.IsEnabled = true;
+            if (!_disposed)
+                _refresh.IsEnabled = !_suspended;
+
+            // A user may switch back while the cancelled background task is
+            // still exiting. Start exactly one fresh scan only after it ends.
+            if (_resumePending && !_disposed && !_suspended)
+            {
+                _resumePending = false;
+                _ = RefreshAsync();
+            }
         }
     }
 
@@ -317,6 +376,9 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _suspended = true;
+        _resumePending = false;
+        _activeInspection?.Cancel();
         _lifetime.Cancel();
         _lifetime.Dispose();
     }

@@ -33,7 +33,7 @@ class RecoveryA11ySourceContract(unittest.TestCase):
         self.assertIn("e.Key != Key.F5", self.pane)
         self.assertIn("e.Handled = true;", self.pane)
         self.assertIn("_ = RefreshAsync();", self.pane)
-        self.assertIn("if (_disposed || _busy) return;", self.pane)
+        self.assertIn("if (_disposed || _busy || _suspended) return;", self.pane)
         self.assertEqual(1, self.pane.count("readonly Button "))
         for forbidden in ("File.Delete(", "File.Write", "File.Move(", "Discard(",
                           "CaptureAsync(", "Process.Start(", "Restore("):
