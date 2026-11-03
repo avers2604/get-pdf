@@ -56,7 +56,7 @@
 - Живые GitHub PR API для #149–158: `open/draft/mergeable_state=clean` и непрерывность base/head.
 - Живые GitHub REST endpoints для SHA #158: **0 check-runs, 0 commit statuses**, нет доказательств сборки.
 - Файлы исходников/контрактов считаны обратно из GitHub после внесённых правок.
-- Проведена модельная **строковая статическая сверка** прямых Python `self.assertIn/NotIn`-ожиданий из source-only контрактов против актуального текста C#/Python. После исправления забытого token-assertion: **74 из 74 прямых буквальных ожиданий совпали**. Такая проверка не запускает сами Python unittest-методы, не выполняет их ветвления/регулярные выражения и не доказывает компиляцию.
+- Проведена модельная **строковая статическая сверка** прямых Python `self.assertIn/NotIn`-ожиданий из source-only контрактов против актуального текста C#/Python. После исправления забытого token-assertion: **101 из 101 прямого буквального ожидания совпало** (включая проверки `self.close`, `self.source_close`, `self.closed`, `self.attached`, `self.refresh` и `self.finally_body`). Такая проверка не запускает сами Python unittest-методы, не выполняет их ветвления/регулярные выражения и не доказывает компиляцию.
 
 **Не выполнены:** Python unittest runner (рабочее дерево недоступно как локальный git checkout), C# компиляция (нет `dotnet` SDK), MSTest, настоящий UIA/NVDA, Windows/NTFS, Astra Linux, SMB, EuroOffice native, WORM/CAS, GUP-2. В среде исполнения `git ls-remote https://github.com/avers2604/get-pdf.git HEAD` возвратил `Could not resolve host: github.com`. Доступ GitHub через разрешённый connector позволяет править файлы и PR, но не заменяет окружение сборки. Не утверждать «все тесты пройдены».
 
