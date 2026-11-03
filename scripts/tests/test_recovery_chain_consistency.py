@@ -10,6 +10,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 PANE = ROOT / "src/GetDocument.Desktop/Recovery/RecoveryDiagnosticsPane.cs"
 WINDOW = ROOT / "src/GetDocument.Desktop/MainWindow.cs"
+STORE = ROOT / "src/GetDocument.Office/LibreOffice/OfficeRecoveryStore.cs"
+LINK_TESTS = ROOT / "tests/GetDocument.Office.Tests/OfficeRecoveryStoreLinkSafetyTests.cs"
 RUNNER = ROOT / "scripts/office_acceptance.py"
 TESTS = ROOT / "scripts/tests"
 REQUIRED = {
@@ -33,6 +35,8 @@ class RecoveryChainIntegrity(unittest.TestCase):
     def setUpClass(cls):
         cls.pane = PANE.read_text(encoding="utf-8")
         cls.window = WINDOW.read_text(encoding="utf-8")
+        cls.store = STORE.read_text(encoding="utf-8")
+        cls.link_tests = LINK_TESTS.read_text(encoding="utf-8")
         cls.runner = RUNNER.read_text(encoding="utf-8")
         cls.refresh = cls.pane.split(
             "internal async Task RefreshAsync()", 1
@@ -99,6 +103,40 @@ class RecoveryChainIntegrity(unittest.TestCase):
         self.assertNotIn('CancellationToken token = _lifetime.Token;', legacy)
         self.assertIn('CancellationToken token = inspection.Token;', legacy)
         self.assertIn('CreateLinkedTokenSource(', self.pane)
+
+    def test_capture_cleanup_uses_operation_ownership_not_path_existence(self):
+        capture = self.store.split(
+            "public async Task<OfficeRecoveryCopy> CaptureAsync(", 1
+        )[1].split("public OfficeRecoveryIncompleteInventory InspectIncomplete(", 1)[0]
+        for marker in (
+            "bool publishedCopy = false;",
+            "bool createdTemporaryManifest = false;",
+            "bool publishedManifest = false;",
+            "publishedCopy = true;",
+            "createdTemporaryManifest = true;",
+            "createdTemporaryManifest = false;",
+            "publishedManifest = true;",
+            "if (createdTemporaryManifest)",
+            "if (publishedCopy && !publishedManifest)",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, capture)
+        self.assertLess(capture.index("File.Move(temporaryCopy, finalCopy);"),
+                        capture.index("publishedCopy = true;"))
+        self.assertLess(capture.index("File.Move(temporaryManifest, finalManifest);"),
+                        capture.index("publishedManifest = true;"))
+        self.assertNotIn("if (!File.Exists(finalManifest)) TryDelete(finalCopy)", capture)
+        self.assertNotIn("TryDelete(temporaryManifest);\n            // If publishing failed", capture)
+
+    def test_collision_regressions_cover_all_publication_names(self):
+        for name in (
+            "PreexistingFinalCopyCollisionMustNotDeleteUnrelatedFile",
+            "PreexistingRegularTemporaryManifestCollisionMustNotDeleteIt",
+            "PreexistingFinalManifestCollisionDoesNotPublishOrDeleteIt",
+        ):
+            with self.subTest(name=name):
+                self.assertIn(name, self.link_tests)
+        self.assertEqual(9, self.link_tests.count("[TestMethod]"))
 
     def test_no_new_user_data_operations_in_diagnostics_pane(self):
         for forbidden in (
