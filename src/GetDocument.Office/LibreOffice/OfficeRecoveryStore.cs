@@ -42,6 +42,14 @@ public sealed class OfficeRecoveryStore
 
         string extension = AllowedExtension(source);
         string folder = FolderFor(source);
+        // Do not start another 128 MiB export when this source already has
+        // too many untrusted incomplete artifacts (including final copies
+        // with no observed manifest). Admission never deletes any artifact.
+        // This is a conservative per-source limit, NOT a cross-process lock
+        // or a complete disk-space budget.
+        RecoveryCaptureAdmission.EnsureMayCapture(
+            InspectIncomplete(source, maxEntries: 1024, cancellationToken: cancellationToken));
+
         // Refuse recovery roots, parents or per-document folders that are
         // symbolic links/junctions. Check before and after directory creation.
         // These checks fail closed; they do not defeat hostile TOCTOU changes.
@@ -148,9 +156,14 @@ public sealed class OfficeRecoveryStore
             return new OfficeRecoveryIncompleteInventory(
                 Array.Empty<OfficeRecoveryIncompleteCandidate>(), false);
 
-        var candidates = new List<OfficeRecoveryIncompleteCandidate>();
+        // Make a single bounded *name* observation before checking metadata.
+        // In particular, a .docx/.xlsx/.pptx final copy must NOT be described
+        // as manifest-free until the entire bounded directory was observed.
+        // The result remains a race-prone observation, never delete authority.
+        var observedEntries = new List<string>(maxEntries);
         bool truncated = false;
         int visited = 0;
+        string expectedParent = Path.GetFullPath(folder);
         foreach (string entry in enumerateEntries(folder))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -160,8 +173,33 @@ public sealed class OfficeRecoveryStore
                 break;
             }
 
+            // Deterministic test enumerators must stay scoped to the source.
+            // Paths are only inspected; no entry is opened by pathname.
+            if (!string.Equals(Path.GetDirectoryName(Path.GetFullPath(entry)),
+                    expectedParent, PathComparison))
+                throw new InvalidDataException(
+                    "Элемент осмотра находится вне каталога аварийного восстановления.");
+            observedEntries.Add(entry);
+        }
+
+        var observedNames = new HashSet<string>(
+            observedEntries.Select(entry => Path.GetFileName(entry)!),
+            OperatingSystem.IsWindows()
+                ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var candidates = new List<OfficeRecoveryIncompleteCandidate>();
+        foreach (string entry in observedEntries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             string name = Path.GetFileName(entry);
             if (!TryClassifyIncompleteName(name, extension, out var kind))
+                continue;
+
+            // No inference of absence from a truncated enumeration. A name
+            // with ANY matching .json entry is not classified as orphan,
+            // even if the manifest is unreadable or malformed. The manifest
+            // may also appear after this scan; that race must remain benign.
+            if (kind == OfficeRecoveryIncompleteKind.FinalCopyWithoutObservedManifest &&
+                (truncated || observedNames.Contains(name[..32] + ".json")))
                 continue;
 
             // FileInfo.LinkTarget can identify a dangling symlink without
@@ -201,7 +239,7 @@ public sealed class OfficeRecoveryStore
 
         return new OfficeRecoveryIncompleteInventory(
             candidates.OrderBy(item => item.FileName, StringComparer.Ordinal).ToArray(),
-            truncated);
+            truncated, ObservedEntries: observedEntries.Count);
     }
 
     private static bool TryClassifyIncompleteName(
@@ -217,6 +255,8 @@ public sealed class OfficeRecoveryStore
             kind = OfficeRecoveryIncompleteKind.StagedOfficeCopy;
         else if (tail.Equals(".json.tmp", StringComparison.OrdinalIgnoreCase))
             kind = OfficeRecoveryIncompleteKind.TemporaryManifest;
+        else if (tail.Equals(extension, StringComparison.OrdinalIgnoreCase))
+            kind = OfficeRecoveryIncompleteKind.FinalCopyWithoutObservedManifest;
         else
             return false;
 
@@ -794,7 +834,10 @@ public sealed record OfficeRecoveryCopy(string FilePath, DateTimeOffset Captured
 public enum OfficeRecoveryIncompleteKind
 {
     StagedOfficeCopy,
-    TemporaryManifest
+    TemporaryManifest,
+    // Informational only: the final-name copy had no manifest in the
+    // complete bounded name observation. It may belong to a LIVE writer.
+    FinalCopyWithoutObservedManifest
 }
 
 public enum OfficeRecoveryIncompleteStatus
@@ -821,4 +864,7 @@ public sealed record OfficeRecoveryIncompleteCandidate(
 /// </summary>
 public sealed record OfficeRecoveryIncompleteInventory(
     IReadOnlyList<OfficeRecoveryIncompleteCandidate> Candidates,
-    bool Truncated);
+    bool Truncated,
+    // Counts ALL immediate entries observed, including unrecognized names.
+    // Not a global disk-space quota and never a delete authorization.
+    int ObservedEntries = 0);

@@ -56,6 +56,7 @@ class RecoveryInventorySourceContract(unittest.TestCase):
         for expected in (
             'tail.Equals(".part" + extension, StringComparison.OrdinalIgnoreCase)',
             'tail.Equals(".json.tmp", StringComparison.OrdinalIgnoreCase)',
+            'tail.Equals(extension, StringComparison.OrdinalIgnoreCase)',
             'Guid.TryParseExact(fileName[..GuidLength], "N", out _)',
         ):
             with self.subTest(expected=expected):
@@ -73,10 +74,14 @@ class RecoveryInventorySourceContract(unittest.TestCase):
             "InvalidBudgetAndUnsupportedFileTypeFailBeforeReadingAnything",
             "DanglingSymlinkIsReportedAsUntrustedWithoutFollowingIt",
             "CancelledInventoryFailsInsteadOfReportingEmpty",
+            "RenamedFinalCopyWithoutManifestIsListedOnlyAsUnverifiedCandidate",
+            "FinalCopyWithEvenMalformedManifestIsNotCalledOrphan",
+            "TruncatedEnumerationMustNotClaimFinalCopyHasNoManifest",
+            "FinalCopyForOtherFormatOrNonGuidNameIsNeverClassified",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, self.tests)
-        self.assertEqual(10, self.tests.count("[TestMethod]"))
+        self.assertEqual(14, self.tests.count("[TestMethod]"))
 
 
 if __name__ == "__main__":
