@@ -41,7 +41,7 @@ class RecoveryReopenShutdownContract(unittest.TestCase):
         self.assertIn("_lifetime.Cancel();", self.dispose)
         self.assertIn("if (!_busy) DisposeLifetime();", self.dispose)
         self.assertIn("private void DisposeLifetime()", self.pane)
-        self.assertIn("if (_disposed) DisposeLifetime();", self.pane)
+        self.assertIn("if (_disposed)\n                DisposeLifetime();", self.pane)
         self.assertIn("private bool _lifetimeDisposed;", self.pane)
         self.assertLess(self.dispose.index("_lifetime.Cancel();"),
                         self.dispose.index("if (!_busy) DisposeLifetime();"))
