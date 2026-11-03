@@ -13,6 +13,22 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ax_corrupt_json_cleanup_and_acl_evidence_remains_manual(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            check = "recovery-chain-consistency-source-tests"
+            self.assertEqual(1, names.count(check))
+            self.assertLess(names.index(check), names.index("solution-restore"))
+            report = acceptance.new_report("e" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27ax-recovery-manifest-fault-windows-ntfs-manual-e2e",
+                "gd31j27ax-recovery-manifest-fault-astra-smb-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27aw_partial_deletion_requires_real_windows_and_astra_acceptance(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)

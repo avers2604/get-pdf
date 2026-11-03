@@ -46,6 +46,62 @@ public sealed class OfficeRecoveryStoreTests
     }
 
     [TestMethod]
+    public async Task FindLatestSkipsMalformedAndOversizedJsonAndKeepsValidCopy()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("valid-with-corrupt-neighbors.docx");
+        byte[] original = File.ReadAllBytes(source);
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        OfficeRecoveryCopy valid = await store.CaptureAsync(source, destination =>
+        {
+            File.Copy(source, destination);
+            return Task.CompletedTask;
+        });
+        string folder = Path.GetDirectoryName(valid.FilePath)!;
+        string malformed = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".json");
+        string oversized = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".json");
+        string wrongType = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".json");
+        File.WriteAllText(malformed, "{not-json");
+        File.WriteAllText(oversized, new string('x', 3000));
+        File.WriteAllText(wrongType, "{\"SourcePath\":true,\"CapturedUtc\":\"not-a-date\"}");
+        byte[] malformedBytes = File.ReadAllBytes(malformed);
+        byte[] oversizedBytes = File.ReadAllBytes(oversized);
+        byte[] wrongTypeBytes = File.ReadAllBytes(wrongType);
+
+        Assert.AreEqual(valid.FilePath, store.FindLatest(source)?.FilePath);
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(source));
+        CollectionAssert.AreEqual(malformedBytes, File.ReadAllBytes(malformed));
+        CollectionAssert.AreEqual(oversizedBytes, File.ReadAllBytes(oversized));
+        CollectionAssert.AreEqual(wrongTypeBytes, File.ReadAllBytes(wrongType));
+    }
+
+    [TestMethod]
+    public async Task FindLatestFallsBackToOlderValidCopyWhenNewerIsCorrupted()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("two-snapshots.xlsx");
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        OfficeRecoveryCopy older = await store.CaptureAsync(source, destination =>
+        {
+            File.Copy(source, destination);
+            return Task.CompletedTask;
+        });
+        await Task.Delay(20);
+        OfficeRecoveryCopy newer = await store.CaptureAsync(source, destination =>
+        {
+            File.Copy(source, destination);
+            return Task.CompletedTask;
+        });
+        Assert.AreEqual(newer.FilePath, store.FindLatest(source)?.FilePath);
+
+        File.AppendAllText(newer.FilePath, "TAMPERED_AFTER_PUBLICATION");
+
+        Assert.AreEqual(older.FilePath, store.FindLatest(source)?.FilePath);
+        Assert.IsTrue(File.Exists(newer.FilePath));
+        Assert.IsTrue(File.Exists(source));
+    }
+
+    [TestMethod]
     public async Task ExportFailureDoesNotExposeIncompleteCopy()
     {
         using var fixture = new RecoveryFixture();
