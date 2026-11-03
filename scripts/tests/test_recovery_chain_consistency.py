@@ -56,6 +56,8 @@ REQUIRED = {
         "test_recovery_orphan_inventory_contract.py",
     "recovery-orphan-budget-native-delete-source-tests":
         "test_recovery_orphan_budget_native_delete_contract.py",
+    "recovery-capture-volume-source-tests":
+        "test_recovery_capture_volume_contract.py",
 }
 
 
@@ -106,7 +108,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
                 self.assertIn('"-p", "' + file_name + '"', self.runner)
 
     def test_registered_recovery_manual_gates_are_unique_and_not_automated(self):
-        all_gates = re.findall(r'    "((?:gd31j27a[lnopqrstuvwxyz]|gd31j27b[abcdefghijkl])[^"]+-manual-e2e)",',
+        all_gates = re.findall(r'    "((?:gd31j27a[lnopqrstuvwxyz]|gd31j27b[abcdefghijklm])[^"]+-manual-e2e)",',
                                self.runner)
         self.assertEqual(len(all_gates), len(set(all_gates)))
         self.assertGreaterEqual(len(all_gates), 8)
