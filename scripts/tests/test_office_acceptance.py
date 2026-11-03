@@ -13,6 +13,25 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27bh_consumer_handle_transfer_needs_manual_platform_proof(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            source = "recovery-consumer-transfer-source-tests"
+            self.assertEqual(1, names.count(source))
+            self.assertLess(names.index(source), names.index("solution-restore"))
+            step = next(s for s in steps if s.name == source)
+            self.assertIn("test_recovery_consumer_transfer_contract.py", step.command)
+            report = acceptance.new_report("h" * 40, host, "GD-31I")
+            for manual in (
+                "gd31j27bh-consumer-windows-ntfs-manual-e2e",
+                "gd31j27bh-consumer-astra-ext4-manual-e2e",
+                "gd31j27bh-consumer-smb-race-manual-e2e",
+            ):
+                self.assertIn(manual, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][manual])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27bg_private_publication_is_inactive_until_platform_proof(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
