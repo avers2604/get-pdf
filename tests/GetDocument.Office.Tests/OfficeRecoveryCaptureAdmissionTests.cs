@@ -67,6 +67,51 @@ public sealed class OfficeRecoveryCaptureAdmissionTests
         Assert.AreEqual("SOURCE_PRESERVED", File.ReadAllText(scratch.Source));
     }
 
+    [TestMethod]
+    public void TotalDirectoryBudgetRejectsEvenWhenAllManifestNamesArePresent()
+    {
+        var observed = new OfficeRecoveryIncompleteInventory(
+            Array.Empty<OfficeRecoveryIncompleteCandidate>(),
+            Truncated: false,
+            ObservedEntries: RecoveryCaptureAdmission.MaxDirectoryEntriesBeforeCapture);
+        Assert.ThrowsExactly<IOException>(() =>
+            RecoveryCaptureAdmission.EnsureMayCapture(observed));
+    }
+
+    [TestMethod]
+    public async Task ManyMalformedManifestPairsCannotEvadeSourceAdmission()
+    {
+        using var scratch = new Scratch();
+        string folder = scratch.CreateRecoveryFolder();
+        var store = new OfficeRecoveryStore(scratch.RecoveryRoot);
+
+        for (int i = 0;
+             i < RecoveryCaptureAdmission.MaxDirectoryEntriesBeforeCapture / 2;
+             i++)
+        {
+            string id = Guid.NewGuid().ToString("N");
+            File.WriteAllText(Path.Combine(folder, id + ".docx"), "UNVERIFIED_COPY");
+            File.WriteAllText(Path.Combine(folder, id + ".json"), "MALFORMED");
+        }
+
+        OfficeRecoveryIncompleteInventory observed = store.InspectIncomplete(scratch.Source);
+        Assert.AreEqual(0, observed.Candidates.Count,
+            "A manifest name is observed; its contents are not inspected.");
+        Assert.AreEqual(RecoveryCaptureAdmission.MaxDirectoryEntriesBeforeCapture,
+            observed.ObservedEntries);
+
+        bool exported = false;
+        await Assert.ThrowsExactlyAsync<IOException>(() =>
+            store.CaptureAsync(scratch.Source, _ =>
+            {
+                exported = true;
+                return Task.CompletedTask;
+            }));
+        Assert.IsFalse(exported);
+        Assert.AreEqual(RecoveryCaptureAdmission.MaxDirectoryEntriesBeforeCapture,
+            Directory.GetFileSystemEntries(folder).Length);
+    }
+
     private static OfficeRecoveryIncompleteInventory MakeInventory(int count)
     {
         var candidates = Enumerable.Range(0, count).Select(_ =>
