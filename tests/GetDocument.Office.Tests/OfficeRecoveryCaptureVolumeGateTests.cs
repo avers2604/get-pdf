@@ -151,6 +151,65 @@ public sealed class OfficeRecoveryCaptureVolumeGateTests
             RecoveryCaptureVolumeGate.LockFileName)));
     }
 
+    [TestMethod]
+    public async Task SeparateStoresSharingRootRejectOverlappingExportBeforeItRuns()
+    {
+        using var scratch = new Scratch();
+        string source = Path.Combine(scratch.Root, "draft.docx");
+        // A real OOXML fixture is unnecessary: the first exporter deliberately
+        // stays blocked; the second must be rejected before its exporter runs.
+        File.WriteAllText(source, "SOURCE_NOT_MODIFIED");
+        var firstStore = new OfficeRecoveryStore(scratch.Root, LocalWithSpace);
+        var secondStore = new OfficeRecoveryStore(scratch.Root, LocalWithSpace);
+        var entered = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<OfficeRecoveryCopy> first = firstStore.CaptureAsync(source, async _ =>
+        {
+            entered.TrySetResult(true);
+            await release.Task;
+            throw new IOException("synthetic stopped export");
+        });
+        await entered.Task;
+        bool secondCalled = false;
+        await Assert.ThrowsExactlyAsync<IOException>(async () =>
+            await secondStore.CaptureAsync(source, _ =>
+            {
+                secondCalled = true;
+                return Task.CompletedTask;
+            }));
+
+        Assert.IsFalse(secondCalled);
+        release.TrySetResult(true);
+        await Assert.ThrowsExactlyAsync<IOException>(async () => await first);
+        Assert.AreEqual("SOURCE_NOT_MODIFIED", File.ReadAllText(source));
+        Assert.IsTrue(File.Exists(Path.Combine(scratch.Root,
+            RecoveryCaptureVolumeGate.LockFileName)));
+    }
+
+    [TestMethod]
+    public async Task LowSpaceStoreRefusesExporterAndPreservesSourceWithoutRecoveryFolder()
+    {
+        using var scratch = new Scratch();
+        string source = Path.Combine(scratch.Root, "draft.docx");
+        File.WriteAllText(source, "KEEP_SOURCE");
+        var store = new OfficeRecoveryStore(scratch.Root, _ =>
+            new RecoveryCaptureVolumeObservation(true,
+                RecoveryCaptureVolumeGate.MinimumFreeBytes - 1, "synthetic"));
+        bool invoked = false;
+        await Assert.ThrowsExactlyAsync<IOException>(async () =>
+            await store.CaptureAsync(source, _ =>
+            {
+                invoked = true;
+                return Task.CompletedTask;
+            }));
+        Assert.IsFalse(invoked);
+        Assert.AreEqual("KEEP_SOURCE", File.ReadAllText(source));
+        Assert.IsFalse(File.Exists(Path.Combine(scratch.Root,
+            RecoveryCaptureVolumeGate.LockFileName)));
+    }
+
     private sealed class Scratch : IDisposable
     {
         internal string Root { get; } = Path.Combine(Path.GetTempPath(),
