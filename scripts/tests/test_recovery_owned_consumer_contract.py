@@ -31,7 +31,7 @@ class RecoveryOwnedConsumerSourceContract(unittest.TestCase):
             "internal async Task<T> ReadVerifiedAsync<T>(", 1
         )[1].split("private static void RequireRegularPrivateDirectory(", 1)[0]
         cls.view = cls.owner.split(
-            "private sealed class RevocableReadOnlyStream : Stream", 1
+            "internal sealed class RevocableReadOnlyStream : Stream", 1
         )[1]
 
     def test_owned_buffer_is_new_private_file_not_memory_or_public_path(self):
@@ -75,11 +75,11 @@ class RecoveryOwnedConsumerSourceContract(unittest.TestCase):
 
     def test_readonly_view_is_revoked_without_closing_held_handle_early(self):
         self.assertIn("new RevocableReadOnlyStream(source, abort)", self.read)
-        self.assertIn("using var view =", self.read)
-        self.assertIn("view.Dispose();", self.read)
+        self.assertIn("var view =", self.read)
+        self.assertIn("await view.RevokeAndDrainAsync();", self.read)
         self.assertLess(self.read.index("T result = await reader(view, abort);"),
-                        self.read.index("view.Dispose();"))
-        self.assertLess(self.read.index("view.Dispose();"),
+                        self.read.index("await view.RevokeAndDrainAsync();"))
+        self.assertLess(self.read.index("await view.RevokeAndDrainAsync();"),
                         self.read.rindex("VerifyOpenedPackage("))
         self.assertIn("public override bool CanWrite => false;", self.view)
         self.assertIn("public override void Write(byte[] buffer, int offset, int count)",
@@ -133,7 +133,7 @@ class RecoveryOwnedConsumerSourceContract(unittest.TestCase):
         for name in names:
             with self.subTest(name=name):
                 self.assertIn(name, self.tests)
-        self.assertEqual(9, self.tests.count("[TestMethod]"))
+        self.assertEqual(11, self.tests.count("[TestMethod]"))
         self.assertIn("new FakeAdapter(", self.tests)
         self.assertIn("TaskCompletionSource<bool>", self.tests)
 
