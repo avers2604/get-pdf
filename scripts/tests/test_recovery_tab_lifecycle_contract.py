@@ -60,7 +60,7 @@ class RecoveryTabLifecycleSourceTests(unittest.TestCase):
                       self.pane)
         self.assertIn("if (_disposed || _busy || _suspended) return;", self.pane)
         self.assertIn("CancellationTokenSource.CreateLinkedTokenSource(", self.pane)
-        self.assertIn("inspection.Dispose();", self.pane)
+        self.assertIn("using var inspection = CancellationTokenSource.CreateLinkedTokenSource(", self.pane)
         self.assertIn("_lifetime.Cancel();", self.pane)
 
     def test_no_extra_refresh_on_tab_creation_or_file_access_rights(self):
