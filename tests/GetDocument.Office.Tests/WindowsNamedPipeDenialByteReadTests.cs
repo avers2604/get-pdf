@@ -1,4 +1,3 @@
-using System.Text;
 using GetDocument.Office.EuroOfficeDesktop;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -70,6 +69,64 @@ public sealed class WindowsNamedPipeDenialByteReadTests
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(
             () => WindowsNamedPipeDenialLab.ReadDenialToEofAsync(
                 stream, cancelled.Token));
+    }
+
+    [TestMethod]
+    public async Task DoesNotAcceptExactPrefixWhilePeerKeepsConnectionOpen()
+    {
+        // A malicious or broken same-user peer may send an exact denial
+        // prefix and keep the pipe open. EOF is mandatory before acceptance.
+        using var stream = new NeverClosingAfterDataStream(WindowsNamedPipeDenialLab.Denied);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        try
+        {
+            await WindowsNamedPipeDenialLab.ReadDenialToEofAsync(stream, timeout.Token);
+            Assert.Fail("The parser must not accept bytes without EOF.");
+        }
+        catch (OperationCanceledException)
+        {
+            Assert.IsTrue(timeout.IsCancellationRequested);
+        }
+    }
+
+    private sealed class NeverClosingAfterDataStream(byte[] data) : Stream
+    {
+        private readonly MemoryStream _memory = new(data);
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_memory.Position < _memory.Length)
+                return _memory.ReadAsync(buffer, cancellationToken);
+            return new ValueTask<int>(UntilCancellationAsync(cancellationToken));
+        }
+        private static async Task<int> UntilCancellationAsync(CancellationToken token)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return 0;
+        }
+        public override int Read(byte[] b, int o, int n) =>
+            _memory.Read(b, o, n);
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) =>
+            throw new NotSupportedException();
+        public override void SetLength(long length) =>
+            throw new NotSupportedException();
+        public override void Write(byte[] b, int o, int n) =>
+            throw new NotSupportedException();
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _memory.Dispose();
+            base.Dispose(disposing);
+        }
     }
 
     private sealed class SingleByteReadStream(byte[] data) : Stream
