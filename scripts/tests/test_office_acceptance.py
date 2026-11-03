@@ -13,6 +13,25 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27bf_verified_handle_staging_is_manual_and_inactive(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            source = "recovery-verified-staging-source-tests"
+            self.assertEqual(1, names.count(source))
+            self.assertLess(names.index(source), names.index("solution-restore"))
+            step = next(s for s in steps if s.name == source)
+            self.assertIn("test_recovery_verified_staging_contract.py", step.command)
+            report = acceptance.new_report("f" * 40, host, "GD-31I")
+            for manual in (
+                "gd31j27bf-verified-staging-windows-ntfs-manual-e2e",
+                "gd31j27bf-verified-staging-astra-ext4-manual-e2e",
+                "gd31j27bf-verified-staging-smb-cancellation-manual-e2e",
+            ):
+                self.assertIn(manual, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][manual])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27be_native_probes_are_inactive_and_need_all_three_os_gates(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
