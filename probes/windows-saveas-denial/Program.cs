@@ -46,13 +46,9 @@ public static class Program
                 Console.WriteLine("GD31J27AK_SERVER_DENIAL_SENT_NOT_ATTESTED");
             }
         }
-        catch (Exception ex) when (ex is IOException or
-                                   InvalidDataException or
-                                   UnauthorizedAccessException or
-                                   OperationCanceledException or
-                                   PlatformNotSupportedException or
-                                   ArgumentException)
+        catch (Exception)
         {
+            // Unknown runtime failures must also exit DENIED (code 2).
             // Never write OS identities, paths, payloads or exception details
             // to logs. Distinguish denial observation from failure by marker,
             // not the always-denied exit code.
