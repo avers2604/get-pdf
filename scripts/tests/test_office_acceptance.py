@@ -13,6 +13,26 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27be_native_probes_are_inactive_and_need_all_three_os_gates(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            source = "recovery-native-probes-source-tests"
+            self.assertEqual(1, names.count(source))
+            self.assertLess(names.index(source), names.index("solution-restore"))
+            step = next(s for s in steps if s.name == source)
+            self.assertIn("test_recovery_native_probes_contract.py", step.command)
+
+            report = acceptance.new_report("e" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27be-native-windows-fileid-manual-e2e",
+                "gd31j27be-native-astra-openat2-manual-e2e",
+                "gd31j27be-native-smb-identity-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27bd_native_identity_is_disabled_until_os_evidence(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
