@@ -168,18 +168,19 @@ public sealed class OfficeRecoveryOwnedConsumerOutputTests
     public async Task WrongPublicationDigestFailsClosedBeforeOwnerIsReturned()
     {
         using var scratch = new Scratch();
-        using var session = scratch.CreateSession();
-        var publication = await RecoveryPrivateCopyPublisher.PublishAsync(
-            session, scratch.Digest, ".docx");
-        // Synthetic receipt mismatch without modifying the original file.
+        // Build an isolated synthetic publication with a deliberately wrong
+        // receipt. Do not reopen a file still held by a publication with
+        // FileShare.Delete: Windows can deny that second open.
+        string temp = Path.Combine(Path.GetTempPath(),
+            "getdoc-gd31j27bi-fake-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temp);
+        string fakePath = Path.Combine(temp, Guid.NewGuid().ToString("N") + ".docx");
+        File.Copy(scratch.Source, fakePath);
         var wrong = new RecoveryPrivatePublication(
-            Path.GetDirectoryName(publication.FilePath)!,
-            publication.FilePath, new FileStream(publication.FilePath,
-                FileMode.Open, FileAccess.ReadWrite, FileShare.Read | FileShare.Delete),
-            new RecoveryStagedCopyReceipt(publication.Receipt.Length,
+            temp, fakePath, new FileStream(fakePath,
+                FileMode.Open, FileAccess.ReadWrite, FileShare.Delete),
+            new RecoveryStagedCopyReceipt(scratch.Bytes.Length,
                 new string('0', 64), ".docx"));
-        // The synthetic owner has a distinct descriptor; never dispose the
-        // original publication until the test is finished.
         try
         {
             await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
@@ -187,7 +188,11 @@ public sealed class OfficeRecoveryOwnedConsumerOutputTests
         }
         finally
         {
-            publication.Dispose();
+            wrong.Dispose();
+            // Synthetic cleanup only; production fail-closed cleanup skips a
+            // file that fails the receipt SHA check.
+            File.Delete(fakePath);
+            Directory.Delete(temp);
         }
 
         CollectionAssert.AreEqual(scratch.Bytes, File.ReadAllBytes(scratch.Source));
