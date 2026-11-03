@@ -13,6 +13,25 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ar_recovery_tab_lifecycle_needs_manual_windows_and_astra_checks(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            lifecycle = "recovery-tab-lifecycle-source-tests"
+            self.assertIn(lifecycle, names)
+            self.assertLess(names.index(lifecycle), names.index("solution-restore"))
+            self.assertIn(
+                "test_recovery_tab_lifecycle_contract.py",
+                next(s for s in steps if s.name == lifecycle).command)
+            report = acceptance.new_report("e" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27ar-recovery-tab-cancellation-windows-manual-e2e",
+                "gd31j27ar-recovery-tab-cancellation-astra-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27aq_accessibility_regression_requires_real_windows_astra_manual_checks(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
