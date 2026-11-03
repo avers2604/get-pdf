@@ -94,6 +94,8 @@ def observe(root: Path) -> dict:
             os.link(stage, foreign, follow_symlinks=False)
         except FileExistsError:
             pass
+        except (NotImplementedError, TypeError):
+            return _result("unsupported_not_attested", False, False)
         except OSError as exc:
             if exc.errno in _UNSUPPORTED:
                 return _result("unsupported_not_attested", False, False)
@@ -105,6 +107,8 @@ def observe(root: Path) -> dict:
         try:
             os.link(stage, published, follow_symlinks=False)
             created.append(published)
+        except (NotImplementedError, TypeError):
+            return _result("unsupported_not_attested", False, False)
         except OSError as exc:
             if exc.errno in _UNSUPPORTED:
                 return _result("unsupported_not_attested", False, False)
@@ -129,7 +133,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         outcome = observe(Path(args[1]))
-    except (ProbeError, OSError, ValueError):
+    except Exception:
+        # Even unknown platform errors remain an unambiguous silent denial.
         return 2
     print(json.dumps(outcome, sort_keys=True, separators=(",", ":")))
     return 2  # Even a fully observed synthetic fixture NEVER authorizes SaveAs.
