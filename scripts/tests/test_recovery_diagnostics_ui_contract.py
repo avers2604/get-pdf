@@ -81,7 +81,7 @@ class RecoveryDiagnosticsSourceContract(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.window)
         self.assertIn("CloseRecoveryDiagnostics(recovery.Key)", self.window)
-        self.assertIn("_ = pane.RefreshAsync();", self.window)
+        self.assertIn("inspection.ResumeInspection();", self.window)
 
 
 if __name__ == "__main__":
