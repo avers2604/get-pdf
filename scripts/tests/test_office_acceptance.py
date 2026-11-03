@@ -13,6 +13,25 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27bd_native_identity_is_disabled_until_os_evidence(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            source = "recovery-native-identity-source-tests"
+            self.assertEqual(1, names.count(source))
+            self.assertLess(names.index(source), names.index("solution-restore"))
+            step = next(s for s in steps if s.name == source)
+            self.assertIn("test_recovery_native_identity_contract.py", step.command)
+
+            report = acceptance.new_report("d" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27bd-native-identity-windows-ntfs-manual-e2e",
+                "gd31j27bd-native-identity-astra-ext4-smb-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27bc_preopen_path_swap_needs_real_os_identity_evidence(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
