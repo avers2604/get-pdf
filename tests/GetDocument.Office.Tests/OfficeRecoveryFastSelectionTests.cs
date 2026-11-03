@@ -87,6 +87,97 @@ public sealed class OfficeRecoveryFastSelectionTests
         Assert.AreEqual(0, Directory.GetFileSystemEntries(fixture.PerSourceFolder).Length);
     }
 
+    [TestMethod]
+    public async Task ChangedManifestTimestampDuringValidationFailsClosed()
+    {
+        using var fixture = new Scratch();
+        var store = new OfficeRecoveryStore(fixture.RecoveryRoot);
+        OfficeRecoveryCopy latest = await CaptureAsync(store, fixture.Source);
+        string manifest = Path.ChangeExtension(latest.FilePath, ".json");
+
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            store.FindLatestWithEnumerator(fixture.Source,
+                folder => Directory.EnumerateFiles(folder, "*.json"),
+                path =>
+                {
+                    var json = System.Text.Json.Nodes.JsonNode.Parse(
+                        File.ReadAllText(manifest))!.AsObject();
+                    json["CapturedUtc"] = DateTimeOffset.UtcNow.AddMinutes(-30);
+                    File.WriteAllText(manifest, json.ToJsonString());
+                    return latest; // simulated successful expensive verification
+                }));
+
+        Assert.IsTrue(File.Exists(latest.FilePath));
+        Assert.IsTrue(File.Exists(manifest));
+        Assert.IsTrue(File.Exists(fixture.Source));
+    }
+
+    [TestMethod]
+    public async Task InvalidManifestBecomesValidDuringVerificationFailsClosed()
+    {
+        using var fixture = new Scratch();
+        var store = new OfficeRecoveryStore(fixture.RecoveryRoot);
+        OfficeRecoveryCopy older = await CaptureAsync(store, fixture.Source);
+        await Task.Delay(25);
+        OfficeRecoveryCopy newest = await CaptureAsync(store, fixture.Source);
+        string olderManifest = Path.ChangeExtension(older.FilePath, ".json");
+        byte[] originalBytes = File.ReadAllBytes(olderManifest);
+        File.WriteAllText(olderManifest, "{not valid");
+
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            store.FindLatestWithEnumerator(fixture.Source,
+                folder => Directory.EnumerateFiles(folder, "*.json"),
+                path =>
+                {
+                    File.WriteAllBytes(olderManifest, originalBytes);
+                    return newest;
+                }));
+
+        Assert.IsTrue(File.Exists(newest.FilePath));
+        Assert.IsTrue(File.Exists(older.FilePath));
+        Assert.IsTrue(File.Exists(fixture.Source));
+    }
+
+    [TestMethod]
+    public async Task NewManifestAddedDuringVerificationFailsClosed()
+    {
+        using var fixture = new Scratch();
+        var store = new OfficeRecoveryStore(fixture.RecoveryRoot);
+        OfficeRecoveryCopy copy = await CaptureAsync(store, fixture.Source);
+        string extra = Path.Combine(Path.GetDirectoryName(copy.FilePath)!,
+            Guid.NewGuid().ToString("N") + ".json");
+
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            store.FindLatestWithEnumerator(fixture.Source,
+                folder => Directory.EnumerateFiles(folder, "*.json"),
+                path =>
+                {
+                    File.WriteAllText(extra, "{not valid");
+                    return copy;
+                }));
+        Assert.IsTrue(File.Exists(extra));
+        Assert.IsTrue(File.Exists(copy.FilePath));
+    }
+
+    [TestMethod]
+    public async Task CopyChangedAfterHashMustNotBeAccepted()
+    {
+        using var fixture = new Scratch();
+        var store = new OfficeRecoveryStore(fixture.RecoveryRoot);
+        OfficeRecoveryCopy copy = await CaptureAsync(store, fixture.Source);
+        string manifest = Path.ChangeExtension(copy.FilePath, ".json");
+        long originalLength = new FileInfo(copy.FilePath).Length;
+
+        OfficeRecoveryCopy? result = store.ReadValidCopyWithPostHashMutation(
+            fixture.Source, manifest,
+            path => File.AppendAllText(path, "SYNTHETIC_AFTER_HASH"));
+
+        Assert.IsNull(result);
+        Assert.IsTrue(new FileInfo(copy.FilePath).Length > originalLength);
+        Assert.IsTrue(File.Exists(manifest));
+        Assert.IsTrue(File.Exists(fixture.Source));
+    }
+
     private static Task<OfficeRecoveryCopy> CaptureAsync(OfficeRecoveryStore store, string source)
         => store.CaptureAsync(source, temporary =>
         {
