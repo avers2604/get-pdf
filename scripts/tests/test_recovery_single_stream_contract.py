@@ -66,7 +66,7 @@ class RecoverySingleStreamSourceContract(unittest.TestCase):
         self.assertNotIn("FileMode.Create", self.open)
         self.assertIn("!file.Exists || file.Length == 0 || file.Length > MaxCopyBytes", self.open)
         self.assertIn("IsLinkedFile(file)", self.open)
-        self.assertIn("input.Length <= MaxCopyBytes", self.open)
+        self.assertIn("input.Length > MaxCopyBytes", self.open)
 
     def test_zip_archive_is_disposed_without_closing_caller_stream(self):
         self.assertIn("private static void EnsureValidPackage(Stream input, string extension)",
