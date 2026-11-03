@@ -42,6 +42,16 @@ public sealed class OfficeRecoveryStore
 
         string extension = AllowedExtension(source);
         string folder = FolderFor(source);
+
+        // GD-31J.27bm: ONE cooperative lock for all sources using this
+        // recovery root. Hold it across admission, exporter awaits, manifest
+        // commit and pruning; disposal releases the OS-held byte-range lock
+        // even if the exporter fails or cancellation is requested.
+        // Network/unknown volumes must fail closed. This does not establish
+        // cross-host SMB locking or protect against uncooperative processes.
+        using var captureLease = await RecoveryCaptureVolumeGate.AcquireAsync(
+            _root, cancellationToken: cancellationToken);
+
         // Do not start another 128 MiB export when this source already has
         // too many untrusted incomplete artifacts (including final copies
         // with no observed manifest). Admission never deletes any artifact.
