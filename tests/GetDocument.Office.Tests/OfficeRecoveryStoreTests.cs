@@ -117,10 +117,12 @@ public sealed class OfficeRecoveryStoreTests
 
         Assert.IsNull(store.FindLatest(source));
         CollectionAssert.AreEqual(original, File.ReadAllBytes(source));
+        Assert.AreEqual(1, store.InspectIncomplete(source).Candidates.Count,
+            "A failed path-only export is an untrusted diagnostic artifact, not an owned deletion target.");
     }
 
     [TestMethod]
-    public async Task CancelledExporterLeavesNoPublishedCopyOrTemporaryFile()
+    public async Task CancelledExporterLeavesUntrustedCopyForReadOnlyInventory()
     {
         using var fixture = new RecoveryFixture();
         string source = fixture.CreateOfficeFile("canceled.docx");
@@ -137,8 +139,14 @@ public sealed class OfficeRecoveryStoreTests
             }, cancellation.Token));
 
         CollectionAssert.AreEqual(original, File.ReadAllBytes(source));
-        Assert.AreEqual(0, Directory.GetFiles(fixture.RecoveryDirectory,
-            "*", SearchOption.AllDirectories).Length);
+        // The exporter wrote a path but did not return an identity-bound
+        // ownership receipt; rollback must not delete it by pathname.
+        var incomplete = store.InspectIncomplete(source);
+        Assert.AreEqual(1, incomplete.Candidates.Count);
+        Assert.AreEqual(OfficeRecoveryIncompleteKind.StagedOfficeCopy,
+            incomplete.Candidates[0].Kind);
+        Assert.AreEqual(OfficeRecoveryIncompleteStatus.RegularUnverified,
+            incomplete.Candidates[0].Status);
         Assert.IsNull(store.FindLatest(source));
     }
 
