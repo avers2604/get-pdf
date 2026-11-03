@@ -59,7 +59,7 @@ internal readonly record struct RecoveryNativeDeleteEvidence(
 
 /// <summary>
 /// Future adapter MUST observe identity from live directory/file handles.
-/// Linux unlinkat(dirfd,name) alone cannot atomically bind the deletion
+/// Linux name-based unlink alone cannot atomically bind the deletion
 /// to an inode under a hostile rename race. Do not enable until the private
 /// parent is isolated, the race is proven closed and platform tests pass.
 /// </summary>
