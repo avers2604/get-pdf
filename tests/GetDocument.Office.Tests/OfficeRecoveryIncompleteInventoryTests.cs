@@ -142,6 +142,39 @@ public sealed class OfficeRecoveryIncompleteInventoryTests
     }
 
     [TestMethod]
+    public void DanglingSymlinkIsReportedAsUntrustedWithoutFollowingIt()
+    {
+        using var fixture = new Scratch();
+        string folder = fixture.CreateSourceRecoveryFolder();
+        string missing = Path.Combine(fixture.Root, "missing-target.docx");
+        string link = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".part.docx");
+        File.CreateSymbolicLink(link, missing);
+
+        var result = new OfficeRecoveryStore(fixture.RecoveryRoot).InspectIncomplete(fixture.Source);
+        var item = result.Candidates.Single();
+        Assert.AreEqual(OfficeRecoveryIncompleteStatus.UntrustedLinkOrNonFile, item.Status);
+        Assert.IsNull(item.LengthBytes);
+        Assert.IsNull(item.LastWriteUtc);
+        Assert.IsFalse(File.Exists(missing));
+    }
+
+    [TestMethod]
+    public void CancelledInventoryFailsInsteadOfReportingEmpty()
+    {
+        using var fixture = new Scratch();
+        string folder = fixture.CreateSourceRecoveryFolder();
+        string pending = Path.Combine(folder, Guid.NewGuid().ToString("N") + ".json.tmp");
+        File.WriteAllText(pending, "PENDING");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+
+        var store = new OfficeRecoveryStore(fixture.RecoveryRoot);
+        Assert.ThrowsExactly<OperationCanceledException>(() =>
+            store.InspectIncomplete(fixture.Source, cancellationToken: cancelled.Token));
+        Assert.AreEqual("PENDING", File.ReadAllText(pending));
+    }
+
+    [TestMethod]
     public void InvalidBudgetAndUnsupportedFileTypeFailBeforeReadingAnything()
     {
         using var fixture = new Scratch();
