@@ -13,6 +13,24 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27bc_preopen_path_swap_needs_real_os_identity_evidence(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            source = "recovery-preopen-guard-source-tests"
+            self.assertEqual(1, names.count(source))
+            self.assertLess(names.index(source), names.index("solution-restore"))
+            target = next(step for step in steps if step.name == source)
+            self.assertIn("test_recovery_preopen_guard_contract.py", target.command)
+            report = acceptance.new_report("c" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27bc-recovery-preopen-windows-ntfs-manual-e2e",
+                "gd31j27bc-recovery-preopen-astra-smb-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27bb_single_stream_needs_windows_astra_smb_runtime_proof(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
