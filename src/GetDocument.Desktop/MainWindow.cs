@@ -151,6 +151,12 @@ public sealed class MainWindow : Window
         KeyDown += OnKeyDown;
         Closed += (_, _) =>
         {
+            // Cancel all read-only recovery scans BEFORE tearing down editors
+            // and related tab views. Never await a blocked NTFS/SMB operation
+            // during window shutdown. A canceled close confirmation does not
+            // reach this Closed handler and must leave tabs active.
+            foreach (var inspection in _recoveryTabs.Values)
+                if (inspection.Content is IDisposable pane) pane.Dispose();
             if (_filesTab?.Content is IDisposable files) files.Dispose();
             if (_officeReturnTab?.Content is IDisposable officeReturn) officeReturn.Dispose();
             if (_officeBindingTab?.Content is IDisposable officeBinding) officeBinding.Dispose();
@@ -159,8 +165,6 @@ public sealed class MainWindow : Window
                 if (view.Content is IDisposable document) document.Dispose();
             foreach (var history in _revisionTabs.Values)
                 if (history.Content is IDisposable pane) pane.Dispose();
-            foreach (var inspection in _recoveryTabs.Values)
-                if (inspection.Content is IDisposable pane) pane.Dispose();
             foreach (var editTab in _collaborationTabs.Values)
                 if (editTab.Content is IDisposable editor) editor.Dispose();
         };
