@@ -13,6 +13,22 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27au_collision_safety_remains_unverified_on_real_filesystems(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            self.assertIn("recovery-chain-consistency-source-tests", names)
+            self.assertLess(names.index("recovery-chain-consistency-source-tests"),
+                            names.index("solution-restore"))
+            report = acceptance.new_report("b" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27au-recovery-name-collision-windows-ntfs-manual-e2e",
+                "gd31j27au-recovery-name-collision-linux-astra-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27at_recovery_chain_checks_are_offline_and_release_remains_blocked(self):
         expected = (
             "recovery-readonly-inventory-source-tests",
