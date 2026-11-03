@@ -92,6 +92,8 @@ MANUAL_GATES = (
     "gd31j27ar-recovery-tab-cancellation-astra-manual-e2e",
     "gd31j27as-reopen-document-session-windows-manual-e2e",
     "gd31j27as-shutdown-long-smb-scan-astra-manual-e2e",
+    "gd31j27au-recovery-name-collision-windows-ntfs-manual-e2e",
+    "gd31j27au-recovery-name-collision-linux-astra-manual-e2e",
     "eurooffice-cef-authenticated-caret-ime-candidates",
     "eurooffice-windows-x11-osr-or-uno-fallback",
     "eurooffice-server-2-5-10-user-coediting",

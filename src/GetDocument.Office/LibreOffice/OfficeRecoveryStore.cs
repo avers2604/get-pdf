@@ -50,6 +50,12 @@ public sealed class OfficeRecoveryStore
         string finalCopy = Path.Combine(folder, name + extension);
         string temporaryManifest = Path.Combine(folder, name + ".json.tmp");
         string finalManifest = Path.Combine(folder, name + ".json");
+        // Cleanup is permitted only for paths this capture successfully
+        // CREATED or MOVED into place. Existence alone proves no ownership:
+        // the exporter may have pre-created colliding sibling filenames.
+        bool publishedCopy = false;
+        bool createdTemporaryManifest = false;
+        bool publishedManifest = false;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -63,6 +69,7 @@ public sealed class OfficeRecoveryStore
             if (IsLinkedFile(new FileInfo(temporaryCopy)))
                 throw new InvalidDataException("Временная аварийная копия подменена ссылкой.");
             File.Move(temporaryCopy, finalCopy);
+            publishedCopy = true;
             var manifest = new RecoveryManifest(source, DateTimeOffset.UtcNow, sha);
             // Never use WriteAllText/Create: a malicious exporter could have
             // created a sibling .json.tmp symlink and redirected the write to
@@ -73,6 +80,7 @@ public sealed class OfficeRecoveryStore
             await using (var output = new FileStream(temporaryManifest, FileMode.CreateNew,
                 FileAccess.Write, FileShare.None, bufferSize: 4096, options: FileOptions.Asynchronous))
             {
+                createdTemporaryManifest = true;
                 await output.WriteAsync(manifestBytes, cancellationToken);
                 output.Flush(flushToDisk: true);
             }
@@ -82,15 +90,23 @@ public sealed class OfficeRecoveryStore
                 IsLinkedFile(new FileInfo(temporaryManifest)))
                 throw new InvalidDataException("Аварийная копия или манифест подменены ссылкой.");
             File.Move(temporaryManifest, finalManifest);
+            createdTemporaryManifest = false; // moved to final name
+            publishedManifest = true;
             Prune(source);
             return new OfficeRecoveryCopy(finalCopy, manifest.CapturedUtc);
         }
         catch
         {
+            // This temporary OOXML path is assigned to exportCopy by this
+            // capture. Never assume ownership of other sibling filenames.
             TryDelete(temporaryCopy);
-            TryDelete(temporaryManifest);
-            // If publishing failed, do not leave a visible or orphaned recovery entry.
-            if (!File.Exists(finalManifest)) TryDelete(finalCopy);
+            if (createdTemporaryManifest)
+                TryDelete(temporaryManifest);
+            if (publishedCopy && !publishedManifest)
+                TryDelete(finalCopy);
+            // A pre-existing .docx/.json/.json.tmp collision is NOT ours
+            // to delete. After manifest commit, a prune failure must retain
+            // the completed snapshot rather than rolling it back.
             throw;
         }
     }
