@@ -13,6 +13,24 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ao_recovery_inspection_is_source_gated_and_not_release_ready(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            name = "recovery-readonly-inventory-source-tests"
+            self.assertIn(name, names)
+            self.assertLess(names.index(name), names.index("solution-restore"))
+            self.assertIn("test_recovery_readonly_inventory_contract.py",
+                          next(step for step in steps if step.name == name).command)
+            report = acceptance.new_report("b" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27ao-recovery-inventory-windows-ntfs-manual-e2e",
+                "gd31j27ao-recovery-inventory-linux-astra-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27al_filesystem_observation_is_not_saveas_attestation(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/disposable"), Path("/offline-feed"), host)
