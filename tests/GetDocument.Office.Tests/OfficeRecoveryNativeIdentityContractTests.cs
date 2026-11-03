@@ -58,6 +58,8 @@ public sealed class OfficeRecoveryNativeIdentityContractTests
             DeviceOrVolume: 100, ObjectLow: 200, ObjectHigh: 301);
         Assert.IsTrue(id.IsComplete);
         Assert.AreNotEqual(id, differentHigh);
+        Assert.IsTrue((id with { ObjectLow = 0 }).IsComplete,
+            "Windows must preserve the high half of a valid 128-bit file ID.");
     }
 
     [TestMethod]
@@ -69,6 +71,9 @@ public sealed class OfficeRecoveryNativeIdentityContractTests
             DeviceOrVolume: 8, ObjectLow: 900, ObjectHigh: 0);
         Assert.IsTrue(first.IsComplete);
         Assert.AreNotEqual(first, differentDevice);
+        Assert.IsFalse((first with { ObjectHigh = 1 }).IsComplete,
+            "The high half is not part of Linux st_ino.");
+        Assert.IsFalse((first with { DeviceOrVolume = 0 }).IsComplete);
     }
 
     [TestMethod]
@@ -145,13 +150,16 @@ public sealed class OfficeRecoveryNativeIdentityContractTests
         var ids = NewIds(RecoveryNativePlatform.Windows);
         var invalidFile = ids.File with { ObjectLow = 0, ObjectHigh = 0 };
 
-        foreach (var change in new[] { "no-follow", "parent", "missing-file-id" })
+        foreach (var change in new[] {
+            "no-follow", "parent", "missing-file-id", "missing-file-id-both"
+        })
         {
             RecoveryNativeReadLease? provided = null;
             var adapter = new FakeAdapter(RecoveryNativePlatform.Windows, () =>
                 provided = Lease(scratch.FilePath, RecoveryNativePlatform.Windows,
-                    ids.Parent, ids.Parent, ids.File,
-                    change == "missing-file-id" ? invalidFile : ids.File,
+                    ids.Parent, ids.Parent,
+                    change == "missing-file-id-both" ? invalidFile : ids.File,
+                    change is "missing-file-id" or "missing-file-id-both" ? invalidFile : ids.File,
                     directoryRelative: change != "parent",
                     noFollow: change != "no-follow"));
             Assert.ThrowsExactly<InvalidDataException>(() =>
