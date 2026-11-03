@@ -72,6 +72,15 @@ class ProbeTests(unittest.TestCase):
             self.assertFalse(report['newCopyBytesVerified'])
             self.assertEqual([], list(root.iterdir()))
 
+    def test_unimplemented_windows_hardlinks_fail_closed_and_clean_sandbox(self):
+        with tempfile.TemporaryDirectory(prefix=probe.SANDBOX_PREFIX) as dirname:
+            root = Path(dirname)
+            with patch.object(probe.os, 'link', side_effect=NotImplementedError('unsupported')):
+                report = probe.observe(root)
+            self.assertEqual('unsupported_not_attested', report['state'])
+            self.assertFalse(report['releaseReady'])
+            self.assertEqual([], list(root.iterdir()))
+
     def test_cli_without_vm_ack_has_no_side_effects(self):
         with tempfile.TemporaryDirectory(prefix=probe.SANDBOX_PREFIX) as dirname:
             root = Path(dirname)
