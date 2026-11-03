@@ -74,7 +74,7 @@ class RecoveryDiagnosticsSourceContract(unittest.TestCase):
             "_items.Add(view);",
             "_tabs.SelectedItem = view;",
             "CloseRecoveryDiagnostics(sourceId)",
-            "CloseRecoveryDiagnostics(id);",
+            "CloseRecoveryDiagnostics(id, restoreSourceSelection: false);",
             "foreach (var inspection in _recoveryTabs.Values)",
             "_recoveryTabs.FirstOrDefault(",
         ):
