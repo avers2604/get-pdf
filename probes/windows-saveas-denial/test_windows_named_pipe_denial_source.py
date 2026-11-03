@@ -25,10 +25,7 @@ class WindowsDenialSourceContract(unittest.TestCase):
             "PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly",
             "PipeTransmissionMode.Message",
             "PipeName(Guid runId)",
-            "RunId",  # not required: only exact lower-case run IDs are handled by entry
         ):
-            if required == "RunId":
-                continue
             with self.subTest(required=required):
                 self.assertIn(required, self.lab)
 
