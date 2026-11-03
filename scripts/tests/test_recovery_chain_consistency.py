@@ -12,6 +12,7 @@ PANE = ROOT / "src/GetDocument.Desktop/Recovery/RecoveryDiagnosticsPane.cs"
 WINDOW = ROOT / "src/GetDocument.Desktop/MainWindow.cs"
 STORE = ROOT / "src/GetDocument.Office/LibreOffice/OfficeRecoveryStore.cs"
 LINK_TESTS = ROOT / "tests/GetDocument.Office.Tests/OfficeRecoveryStoreLinkSafetyTests.cs"
+STORE_TESTS = ROOT / "tests/GetDocument.Office.Tests/OfficeRecoveryStoreTests.cs"
 RUNNER = ROOT / "scripts/office_acceptance.py"
 TESTS = ROOT / "scripts/tests"
 REQUIRED = {
@@ -37,6 +38,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
         cls.window = WINDOW.read_text(encoding="utf-8")
         cls.store = STORE.read_text(encoding="utf-8")
         cls.link_tests = LINK_TESTS.read_text(encoding="utf-8")
+        cls.store_tests = STORE_TESTS.read_text(encoding="utf-8")
         cls.runner = RUNNER.read_text(encoding="utf-8")
         cls.refresh = cls.pane.split(
             "internal async Task RefreshAsync()", 1
@@ -76,7 +78,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
                 self.assertIn('"-p", "' + file_name + '"', self.runner)
 
     def test_registered_recovery_manual_gates_are_unique_and_not_automated(self):
-        all_gates = re.findall(r'    "(gd31j27a[lnopqrst][^"]+-manual-e2e)",',
+        all_gates = re.findall(r'    "(gd31j27a[lnopqrstuv][^"]+-manual-e2e)",',
                                self.runner)
         self.assertEqual(len(all_gates), len(set(all_gates)))
         self.assertGreaterEqual(len(all_gates), 8)
@@ -136,7 +138,44 @@ class RecoveryChainIntegrity(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 self.assertIn(name, self.link_tests)
-        self.assertEqual(9, self.link_tests.count("[TestMethod]"))
+        self.assertEqual(10, self.link_tests.count("[TestMethod]"))
+
+    def test_discard_verifies_snapshot_hash_and_package_before_removal(self):
+        discard = self.store.split("public void Discard(", 1)[1].split(
+            "private OfficeRecoveryCopy? ReadValidCopy(", 1
+        )[0]
+        verify = "OfficeRecoveryCopy? verified = ReadValidCopy(source, extension, manifest);"
+        self.assertIn(verify, discard)
+        self.assertIn("if (verified is null) continue;", discard)
+        self.assertLess(discard.index(verify), discard.index("TryDelete(manifest);"))
+        self.assertLess(discard.index("if (verified is null) continue;"),
+                        discard.index("TryDelete(verified.FilePath);"))
+        self.assertNotIn("RecoveryManifest? metadata = ReadManifest(manifest);", discard)
+        self.assertNotIn("Path.Combine(folder, name + extension)", discard)
+
+    def test_discard_regressions_cover_corrupt_orphan_and_linked_artifacts(self):
+        for name in (
+            "DiscardRetainsTamperedSnapshotAndManifestForManualInvestigation",
+            "DiscardDoesNotUnlinkSymlinkReplacedRecoveryCopy",
+            "DiscardPreservesOrphanManifestWhenItsCopyDisappeared",
+            "CancelledExporterLeavesNoPublishedCopyOrTemporaryFile",
+        ):
+            with self.subTest(name=name):
+                self.assertIn(name, self.store_tests)
+        self.assertIn("DiscardPreservesSymlinkedManifestAndValidSiblingCopy",
+                      self.link_tests)
+
+    def test_capture_has_last_cancellation_check_before_manifest_commit(self):
+        capture = self.store.split(
+            "public async Task<OfficeRecoveryCopy> CaptureAsync(", 1
+        )[1].split("public OfficeRecoveryIncompleteInventory InspectIncomplete(", 1)[0]
+        marker = "cancellationToken.ThrowIfCancellationRequested();"
+        last_check = capture.rindex(marker)
+        commit = capture.index("File.Move(temporaryManifest, finalManifest);")
+        self.assertLess(capture.index("IsLinkedFile(new FileInfo(temporaryManifest))"),
+                        last_check)
+        self.assertLess(last_check, commit)
+        self.assertIn("publishedManifest = true;", capture[commit:])
 
     def test_no_new_user_data_operations_in_diagnostics_pane(self):
         for forbidden in (
