@@ -96,6 +96,8 @@ MANUAL_GATES = (
     "gd31j27au-recovery-name-collision-linux-astra-manual-e2e",
     "gd31j27av-recovery-discard-integrity-windows-ntfs-manual-e2e",
     "gd31j27av-recovery-discard-integrity-astra-smb-manual-e2e",
+    "gd31j27aw-recovery-partial-delete-windows-ntfs-manual-e2e",
+    "gd31j27aw-recovery-partial-delete-astra-smb-manual-e2e",
     "eurooffice-cef-authenticated-caret-ime-candidates",
     "eurooffice-windows-x11-osr-or-uno-fallback",
     "eurooffice-server-2-5-10-user-coediting",
