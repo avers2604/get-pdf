@@ -96,9 +96,9 @@ public sealed class RecoveryDetachedWorkspaceInspectorTests
     public void LazyEnumerationIOExceptionPropagatesInsteadOfReportingEmptyScan()
     {
         using var scratch = new Scratch();
-        static IEnumerable<string> ThrowingEnumerator(string _)
+        static IEnumerable<string> ThrowingEnumerator(string root)
         {
-            yield return "unrelated";
+            yield return Path.Combine(root, "unrelated");
             throw new IOException("synthetic MoveNext failure");
         }
 
@@ -153,7 +153,7 @@ public sealed class RecoveryDetachedWorkspaceInspectorTests
         internal string Root { get; } = Path.Combine(Path.GetTempPath(),
             "getdoc-bk-inventory-" + Guid.NewGuid().ToString("N"));
 
-        internal Scratch() => Directory.CreateDirectory(Root);
+        internal Scratch() => System.IO.Directory.CreateDirectory(Root);
 
         internal string Directory(string name)
         {
