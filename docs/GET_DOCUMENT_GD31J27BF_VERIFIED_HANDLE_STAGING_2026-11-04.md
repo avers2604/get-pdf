@@ -2,7 +2,7 @@
 
 **Репозиторий:** `avers2604/get-pdf`. **Ветка:** `feature/gd31j27bf-verified-handle-staging`, отдельный stacked Draft поверх GD-31J.27be / PR #170.
 
-**Ограничения пользователя:** без сборки, без запуска Python unittest / MSTest, без Windows NTFS/Astra ext4/SMB-стенда. `main`, GitHub Actions, WORM-оригиналы, GUP-2, EuroOffice-native SaveAs и текущий `OfficeRecoveryStore` не изменяются.
+**Ограничения пользователя:** без сборки, без запуска Python unittest / MSTest, без Windows NTFS/Astra ext4/SMB-стенда. Компиляция и тесты в рамках данного этапа не выполнялись. `main`, GitHub Actions, WORM-оригиналы, GUP-2, EuroOffice-native SaveAs и текущий `OfficeRecoveryStore` не изменяются.
 
 ## Обнаруженный разрыв между проверкой и восстановлением
 
