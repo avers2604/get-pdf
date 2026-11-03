@@ -87,7 +87,7 @@ class PrivateRecoveryPublicationSourceContract(unittest.TestCase):
         self.assertIn("internal sealed class RecoveryPrivatePublication : IDisposable",
                       self.publisher)
         self.assertIn("Interlocked.Exchange(ref _heldStream, null)", self.publisher)
-        self.assertIn("handle.Dispose();", self.publisher)
+        self.assertIn("handle?.Dispose();", self.publisher)
         self.assertIn("TryDeleteOwnRegularFile(", self.publisher)
         self.assertIn("TryRemoveEmptyPrivateDirectory(", self.publisher)
         self.assertIn("internal RecoveryStagedCopyReceipt Receipt", self.publisher)
@@ -107,7 +107,7 @@ class PrivateRecoveryPublicationSourceContract(unittest.TestCase):
         for name in names:
             with self.subTest(name=name):
                 self.assertIn(name, self.tests)
-        self.assertEqual(7, self.tests.count("[TestMethod]"))
+        self.assertEqual(15, self.tests.count("[TestMethod]"))
         self.assertIn("new FakeAdapter(", self.tests)
 
     def test_production_remains_unwired_and_manual_release_stays_blocked(self):
