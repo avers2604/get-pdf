@@ -59,6 +59,11 @@ internal static class RecoveryDetachedWorkspaceInspector
 
         // A missing optional scratch root is a true empty inventory, but
         // permissions, link/reparse and malformed-path failures propagate.
+        var rootMetadata = new DirectoryInfo(root);
+        rootMetadata.Refresh();
+        if (rootMetadata.LinkTarget is not null)
+            throw new InvalidDataException(
+                "Корень временного каталога является ссылкой.");
         FileAttributes attributes;
         try
         {
