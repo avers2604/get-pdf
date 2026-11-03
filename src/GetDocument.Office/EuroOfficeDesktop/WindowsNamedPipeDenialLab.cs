@@ -101,14 +101,44 @@ public static class WindowsNamedPipeDenialLab
             ".", pipeName, PipeDirection.InOut,
             PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         await pipe.ConnectAsync(30_000, timeout.Token);
-        pipe.ReadMode = PipeTransmissionMode.Message;
-
+        // On Windows, changing client ReadMode to Message can require
+        // FILE_WRITE_ATTRIBUTES, which .NET's standard client handle may
+        // not possess. Read the fixed reply in byte mode instead.
         await pipe.WriteAsync(Request, timeout.Token);
         await pipe.FlushAsync(timeout.Token);
-        byte[] response = await ReadSingleMessageAsync(pipe, Denied.Length, timeout.Token);
+        byte[] response = await ReadDenialToEofAsync(pipe, timeout.Token);
         RequireExactDenial(response);
     }
 
+    /// <summary>
+    /// Client-side bounded byte reader. Never changes PipeStream.ReadMode.
+    /// A reply is accepted ONLY after clean EOF, so an exact-prefix reply
+    /// followed by a hidden extra byte, a hanging peer or timeout fails.
+    /// This method has no OS dependency and can be exercised on MemoryStream.
+    /// </summary>
+    internal static async Task<byte[]> ReadDenialToEofAsync(
+        Stream stream, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        cancellationToken.ThrowIfCancellationRequested();
+        byte[] buffer = new byte[Denied.Length + 1];
+        int count = 0;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int received = await stream.ReadAsync(
+                buffer.AsMemory(count, buffer.Length - count), cancellationToken);
+            if (received == 0) break;
+            count += received;
+            if (count > Denied.Length)
+                throw new InvalidDataException("Overlong Windows pipe denial response.");
+        }
+        if (count != Denied.Length)
+            throw new InvalidDataException("Truncated Windows pipe denial response.");
+        return buffer[..count];
+    }
+
+    /// <summary>Server-side message reader; server created in Message mode.</summary>
     private static async Task<byte[]> ReadSingleMessageAsync(
         PipeStream pipe, int expectedLength, CancellationToken cancellationToken)
     {

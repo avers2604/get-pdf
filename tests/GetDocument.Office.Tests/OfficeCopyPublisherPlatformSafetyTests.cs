@@ -96,6 +96,12 @@ public sealed class OfficeCopyPublisherPlatformSafetyTests
     [DataRow("NUL.xlsx")]
     [DataRow("com1.pptx")]
     [DataRow("LPT9.docx")]
+    [DataRow("COM¹.docx")]
+    [DataRow("com².xlsx")]
+    [DataRow("COM³.pptx")]
+    [DataRow("LPT¹.docx")]
+    [DataRow("lpt².xlsx")]
+    [DataRow("LPT³.pptx")]
     [DataRow("trailing.xlsx.")]
     [DataRow("trailing.pptx ")]
     public void PortableFileNamesRejectWindowsDeviceNamesAndAds(string unsafeName)
@@ -111,6 +117,29 @@ public sealed class OfficeCopyPublisherPlatformSafetyTests
     public void PortableFileNamesAcceptOrdinaryOfficeCopies(string safeName)
     {
         OfficeCopyPublisher.ValidatePortableDestinationFileName(safeName);
+    }
+
+    [TestMethod]
+    public async Task WindowsDeviceAliasesCannotInvokeNativeExporterOnEitherPlatform()
+    {
+        using var fixture = new Scratch();
+        foreach (string name in new[]
+        {
+            "COM¹.docx", "COM².xlsx", "COM³.pptx",
+            "LPT¹.docx", "LPT².xlsx", "LPT³.pptx"
+        })
+        {
+            bool called = false;
+            await Assert.ThrowsExactlyAsync<ArgumentException>(
+                () => OfficeCopyPublisher.PublishAsync(
+                    Path.Combine(fixture.Root, name), _ =>
+                    {
+                        called = true;
+                        return Task.CompletedTask;
+                    }));
+            Assert.IsFalse(called, name);
+        }
+        Assert.AreEqual(0, Directory.GetFileSystemEntries(fixture.Root).Length);
     }
 
     private sealed class Scratch : IDisposable
