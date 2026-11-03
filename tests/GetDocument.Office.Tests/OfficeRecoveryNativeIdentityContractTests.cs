@@ -53,9 +53,9 @@ public sealed class OfficeRecoveryNativeIdentityContractTests
     public void FullWindowsFileIdIncludesBothHighAndLowHalves()
     {
         var id = new RecoveryNativeFileId(RecoveryNativePlatform.Windows,
-            deviceOrVolume: 100, objectLow: 200, objectHigh: 300);
+            DeviceOrVolume: 100, ObjectLow: 200, ObjectHigh: 300);
         var differentHigh = new RecoveryNativeFileId(RecoveryNativePlatform.Windows,
-            deviceOrVolume: 100, objectLow: 200, objectHigh: 301);
+            DeviceOrVolume: 100, ObjectLow: 200, ObjectHigh: 301);
         Assert.IsTrue(id.IsComplete);
         Assert.AreNotEqual(id, differentHigh);
     }
@@ -64,11 +64,26 @@ public sealed class OfficeRecoveryNativeIdentityContractTests
     public void LinuxIdentityIncludesDeviceAndInode()
     {
         var first = new RecoveryNativeFileId(RecoveryNativePlatform.Linux,
-            deviceOrVolume: 7, objectLow: 900, objectHigh: 0);
+            DeviceOrVolume: 7, ObjectLow: 900, ObjectHigh: 0);
         var differentDevice = new RecoveryNativeFileId(RecoveryNativePlatform.Linux,
-            deviceOrVolume: 8, objectLow: 900, objectHigh: 0);
+            DeviceOrVolume: 8, ObjectLow: 900, ObjectHigh: 0);
         Assert.IsTrue(first.IsComplete);
         Assert.AreNotEqual(first, differentDevice);
+    }
+
+    [TestMethod]
+    public void DefaultRelativeKeyMustNotReachAnyAdapter()
+    {
+        using var scratch = new Scratch("SYNTHETIC_INVALID_KEY");
+        bool invoked = false;
+        var adapter = new FakeAdapter(RecoveryNativePlatform.Windows, () =>
+        {
+            invoked = true;
+            return NewLease(scratch.FilePath, RecoveryNativePlatform.Windows);
+        });
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            RecoveryNativeIdentityGate.OpenVerifiedRead(adapter, default));
+        Assert.IsFalse(invoked);
     }
 
     [TestMethod]
@@ -168,8 +183,10 @@ public sealed class OfficeRecoveryNativeIdentityContractTests
     private static (RecoveryNativeFileId Parent, RecoveryNativeFileId File) NewIds(
         RecoveryNativePlatform platform)
     {
-        var parent = new RecoveryNativeFileId(platform, 0x1234, 0x3456, 0x5678);
-        var file = new RecoveryNativeFileId(platform, 0x1234, 0x9999, 0x8888);
+        ulong highParent = platform == RecoveryNativePlatform.Windows ? 0x5678UL : 0UL;
+        ulong highFile = platform == RecoveryNativePlatform.Windows ? 0x8888UL : 0UL;
+        var parent = new RecoveryNativeFileId(platform, 0x1234, 0x3456, highParent);
+        var file = new RecoveryNativeFileId(platform, 0x1234, 0x9999, highFile);
         return (parent, file);
     }
 
