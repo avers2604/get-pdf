@@ -24,7 +24,7 @@ public sealed class OfficeRecoveryCaptureVolumeGateTests
             scratch.Root, LocalWithSpace);
         await Assert.ThrowsExactlyAsync<IOException>(async () =>
         {
-            using var _ = await RecoveryCaptureVolumeGate.AcquireAsync(
+            using var rejectedOrSecond = await RecoveryCaptureVolumeGate.AcquireAsync(
                 scratch.Root, LocalWithSpace);
         });
         Assert.IsTrue(File.Exists(Path.Combine(scratch.Root,
@@ -53,7 +53,7 @@ public sealed class OfficeRecoveryCaptureVolumeGateTests
         cts.Cancel();
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
         {
-            using var _ = await RecoveryCaptureVolumeGate.AcquireAsync(
+            using var rejectedOrSecond = await RecoveryCaptureVolumeGate.AcquireAsync(
                 absent, _ =>
                 {
                     probed = true;
@@ -71,7 +71,7 @@ public sealed class OfficeRecoveryCaptureVolumeGateTests
         string absent = Path.Combine(scratch.Root, "low-space");
         await Assert.ThrowsExactlyAsync<IOException>(async () =>
         {
-            using var _ = await RecoveryCaptureVolumeGate.AcquireAsync(
+            using var rejectedOrSecond = await RecoveryCaptureVolumeGate.AcquireAsync(
                 absent, _ => new RecoveryCaptureVolumeObservation(
                     true, RecoveryCaptureVolumeGate.MinimumFreeBytes - 1, "ntfs"));
         });
@@ -85,7 +85,7 @@ public sealed class OfficeRecoveryCaptureVolumeGateTests
         string absent = Path.Combine(scratch.Root, "unapproved");
         await Assert.ThrowsExactlyAsync<PlatformNotSupportedException>(async () =>
         {
-            using var _ = await RecoveryCaptureVolumeGate.AcquireAsync(
+            using var rejectedOrSecond = await RecoveryCaptureVolumeGate.AcquireAsync(
                 absent, _ => new RecoveryCaptureVolumeObservation(
                     false, long.MaxValue, "smb"));
         });
@@ -99,7 +99,7 @@ public sealed class OfficeRecoveryCaptureVolumeGateTests
         int observations = 0;
         await Assert.ThrowsExactlyAsync<IOException>(async () =>
         {
-            using var _ = await RecoveryCaptureVolumeGate.AcquireAsync(
+            using var rejectedOrSecond = await RecoveryCaptureVolumeGate.AcquireAsync(
                 scratch.Root, _ =>
                 {
                     observations++;
@@ -129,7 +129,7 @@ public sealed class OfficeRecoveryCaptureVolumeGateTests
 
         await Assert.ThrowsExactlyAsync<InvalidDataException>(async () =>
         {
-            using var _ = await RecoveryCaptureVolumeGate.AcquireAsync(
+            using var rejectedOrSecond = await RecoveryCaptureVolumeGate.AcquireAsync(
                 scratch.Root, LocalWithSpace);
         });
         Assert.AreEqual("UNTOUCHED", File.ReadAllText(protectedFile));
