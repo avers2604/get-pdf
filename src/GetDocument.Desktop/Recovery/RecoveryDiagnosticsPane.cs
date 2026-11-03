@@ -124,6 +124,7 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
     {
         if (_disposed || _busy) return;
         _busy = true;
+        CancellationToken token = _lifetime.Token;
         _refresh.IsEnabled = false;
         _summary.Text = "Проверка временных объектов…";
         _details.Text = "Читаются только имена и доступные метаданные в каталоге выбранного документа.";
@@ -135,12 +136,12 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
             // Cancellation on closing this tab cannot authorize any action.
             OfficeRecoveryIncompleteInventory result = await Task.Run(
                 () => _store.InspectIncomplete(
-                    _sourcePath, cancellationToken: _lifetime.Token),
-                _lifetime.Token);
-            if (_disposed || _lifetime.IsCancellationRequested) return;
+                    _sourcePath, cancellationToken: token),
+                token);
+            if (_disposed || token.IsCancellationRequested) return;
             Render(result);
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             // Closing the tab does not imply a completed inspection.
         }
