@@ -96,6 +96,12 @@ public sealed class OfficeCopyPublisherPlatformSafetyTests
     [DataRow("NUL.xlsx")]
     [DataRow("com1.pptx")]
     [DataRow("LPT9.docx")]
+    [DataRow("COM¹.docx")]
+    [DataRow("com².xlsx")]
+    [DataRow("COM³.pptx")]
+    [DataRow("LPT¹.docx")]
+    [DataRow("lpt².xlsx")]
+    [DataRow("LPT³.pptx")]
     [DataRow("trailing.xlsx.")]
     [DataRow("trailing.pptx ")]
     public void PortableFileNamesRejectWindowsDeviceNamesAndAds(string unsafeName)
