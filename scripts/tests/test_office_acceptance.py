@@ -13,6 +13,24 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27as_reopen_shutdown_requires_manual_windows_astra_acceptance(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [s.name for s in steps]
+            source = "recovery-reopen-shutdown-source-tests"
+            self.assertIn(source, names)
+            self.assertLess(names.index(source), names.index("solution-restore"))
+            self.assertIn("test_recovery_reopen_shutdown_contract.py",
+                          next(s for s in steps if s.name == source).command)
+            report = acceptance.new_report("f" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27as-reopen-document-session-windows-manual-e2e",
+                "gd31j27as-shutdown-long-smb-scan-astra-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27ar_recovery_tab_lifecycle_needs_manual_windows_and_astra_checks(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
