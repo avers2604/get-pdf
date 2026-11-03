@@ -57,10 +57,19 @@ public sealed class OfficeRecoveryStore
             cancellationToken.ThrowIfCancellationRequested();
             EnsureValidPackage(temporaryCopy, extension);
             string sha = await HashFileAsync(temporaryCopy, cancellationToken);
+            // Re-evaluate the path after the hash operation: it is possible
+            // for a concurrent writer to replace it while it is being read.
+            RejectLinkedDirectories(folder);
+            if (IsLinkedFile(new FileInfo(temporaryCopy)))
+                throw new InvalidDataException("Временная аварийная копия подменена ссылкой.");
             File.Move(temporaryCopy, finalCopy);
             var manifest = new RecoveryManifest(source, DateTimeOffset.UtcNow, sha);
             await File.WriteAllTextAsync(temporaryManifest, JsonSerializer.Serialize(manifest), cancellationToken);
             // The manifest is the commit marker. Interrupted exports never become recoverable.
+            RejectLinkedDirectories(folder);
+            if (IsLinkedFile(new FileInfo(finalCopy)) ||
+                IsLinkedFile(new FileInfo(temporaryManifest)))
+                throw new InvalidDataException("Аварийная копия или манифест подменены ссылкой.");
             File.Move(temporaryManifest, finalManifest);
             Prune(source);
             return new OfficeRecoveryCopy(finalCopy, manifest.CapturedUtc);
