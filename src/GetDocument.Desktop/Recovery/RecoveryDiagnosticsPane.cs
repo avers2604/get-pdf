@@ -126,6 +126,7 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
         _busy = true;
         CancellationToken token = _lifetime.Token;
         _refresh.IsEnabled = false;
+        _summary.Foreground = Brush("GetNavyBrush");
         _summary.Text = "Проверка временных объектов…";
         _details.Text = "Читаются только имена и доступные метаданные в каталоге выбранного документа.";
         _entries.Children.Clear();
