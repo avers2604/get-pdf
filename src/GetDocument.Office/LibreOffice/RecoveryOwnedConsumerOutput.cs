@@ -133,29 +133,35 @@ internal sealed class RecoveryOwnedConsumerOutput : IDisposable, IAsyncDisposabl
             abort.ThrowIfCancellationRequested();
 
             source.Position = 0;
-            using var view = new RevocableReadOnlyStream(source, abort);
-            T result = await reader(view, abort);
-            // Revoke access immediately when callback returns, BEFORE
-            // post-read SHA/ZIP verification. A retained wrapper cannot
-            // read concurrently with this final integrity check.
-            view.Dispose();
-            abort.ThrowIfCancellationRequested();
+            var view = new RevocableReadOnlyStream(source, abort);
+            try
+            {
+                T result = await reader(view, abort);
+                // Callbacks may start a ReadAsync without awaiting it. Revoke
+                // the view AND drain all already-started I/O before performing
+                // the final same-handle SHA/ZIP verification or closing it.
+                await view.RevokeAndDrainAsync();
+                abort.ThrowIfCancellationRequested();
 
-            // A consumer might have read an inconsistent or mutated stream.
-            // Recheck the SAME owned handle before returning any result.
-            source.Position = 0;
-            if (!OfficeRecoveryStore.VerifyOpenedPackage(
-                    source, Receipt.Extension, Receipt.Sha256))
-                throw new InvalidDataException(
-                    "Приёмный файл изменился во время чтения.");
-            abort.ThrowIfCancellationRequested();
+                source.Position = 0;
+                if (!OfficeRecoveryStore.VerifyOpenedPackage(
+                        source, Receipt.Extension, Receipt.Sha256))
+                    throw new InvalidDataException(
+                        "Приёмный файл изменился во время чтения.");
+                abort.ThrowIfCancellationRequested();
 
-            if (Interlocked.CompareExchange(ref _state, 2, 1) != 1)
-                throw new ObjectDisposedException(nameof(RecoveryOwnedConsumerOutput));
+                if (Interlocked.CompareExchange(ref _state, 2, 1) != 1)
+                    throw new ObjectDisposedException(nameof(RecoveryOwnedConsumerOutput));
 
-            // The result is only a read-side observation. It does not confer
-            // safe OS-native identity, WORM commit or replacement rights.
-            return result;
+                // A result from an already finished callback is an observation,
+                // not authorization for any WORM/document publication.
+                return result;
+            }
+            finally
+            {
+                // Also drain in exceptional/cancelled callback paths.
+                await view.RevokeAndDrainAsync();
+            }
         }
         finally
         {
@@ -231,73 +237,157 @@ internal sealed class RecoveryOwnedConsumerOutput : IDisposable, IAsyncDisposabl
     /// obtain its Name/handle or write into the owned data. Retaining the
     /// wrapper beyond its callback yields ObjectDisposedException.
     /// </summary>
-    private sealed class RevocableReadOnlyStream : Stream
+    // Internal for isolated synthetic concurrency regressions only.
+    // The view never owns the FileStream; the owning output closes it.
+    internal sealed class RevocableReadOnlyStream : Stream
     {
-        private Stream? _source;
+        private readonly object _gate = new();
         private readonly CancellationToken _ownerCancellation;
+        private readonly CancellationTokenSource _revocationCancellation = new();
+        private Stream? _source;
+        private TaskCompletionSource<bool>? _drain;
+        private bool _revoked;
+        private bool _active;
 
         internal RevocableReadOnlyStream(Stream source, CancellationToken ownerCancellation)
         {
-            _source = source;
+            _source = source ?? throw new ArgumentNullException(nameof(source));
             _ownerCancellation = ownerCancellation;
         }
 
-        private Stream Check()
+        private Stream Begin()
         {
-            Stream inner = Volatile.Read(ref _source)
-                ?? throw new ObjectDisposedException(nameof(RevocableReadOnlyStream));
+            lock (_gate)
+            {
+                if (_revoked || _source is null)
+                    throw new ObjectDisposedException(nameof(RevocableReadOnlyStream));
+                _ownerCancellation.ThrowIfCancellationRequested();
+                if (_active)
+                    throw new InvalidOperationException(
+                        "Одновременные обращения к одному проверенному потоку запрещены.");
+                _active = true;
+                return _source;
+            }
+        }
+
+        private void End()
+        {
+            TaskCompletionSource<bool>? drain = null;
+            lock (_gate)
+            {
+                _active = false;
+                drain = _drain;
+            }
+            drain?.TrySetResult(true);
+        }
+
+        private void RequireNotRevoked()
+        {
+            if (Volatile.Read(ref _source) is null)
+                throw new ObjectDisposedException(nameof(RevocableReadOnlyStream));
             _ownerCancellation.ThrowIfCancellationRequested();
-            return inner;
+        }
+
+        internal async Task RevokeAndDrainAsync()
+        {
+            Dispose();
+            Task drain;
+            lock (_gate)
+            {
+                drain = !_active ? Task.CompletedTask :
+                    (_drain ??= new TaskCompletionSource<bool>(
+                        TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            }
+            await drain;
+            _revocationCancellation.Dispose();
         }
 
         public override bool CanRead => Volatile.Read(ref _source)?.CanRead == true;
         public override bool CanSeek => Volatile.Read(ref _source)?.CanSeek == true;
         public override bool CanWrite => false;
 
-        public override long Length => Check().Length;
+        public override long Length
+        {
+            get
+            {
+                Stream source = Begin();
+                try { return source.Length; }
+                finally { End(); }
+            }
+        }
 
         public override long Position
         {
-            get => Check().Position;
-            set => Check().Position = value;
+            get
+            {
+                Stream source = Begin();
+                try { return source.Position; }
+                finally { End(); }
+            }
+            set
+            {
+                Stream source = Begin();
+                try { source.Position = value; }
+                finally { End(); }
+            }
         }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            int read = Check().Read(buffer, offset, count);
-            _ownerCancellation.ThrowIfCancellationRequested();
-            return read;
+            Stream source = Begin();
+            try
+            {
+                int countRead = source.Read(buffer, offset, count);
+                RequireNotRevoked();
+                return countRead;
+            }
+            finally { End(); }
         }
 
         public override int Read(Span<byte> buffer)
         {
-            int read = Check().Read(buffer);
-            _ownerCancellation.ThrowIfCancellationRequested();
-            return read;
+            Stream source = Begin();
+            try
+            {
+                int countRead = source.Read(buffer);
+                RequireNotRevoked();
+                return countRead;
+            }
+            finally { End(); }
         }
 
         public override async ValueTask<int> ReadAsync(
             Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            Stream inner = Check();
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-                _ownerCancellation, cancellationToken);
-            int read = await inner.ReadAsync(buffer, linked.Token);
-            Check();
-            linked.Token.ThrowIfCancellationRequested();
-            return read;
+            Stream source = Begin();
+            try
+            {
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                    _ownerCancellation, _revocationCancellation.Token, cancellationToken);
+                int countRead = await source.ReadAsync(buffer, linked.Token);
+                RequireNotRevoked();
+                linked.Token.ThrowIfCancellationRequested();
+                return countRead;
+            }
+            finally { End(); }
         }
 
         public override Task<int> ReadAsync(
             byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
             ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
 
-        public override long Seek(long offset, SeekOrigin origin) =>
-            Check().Seek(offset, origin);
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            Stream source = Begin();
+            try { return source.Seek(offset, origin); }
+            finally { End(); }
+        }
 
         public override void Flush()
         {
-            _ = Check();
+            _ = Begin();
+            try { RequireNotRevoked(); }
+            finally { End(); }
         }
 
         public override void SetLength(long value) => throw new NotSupportedException();
@@ -308,10 +398,21 @@ internal sealed class RecoveryOwnedConsumerOutput : IDisposable, IAsyncDisposabl
 
         protected override void Dispose(bool disposing)
         {
+            bool cancel = false;
             if (disposing)
-                Interlocked.Exchange(ref _source, null);
-            // The owner, not this wrapper, owns and closes the underlying
-            // FileStream. Revoking view access must not close it early.
+            {
+                lock (_gate)
+                {
+                    if (!_revoked)
+                    {
+                        _revoked = true;
+                        Interlocked.Exchange(ref _source, null);
+                        cancel = true;
+                    }
+                }
+                if (cancel)
+                    _revocationCancellation.Cancel();
+            }
             base.Dispose(disposing);
         }
     }
