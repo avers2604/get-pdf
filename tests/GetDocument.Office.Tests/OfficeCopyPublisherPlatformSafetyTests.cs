@@ -119,6 +119,29 @@ public sealed class OfficeCopyPublisherPlatformSafetyTests
         OfficeCopyPublisher.ValidatePortableDestinationFileName(safeName);
     }
 
+    [TestMethod]
+    public async Task WindowsDeviceAliasesCannotInvokeNativeExporterOnEitherPlatform()
+    {
+        using var fixture = new Scratch();
+        foreach (string name in new[]
+        {
+            "COM¹.docx", "COM².xlsx", "COM³.pptx",
+            "LPT¹.docx", "LPT².xlsx", "LPT³.pptx"
+        })
+        {
+            bool called = false;
+            await Assert.ThrowsExactlyAsync<ArgumentException>(
+                () => OfficeCopyPublisher.PublishAsync(
+                    Path.Combine(fixture.Root, name), _ =>
+                    {
+                        called = true;
+                        return Task.CompletedTask;
+                    }));
+            Assert.IsFalse(called, name);
+        }
+        Assert.AreEqual(0, Directory.GetFileSystemEntries(fixture.Root).Length);
+    }
+
     private sealed class Scratch : IDisposable
     {
         public string Root { get; } = Path.Combine(Path.GetTempPath(),
