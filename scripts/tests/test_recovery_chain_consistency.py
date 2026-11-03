@@ -78,7 +78,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
                 self.assertIn('"-p", "' + file_name + '"', self.runner)
 
     def test_registered_recovery_manual_gates_are_unique_and_not_automated(self):
-        all_gates = re.findall(r'    "(gd31j27a[lnopqrstuv][^"]+-manual-e2e)",',
+        all_gates = re.findall(r'    "(gd31j27a[lnopqrstuvw][^"]+-manual-e2e)",',
                                self.runner)
         self.assertEqual(len(all_gates), len(set(all_gates)))
         self.assertGreaterEqual(len(all_gates), 8)
@@ -147,9 +147,11 @@ class RecoveryChainIntegrity(unittest.TestCase):
         verify = "OfficeRecoveryCopy? verified = ReadValidCopy(source, extension, manifest);"
         self.assertIn(verify, discard)
         self.assertIn("if (verified is null) continue;", discard)
-        self.assertLess(discard.index(verify), discard.index("TryDelete(manifest);"))
+        pair_call = "DeleteVerifiedPair(verified.FilePath, manifest, TryDeleteVerifiedPart);"
+        self.assertIn(pair_call, discard)
+        self.assertLess(discard.index(verify), discard.index(pair_call))
         self.assertLess(discard.index("if (verified is null) continue;"),
-                        discard.index("TryDelete(verified.FilePath);"))
+                        discard.index(pair_call))
         self.assertNotIn("RecoveryManifest? metadata = ReadManifest(manifest);", discard)
         self.assertNotIn("Path.Combine(folder, name + extension)", discard)
 
@@ -176,6 +178,47 @@ class RecoveryChainIntegrity(unittest.TestCase):
                         last_check)
         self.assertLess(last_check, commit)
         self.assertIn("publishedManifest = true;", capture[commit:])
+
+    def test_prune_and_discard_delete_verified_copy_before_manifest(self):
+        discard = self.store.split("public void Discard(", 1)[1].split(
+            "private OfficeRecoveryCopy? ReadValidCopy(", 1)[0]
+        prune = self.store.split("private void Prune(", 1)[1].split(
+            "private static void RejectLinkedDirectories(", 1)[0]
+        helper = self.store.split("internal static bool DeleteVerifiedPair(", 1)[1].split(
+            "private static bool TryDeleteVerifiedPart(", 1)[0]
+        self.assertIn("DeleteVerifiedPair(verified.FilePath, manifest, TryDeleteVerifiedPart);",
+                      discard)
+        self.assertIn("DeleteVerifiedPair(entry.Copy!.FilePath, entry.Manifest, TryDeleteVerifiedPart);",
+                      prune)
+        self.assertIn("if (!tryDelete(copyPath)) return false;", helper)
+        self.assertIn("return tryDelete(manifestPath);", helper)
+        self.assertLess(helper.index("tryDelete(copyPath)"),
+                        helper.index("tryDelete(manifestPath)"))
+        self.assertNotIn("TryDelete(manifest);", discard)
+        self.assertNotIn("TryDelete(entry.Manifest);", prune)
+
+    def test_verified_deletion_rejects_missing_or_linked_parts(self):
+        delete = self.store.split("private static bool TryDeleteVerifiedPart(", 1)[1].split(
+            "private static void TryDelete(", 1)[0]
+        self.assertIn("if (!file.Exists || IsLinkedFile(file)", delete)
+        self.assertIn("FileAttributes.ReparsePoint", delete)
+        self.assertIn("return false;", delete)
+        self.assertIn("File.Delete(path);", delete)
+        self.assertIn("return !File.Exists(path);", delete)
+        self.assertIn("IOException or UnauthorizedAccessException", delete)
+
+    def test_failure_injection_regressions_cover_both_deletion_order_outcomes(self):
+        tests = (ROOT / "tests/GetDocument.Office.Tests/OfficeRecoveryDeletionOrderTests.cs"
+                 ).read_text(encoding="utf-8")
+        for case in (
+            "CopyDeletionDeniedKeepsManifestAndNeverCallsManifestDelete",
+            "ManifestDeletionDeniedOnlyAfterSuccessfulCopyDeletion",
+            "BothDeletionsSucceedInCopyFirstOrder",
+            "FaultingCopyDeletionDoesNotAttemptManifestDeletion",
+        ):
+            with self.subTest(case=case):
+                self.assertIn(case, tests)
+        self.assertEqual(4, tests.count("[TestMethod]"))
 
     def test_no_new_user_data_operations_in_diagnostics_pane(self):
         for forbidden in (
