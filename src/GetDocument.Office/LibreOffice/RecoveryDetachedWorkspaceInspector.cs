@@ -54,7 +54,8 @@ internal static class RecoveryDetachedWorkspaceInspector
         cancellationToken.ThrowIfCancellationRequested();
         if (maxEntries is < 1 or > 1024)
             throw new ArgumentOutOfRangeException(nameof(maxEntries));
-        string root = Path.GetFullPath(tempRoot ?? Path.GetTempPath());
+        string root = Path.TrimEndingDirectorySeparator(
+            Path.GetFullPath(tempRoot ?? Path.GetTempPath()));
 
         // A missing optional scratch root is a true empty inventory, but
         // permissions, link/reparse and malformed-path failures propagate.
