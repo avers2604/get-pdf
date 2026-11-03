@@ -202,9 +202,11 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
     internal async Task RefreshAsync()
     {
         if (_disposed || _busy || _suspended) return;
-        _busy = true;
-        using var inspection = CancellationTokenSource.CreateLinkedTokenSource(
+        // Explicit ownership: the linked child must be disposed before the
+        // shared lifetime source, including when closing during slow SMB I/O.
+        var inspection = CancellationTokenSource.CreateLinkedTokenSource(
             _lifetime.Token);
+        _busy = true;
         _activeInspection = inspection;
         CancellationToken token = inspection.Token;
         _refresh.IsEnabled = false;
@@ -247,6 +249,9 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
         {
             if (ReferenceEquals(_activeInspection, inspection))
                 _activeInspection = null;
+            // A using declaration would dispose the linked child only AFTER
+            // this finally body, incorrectly disposing its parent first.
+            inspection.Dispose();
             _busy = false;
             if (_disposed)
                 DisposeLifetime();
