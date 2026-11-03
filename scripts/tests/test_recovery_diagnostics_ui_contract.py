@@ -27,7 +27,8 @@ class RecoveryDiagnosticsSourceContract(unittest.TestCase):
                 self.assertNotIn(forbidden, self.pane)
         self.assertIn("InspectIncomplete(", self.pane)
         self.assertIn("Task.Run(", self.pane)
-        self.assertIn("CancellationToken token = _lifetime.Token;", self.pane)
+        self.assertIn("CancellationToken token = inspection.Token;", self.pane)
+        self.assertIn("CancellationTokenSource.CreateLinkedTokenSource(", self.pane)
         self.assertIn("_lifetime.Cancel();", self.pane)
         self.assertIn("_refresh.IsEnabled = false;", self.pane)
 
