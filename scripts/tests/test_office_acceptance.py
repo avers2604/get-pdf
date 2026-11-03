@@ -13,6 +13,25 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27az_fast_recovery_lookup_needs_real_os_benchmarks(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            source = "recovery-fast-selection-source-tests"
+            self.assertEqual(1, names.count(source))
+            self.assertLess(names.index(source), names.index("solution-restore"))
+            step = next(s for s in steps if s.name == source)
+            self.assertIn("test_recovery_fast_selection_contract.py", step.command)
+
+            report = acceptance.new_report("a" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27az-recovery-fast-selection-windows-ntfs-manual-e2e",
+                "gd31j27az-recovery-fast-selection-astra-smb-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27ay_recovery_folder_unavailable_is_not_empty_or_release_ready(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
