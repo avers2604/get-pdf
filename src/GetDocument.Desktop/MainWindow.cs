@@ -1437,6 +1437,9 @@ public sealed class MainWindow : Window
     private void CloseDocument(Guid id)
     {
         if (!_views.TryGetValue(id, out var view)) return;
+        // Collection removal may auto-select a neighbor. Capture actual
+        // selection before removal to restore the workspace active document.
+        bool wasSelected = ReferenceEquals(_tabs.SelectedItem, view);
         if (_officeBindingSourceId == id) CloseOfficeBinding();
         // Update active-document state before choosing a fallback. Otherwise
         // closing an active document could briefly re-select that same,
@@ -1446,7 +1449,7 @@ public sealed class MainWindow : Window
         CloseRecoveryDiagnostics(id, restoreSourceSelection: false);
         if (view.Content is IDisposable disposable) disposable.Dispose();
         _items.Remove(view);
-        if (_tabs.SelectedItem is null || ReferenceEquals(_tabs.SelectedItem, view))
+        if (wasSelected || _tabs.SelectedItem is null)
         {
             if (_workspace.ActiveId is { } active && _views.TryGetValue(active, out var selected))
                 _tabs.SelectedItem = selected;
