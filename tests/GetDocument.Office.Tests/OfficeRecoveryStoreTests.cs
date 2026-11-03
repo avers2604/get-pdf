@@ -64,6 +64,29 @@ public sealed class OfficeRecoveryStoreTests
     }
 
     [TestMethod]
+    public async Task CancelledExporterLeavesNoPublishedCopyOrTemporaryFile()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("canceled.docx");
+        byte[] original = File.ReadAllBytes(source);
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        using var cancellation = new CancellationTokenSource();
+
+        await Assert.ThrowsExactlyAsync<OperationCanceledException>(() =>
+            store.CaptureAsync(source, destination =>
+            {
+                File.Copy(source, destination);
+                cancellation.Cancel();
+                return Task.CompletedTask;
+            }, cancellation.Token));
+
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(source));
+        Assert.AreEqual(0, Directory.GetFiles(fixture.RecoveryDirectory,
+            "*", SearchOption.AllDirectories).Length);
+        Assert.IsNull(store.FindLatest(source));
+    }
+
+    [TestMethod]
     public async Task RejectsNonOfficeZipAndUnsupportedFormats()
     {
         using var fixture = new RecoveryFixture();
@@ -205,6 +228,85 @@ public sealed class OfficeRecoveryStoreTests
 
         store.Discard(source);
 
+        Assert.IsNull(store.FindLatest(source));
+        Assert.IsTrue(File.Exists(source));
+    }
+
+    [TestMethod]
+    public async Task DiscardRetainsTamperedSnapshotAndManifestForManualInvestigation()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("tamper.docx");
+        byte[] original = File.ReadAllBytes(source);
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        OfficeRecoveryCopy snapshot = await store.CaptureAsync(source, destination =>
+        {
+            File.Copy(source, destination);
+            return Task.CompletedTask;
+        });
+        string manifest = Directory.GetFiles(fixture.RecoveryDirectory, "*.json",
+            SearchOption.AllDirectories).Single();
+
+        // The manifest still claims this snapshot belongs to the source,
+        // but its SHA-256 no longer matches. A mere path match is not proof.
+        File.AppendAllText(snapshot.FilePath, "TAMPERED");
+        byte[] suspectBytes = File.ReadAllBytes(snapshot.FilePath);
+
+        store.Discard(source);
+
+        CollectionAssert.AreEqual(suspectBytes, File.ReadAllBytes(snapshot.FilePath));
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(source));
+        Assert.IsTrue(File.Exists(manifest));
+        Assert.IsNull(store.FindLatest(source));
+    }
+
+    [TestMethod]
+    public async Task DiscardDoesNotUnlinkSymlinkReplacedRecoveryCopy()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("replaced.docx");
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        OfficeRecoveryCopy snapshot = await store.CaptureAsync(source, destination =>
+        {
+            File.Copy(source, destination);
+            return Task.CompletedTask;
+        });
+        string manifest = Directory.GetFiles(fixture.RecoveryDirectory, "*.json",
+            SearchOption.AllDirectories).Single();
+        string outside = fixture.CreateOfficeFile("unrelated.docx");
+        byte[] outsideBytes = File.ReadAllBytes(outside);
+
+        File.Delete(snapshot.FilePath);
+        File.CreateSymbolicLink(snapshot.FilePath, outside);
+
+        store.Discard(source);
+
+        Assert.IsTrue(File.Exists(manifest));
+        Assert.IsNotNull(new FileInfo(snapshot.FilePath).LinkTarget);
+        CollectionAssert.AreEqual(outsideBytes, File.ReadAllBytes(outside));
+        Assert.IsTrue(File.Exists(source));
+    }
+
+    [TestMethod]
+    public async Task DiscardPreservesOrphanManifestWhenItsCopyDisappeared()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("missing.xlsx");
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        OfficeRecoveryCopy snapshot = await store.CaptureAsync(source, destination =>
+        {
+            File.Copy(source, destination);
+            return Task.CompletedTask;
+        });
+        string manifest = Directory.GetFiles(fixture.RecoveryDirectory, "*.json",
+            SearchOption.AllDirectories).Single();
+        byte[] manifestBytes = File.ReadAllBytes(manifest);
+
+        File.Delete(snapshot.FilePath);
+        store.Discard(source);
+
+        CollectionAssert.AreEqual(manifestBytes, File.ReadAllBytes(manifest));
+        Assert.IsFalse(File.Exists(snapshot.FilePath));
         Assert.IsNull(store.FindLatest(source));
         Assert.IsTrue(File.Exists(source));
     }

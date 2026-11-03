@@ -175,6 +175,32 @@ public sealed class OfficeRecoveryStoreLinkSafetyTests
     }
 
     [TestMethod]
+    public async Task DiscardPreservesSymlinkedManifestAndValidSiblingCopy()
+    {
+        using var fixture = new RecoveryScratch();
+        var store = new OfficeRecoveryStore(fixture.RecoveryRoot);
+        OfficeRecoveryCopy copy = await store.CaptureAsync(fixture.Source, destination =>
+        {
+            File.Copy(fixture.Source, destination);
+            return Task.CompletedTask;
+        });
+        string manifest = Directory.GetFiles(fixture.RecoveryRoot, "*.json",
+            SearchOption.AllDirectories).Single();
+        string outside = Path.Combine(fixture.Root, "external-recovery-manifest.json");
+        File.Copy(manifest, outside);
+        byte[] externalBytes = File.ReadAllBytes(outside);
+        File.Delete(manifest);
+        File.CreateSymbolicLink(manifest, outside);
+
+        store.Discard(fixture.Source);
+
+        Assert.IsTrue(File.Exists(copy.FilePath));
+        Assert.IsNotNull(new FileInfo(manifest).LinkTarget);
+        CollectionAssert.AreEqual(externalBytes, File.ReadAllBytes(outside));
+        Assert.IsTrue(File.Exists(fixture.Source));
+    }
+
+    [TestMethod]
     public async Task SymlinkedRecoveryRootRejectsCaptureBeforeCallingExporter()
     {
         using var fixture = new RecoveryScratch();
