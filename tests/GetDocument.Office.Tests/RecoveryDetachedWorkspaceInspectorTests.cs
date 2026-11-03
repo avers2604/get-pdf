@@ -148,6 +148,27 @@ public sealed class RecoveryDetachedWorkspaceInspectorTests
         Assert.IsTrue(Directory.Exists(real));
     }
 
+    [TestMethod]
+    public void LinkedTemporaryRootIsRejectedIfSymlinksAreAvailable()
+    {
+        using var scratch = new Scratch();
+        string real = scratch.Directory("real-root");
+        string linkedRoot = Path.Combine(scratch.Root, "linked-root");
+        try
+        {
+            Directory.CreateSymbolicLink(linkedRoot, real);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                   or PlatformNotSupportedException)
+        {
+            return; // Covered by manual real-platform gate when unsupported.
+        }
+
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryDetachedWorkspaceInspector.Inspect(linkedRoot));
+        Assert.IsTrue(Directory.Exists(real));
+    }
+
     private sealed class Scratch : IDisposable
     {
         internal string Root { get; } = Path.Combine(Path.GetTempPath(),
