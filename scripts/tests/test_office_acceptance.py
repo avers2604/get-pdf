@@ -13,6 +13,26 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27al_filesystem_observation_is_not_saveas_attestation(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/disposable"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            self.assertIn("savecopy-synthetic-filesystem-tests", names)
+            self.assertLess(names.index("savecopy-synthetic-filesystem-tests"),
+                            names.index("solution-restore"))
+            self.assertIn("test_savecopy_fs_probe.py",
+                          next(step for step in steps if
+                               step.name == "savecopy-synthetic-filesystem-tests").command)
+            report = acceptance.new_report("a" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27al-windows-ntfs-real-dotnet-savecopy-manual-e2e",
+                "gd31j27al-linux-ext4-real-dotnet-savecopy-manual-e2e",
+                "gd31j27al-offline-smb-real-dotnet-savecopy-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27ak_windows_pipe_denial_requires_real_manual_acceptance(self):
         linux = acceptance.build_steps(Path("/get-document"),
                                         Path("/offline-feed"), "Linux")
