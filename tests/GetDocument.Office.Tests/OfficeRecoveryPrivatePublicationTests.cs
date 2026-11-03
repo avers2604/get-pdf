@@ -222,8 +222,17 @@ public sealed class OfficeRecoveryPrivatePublicationTests
         // Publication disposal requests cancellation; active consumer owns
         // the handle until it can safely stop and perform cleanup.
         blocked.Release();
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
-            await running);
+        // Depending on Stream/Task cancellation, .NET may throw the derived
+        // TaskCanceledException rather than exactly OperationCanceledException.
+        try
+        {
+            await running;
+            Assert.Fail("Concurrent disposal must cancel the active transfer.");
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected: no receipt and no usable partial consumer output.
+        }
 
         Assert.AreEqual(0L, blocked.Length);
         Assert.IsFalse(File.Exists(copyPath));
