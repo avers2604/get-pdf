@@ -31,6 +31,30 @@ public sealed class OfficeRecoveryStoreLinkSafetyTests
     }
 
     [TestMethod]
+    public async Task PrecreatedTemporaryManifestSymlinkNeverOverwritesUnrelatedFile()
+    {
+        using var fixture = new RecoveryScratch();
+        var store = new OfficeRecoveryStore(fixture.RecoveryRoot);
+        string untouched = Path.Combine(fixture.Root, "untouched.txt");
+        await File.WriteAllTextAsync(untouched, "KEEP_THIS_CONTENT");
+
+        await Assert.ThrowsExactlyAsync<IOException>(() =>
+            store.CaptureAsync(fixture.Source, temporary =>
+            {
+                File.Copy(fixture.Source, temporary);
+                string name = Path.GetFileName(temporary).Split('.')[0];
+                string manifest = Path.Combine(Path.GetDirectoryName(temporary)!,
+                    name + ".json.tmp");
+                File.CreateSymbolicLink(manifest, untouched);
+                return Task.CompletedTask;
+            }));
+
+        Assert.AreEqual("KEEP_THIS_CONTENT", await File.ReadAllTextAsync(untouched));
+        Assert.IsNull(store.FindLatest(fixture.Source));
+        Assert.IsTrue(File.Exists(fixture.Source));
+    }
+
+    [TestMethod]
     public async Task LatestRecoveryCopyMustNotBeSymlinkedToValidOriginal()
     {
         using var fixture = new RecoveryScratch();
