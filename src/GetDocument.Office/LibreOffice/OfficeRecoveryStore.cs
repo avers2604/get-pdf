@@ -102,8 +102,10 @@ public sealed class OfficeRecoveryStore
     /// The scan is non-recursive and bounded across ALL directory entries.
     /// </summary>
     public OfficeRecoveryIncompleteInventory InspectIncomplete(
-        string sourcePath, int maxEntries = 256)
+        string sourcePath, int maxEntries = 256,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (maxEntries is < 1 or > 1024)
             throw new ArgumentOutOfRangeException(nameof(maxEntries),
                 "Допустимый предел осмотра — от 1 до 1024 записей.");
@@ -124,6 +126,7 @@ public sealed class OfficeRecoveryStore
         foreach (string entry in Directory.EnumerateFileSystemEntries(
                      folder, "*", SearchOption.TopDirectoryOnly))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (++visited > maxEntries)
             {
                 truncated = true;
