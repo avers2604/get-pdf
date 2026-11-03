@@ -13,6 +13,22 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27av_discard_integrity_needs_platform_evidence(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            source_gate = "recovery-chain-consistency-source-tests"
+            names = [step.name for step in steps]
+            self.assertEqual(1, names.count(source_gate))
+            self.assertLess(names.index(source_gate), names.index("solution-restore"))
+            report = acceptance.new_report("c" * 40, host, "GD-31I")
+            for gate in (
+                "gd31j27av-recovery-discard-integrity-windows-ntfs-manual-e2e",
+                "gd31j27av-recovery-discard-integrity-astra-smb-manual-e2e",
+            ):
+                self.assertIn(gate, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][gate])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27au_collision_safety_remains_unverified_on_real_filesystems(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
