@@ -64,6 +64,29 @@ public sealed class OfficeRecoveryStoreTests
     }
 
     [TestMethod]
+    public async Task CancelledExporterLeavesNoPublishedCopyOrTemporaryFile()
+    {
+        using var fixture = new RecoveryFixture();
+        string source = fixture.CreateOfficeFile("canceled.docx");
+        byte[] original = File.ReadAllBytes(source);
+        var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
+        using var cancellation = new CancellationTokenSource();
+
+        await Assert.ThrowsExactlyAsync<OperationCanceledException>(() =>
+            store.CaptureAsync(source, destination =>
+            {
+                File.Copy(source, destination);
+                cancellation.Cancel();
+                return Task.CompletedTask;
+            }, cancellation.Token));
+
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(source));
+        Assert.AreEqual(0, Directory.GetFiles(fixture.RecoveryDirectory,
+            "*", SearchOption.AllDirectories).Length);
+        Assert.IsNull(store.FindLatest(source));
+    }
+
+    [TestMethod]
     public async Task RejectsNonOfficeZipAndUnsupportedFormats()
     {
         using var fixture = new RecoveryFixture();
