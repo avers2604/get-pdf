@@ -27,7 +27,11 @@ public sealed class OfficeRecoveryStoreLinkSafetyTests
 
         CollectionAssert.AreEqual(original, await File.ReadAllBytesAsync(fixture.Source));
         Assert.IsNull(store.FindLatest(fixture.Source));
-        Assert.AreEqual(0, Directory.GetFiles(fixture.RecoveryRoot, "*", SearchOption.AllDirectories).Length);
+        var incomplete = store.InspectIncomplete(fixture.Source);
+        Assert.AreEqual(1, incomplete.Candidates.Count,
+            "An untrusted symlink must remain for read-only diagnosis.");
+        Assert.AreEqual(OfficeRecoveryIncompleteStatus.UntrustedLinkOrNonFile,
+            incomplete.Candidates[0].Status);
     }
 
     [TestMethod]
@@ -128,8 +132,10 @@ public sealed class OfficeRecoveryStoreLinkSafetyTests
         Assert.IsNotNull(destination);
         Assert.IsNotNull(failedPublishedCopy);
         Assert.AreEqual(unrelated, File.ReadAllText(destination));
-        Assert.IsFalse(File.Exists(failedPublishedCopy),
-            "Only the copy successfully published by this failed capture may be removed.");
+        Assert.IsTrue(File.Exists(failedPublishedCopy),
+            "A renamed path alone does not prove the still-present file is owned.");
+        Assert.IsNull(store.FindLatest(fixture.Source),
+            "Without a committed manifest the candidate must not be recoverable.");
         Assert.IsNull(store.FindLatest(fixture.Source));
         Assert.IsTrue(File.Exists(fixture.Source));
     }
