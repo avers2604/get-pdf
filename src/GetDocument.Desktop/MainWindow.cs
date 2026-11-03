@@ -1426,6 +1426,10 @@ public sealed class MainWindow : Window
     {
         if (!_views.TryGetValue(id, out var view)) return;
         if (_officeBindingSourceId == id) CloseOfficeBinding();
+        // A diagnostics view belongs to the source document, not to a
+        // global user-selected path. Close it and cancel its metadata scan
+        // when that document is closed.
+        CloseRecoveryDiagnostics(id);
         _views.Remove(id);
         _workspace.Close(id);
         if (view.Content is IDisposable disposable) disposable.Dispose();
