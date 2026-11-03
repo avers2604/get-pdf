@@ -44,7 +44,9 @@ class RecoveryFolderStateSourceContract(unittest.TestCase):
         self.assertIn("if (!RecoveryFolderExists(folder)) return null;", self.find)
         self.assertNotIn("if (!Directory.Exists(folder)) return null;", self.find)
         self.assertIn("FindLatestWithEnumerator(", self.find)
-        self.assertIn("foreach (string manifestPath in enumerateManifests(folder))", self.find)
+        self.assertIn("enumerateManifests(folder)", self.find)
+        self.assertIn("Take(MaxManifestCandidates + 1).ToArray()", self.find)
+        self.assertIn("foreach (var entry in ordered)", self.find)
         self.assertIn("RejectLinkedDirectories(folder);", self.find)
 
     def test_discard_fails_closed_instead_of_dropping_inaccessible_folder(self):
