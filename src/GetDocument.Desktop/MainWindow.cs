@@ -15,6 +15,7 @@ using GetDocument.Desktop.Preview;
 using GetDocument.Desktop.Files;
 using GetDocument.Desktop.Templates;
 using GetDocument.Desktop.Revisions;
+using GetDocument.Desktop.Recovery;
 using GetDocument.Desktop.Collaboration;
 using GetDocument.Office;
 using GetDocument.Office.EuroOfficeDesktop;
@@ -51,6 +52,7 @@ public sealed class MainWindow : Window
     private TabItem? _filesTab;
     private TabItem? _templatesTab;
     private readonly Dictionary<Guid, TabItem> _revisionTabs = [];
+    private readonly Dictionary<Guid, TabItem> _recoveryTabs = [];
     private readonly Dictionary<string, TabItem> _collaborationTabs = new(StringComparer.Ordinal);
     private readonly OfficeReturnPolicy _officeReturnPolicy = OfficeReturnPolicy.LoadLocal();
     private TabItem? _officeReturnTab;
@@ -145,6 +147,8 @@ public sealed class MainWindow : Window
                 if (view.Content is IDisposable document) document.Dispose();
             foreach (var history in _revisionTabs.Values)
                 if (history.Content is IDisposable pane) pane.Dispose();
+            foreach (var inspection in _recoveryTabs.Values)
+                if (inspection.Content is IDisposable pane) pane.Dispose();
             foreach (var editTab in _collaborationTabs.Values)
                 if (editTab.Content is IDisposable editor) editor.Dispose();
         };
@@ -475,6 +479,12 @@ public sealed class MainWindow : Window
                 "Когда ИТ-служба подключит сервер, документ из карточки GUP-2 откроется здесь, во вкладке. " +
                 "Сейчас сервер не настроен: правки и права пользователей не имитируются.")));
         content.Children.Add(open);
+        content.Children.Add(Section("Диагностика"));
+        var diagnostics = new WrapPanel { Orientation = Orientation.Horizontal };
+        diagnostics.Children.Add(CreateAction("Аварийные копии",
+            "Проверить временные файлы выбранного документа — только просмотр",
+            Icons.ShieldCheck, ShowRecoveryDiagnostics));
+        content.Children.Add(diagnostics);
         content.Children.Add(_homeLists);
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DropEvent, OnDrop);
@@ -1729,6 +1739,47 @@ public sealed class MainWindow : Window
         _tabs.SelectedIndex = 0;
     }
 
+    private void ShowRecoveryDiagnostics()
+    {
+        var source = _workspace.Tabs.FirstOrDefault(t => t.Id == _workspace.ActiveId);
+        if (source?.FilePath is not { } path ||
+            !new[] { ".docx", ".xlsx", ".pptx" }.Contains(
+                Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+        {
+            _status.Text = "Для диагностики выберите ранее открытый DOCX, XLSX или PPTX.";
+            return;
+        }
+        if (_recoveryTabs.TryGetValue(source.Id, out var existing))
+        {
+            _tabs.SelectedItem = existing;
+            return;
+        }
+
+        // Never start an Office engine or enumerate unrelated recovery folders.
+        var pane = new RecoveryDiagnosticsPane(path);
+        Guid sourceId = source.Id;
+        var view = new TabItem
+        {
+            Header = TabHeader("Аварийные копии: " + source.Title,
+                () => CloseRecoveryDiagnostics(sourceId)),
+            Content = pane
+        };
+        _recoveryTabs.Add(source.Id, view);
+        _items.Add(view);
+        _tabs.SelectedItem = view;
+        _status.Text = "Диагностика временных файлов: только просмотр. Действия с копиями запрещены.";
+        _ = pane.RefreshAsync();
+    }
+
+    private void CloseRecoveryDiagnostics(Guid sourceId)
+    {
+        if (!_recoveryTabs.Remove(sourceId, out var view)) return;
+        if (view.Content is IDisposable disposable) disposable.Dispose();
+        _items.Remove(view);
+        if (_tabs.SelectedItem is null || ReferenceEquals(_tabs.SelectedItem, view))
+            _tabs.SelectedIndex = 0;
+    }
+
     private void ShowRevisionHistory()
     {
         var source = _workspace.Tabs.FirstOrDefault(t => t.Id == _workspace.ActiveId);
@@ -1859,6 +1910,9 @@ public sealed class MainWindow : Window
         { e.Handled = true; CloseGetFiles(); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _templatesTab))
         { e.Handled = true; CloseCorporateTemplates(); }
+        else if (e.Key == Key.W && _recoveryTabs.FirstOrDefault(
+                     kv => ReferenceEquals(kv.Value, _tabs.SelectedItem)) is { Value: not null } recovery)
+        { e.Handled = true; CloseRecoveryDiagnostics(recovery.Key); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _officeReturnTab))
         { e.Handled = true; CloseOfficeReturn(); }
         else if (e.Key == Key.W && ReferenceEquals(_tabs.SelectedItem, _printTab))
