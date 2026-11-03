@@ -124,7 +124,7 @@ internal static class RecoveryCaptureVolumeGate
                 string mounted = Path.TrimEndingDirectorySeparator(
                     Path.GetFullPath(candidate.Name));
                 return path.Equals(mounted, comparison) ||
-                    path.StartsWith(mounted.EndsInDirectorySeparator()
+                    path.StartsWith(Path.EndsInDirectorySeparator(mounted)
                         ? mounted : mounted + Path.DirectorySeparatorChar, comparison);
             })
             .OrderByDescending(candidate => candidate.Name.Length)
