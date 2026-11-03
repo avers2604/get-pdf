@@ -88,7 +88,7 @@ internal sealed class RecoveryOwnedConsumerOutput : IDisposable, IAsyncDisposabl
             }
             catch
             {
-                held?.Dispose(); // OS-backed DeleteOnClose, no File.Delete(path)
+                held?.Dispose(); // OS-backed DeleteOnClose; no pathname deletion
                 TryRemoveEmptyDirectory(root);
                 throw;
             }
