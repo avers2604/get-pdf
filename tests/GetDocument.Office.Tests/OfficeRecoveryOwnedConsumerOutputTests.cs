@@ -213,6 +213,46 @@ public sealed class OfficeRecoveryOwnedConsumerOutputTests
     }
 
     [TestMethod]
+    public async Task RevocationDrainsUnawaitedPendingReadBeforeOwnerMayCloseHandle()
+    {
+        using var source = new BlockedReadStream(new byte[] { 7, 8 });
+        using var view = new RecoveryOwnedConsumerOutput.RevocableReadOnlyStream(
+            source, CancellationToken.None);
+        var buffer = new byte[1];
+
+        Task<int> outstanding = view.ReadAsync(buffer.AsMemory()).AsTask();
+        await source.Entered;
+        Task revoke = view.RevokeAndDrainAsync();
+        Assert.IsFalse(revoke.IsCompleted,
+            "Owner must await the unfinished read, even if caller forgot its Task.");
+        Assert.ThrowsExactly<ObjectDisposedException>(() => view.ReadByte());
+        Assert.IsTrue(source.CanRead, "Revoking a view never closes its owner's stream.");
+
+        source.Release();
+        await Assert.ThrowsExactlyAsync<ObjectDisposedException>(async () =>
+            await outstanding);
+        await revoke;
+        Assert.IsTrue(source.CanRead);
+    }
+
+    [TestMethod]
+    public async Task ConcurrentViewReadsAreRejectedWhileOneReadIsPending()
+    {
+        using var source = new BlockedReadStream(new byte[] { 4 });
+        using var view = new RecoveryOwnedConsumerOutput.RevocableReadOnlyStream(
+            source, CancellationToken.None);
+        Task<int> outstanding = view.ReadAsync(new byte[1].AsMemory()).AsTask();
+        await source.Entered;
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => view.ReadByte());
+        Assert.ThrowsExactly<InvalidOperationException>(() => view.Seek(0, SeekOrigin.Begin));
+        source.Release();
+        Assert.AreEqual(1, await outstanding);
+        await view.RevokeAndDrainAsync();
+        Assert.ThrowsExactly<ObjectDisposedException>(() => view.ReadByte());
+    }
+
+    [TestMethod]
     public async Task RealDisabledNativeAdapterCannotCreateOwnedOutput()
     {
         using var scratch = new Scratch();
@@ -225,6 +265,28 @@ public sealed class OfficeRecoveryOwnedConsumerOutputTests
 
         await Task.CompletedTask;
         CollectionAssert.AreEqual(scratch.Bytes, File.ReadAllBytes(scratch.Source));
+    }
+
+    private sealed class BlockedReadStream : MemoryStream
+    {
+        private readonly TaskCompletionSource<bool> _entered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public BlockedReadStream(byte[] bytes) : base(bytes) { }
+        public Task Entered => _entered.Task;
+        public void Release() => _release.TrySetResult(true);
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            _entered.TrySetResult(true);
+            // Simulate a native read that does not immediately observe cancel;
+            // draining must wait for actual completion, not just cancel intent.
+            await _release.Task;
+            return await base.ReadAsync(buffer, CancellationToken.None);
+        }
     }
 
     private sealed class Scratch : IDisposable

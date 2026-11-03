@@ -143,6 +143,60 @@ public sealed class OfficeRecoveryVerifiedStagingTests
     }
 
     [TestMethod]
+    public async Task DisposeWhileStageWriteIsPendingKeepsSourceHandleUntilTransferStops()
+    {
+        using var fixture = new Scratch(validZip: true);
+        RecoveryNativeReadLease? sourceLease = null;
+        using var session = RecoveryVerifiedStreamStage.Open(
+            NewFake(() => sourceLease = NewLease(fixture.FilePath)), NewKey());
+        using var staging = new BlockAfterWriteStream();
+
+        Task<RecoveryStagedCopyReceipt> pending =
+            session.StageToAsync(staging, fixture.Sha256, ".docx");
+        await staging.Entered;
+
+        Assert.IsNotNull(sourceLease);
+        Assert.IsTrue(sourceLease.Stream.CanRead);
+        session.Dispose();
+
+        // Dispose must cancel but must not close an in-flight source descriptor.
+        Assert.IsTrue(sourceLease.Stream.CanRead,
+            "An active operation, not Dispose, owns its source until finally.");
+        staging.Release();
+        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+            await pending);
+        Assert.IsFalse(sourceLease.Stream.CanRead);
+        Assert.AreEqual(0L, staging.Length);
+        CollectionAssert.AreEqual(fixture.Bytes, File.ReadAllBytes(fixture.FilePath));
+    }
+
+    [TestMethod]
+    public async Task ParallelStageAttemptCannotStealOrCloseActiveSourceLease()
+    {
+        using var fixture = new Scratch(validZip: true);
+        RecoveryNativeReadLease? sourceLease = null;
+        using var session = RecoveryVerifiedStreamStage.Open(
+            NewFake(() => sourceLease = NewLease(fixture.FilePath)), NewKey());
+        using var staging = new BlockAfterWriteStream();
+        Task<RecoveryStagedCopyReceipt> first =
+            session.StageToAsync(staging, fixture.Sha256, ".docx");
+        await staging.Entered;
+
+        using var secondStage = new MemoryStream();
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            session.StageToAsync(secondStage, fixture.Sha256, ".docx"));
+        Assert.IsNotNull(sourceLease);
+        Assert.IsTrue(sourceLease.Stream.CanRead,
+            "A rejected second transfer must never dispose the first lease.");
+        Assert.AreEqual(0L, secondStage.Length);
+
+        staging.Release();
+        RecoveryStagedCopyReceipt result = await first;
+        Assert.AreEqual(fixture.Sha256, result.Sha256);
+        Assert.IsFalse(sourceLease.Stream.CanRead);
+    }
+
+    [TestMethod]
     public void DisabledRealNativeAdapterCannotCreateAStagingSession()
     {
         RecoveryRelativeKey key = NewKey();
@@ -175,6 +229,28 @@ public sealed class OfficeRecoveryVerifiedStagingTests
         public bool SupportsVerifiedDirectoryRelativeOpen => true;
         public FakeAdapter(Func<RecoveryNativeReadLease> open) => _open = open;
         public RecoveryNativeReadLease OpenReadOnlyRelative(RecoveryRelativeKey key) => _open();
+    }
+
+    private sealed class BlockAfterWriteStream : MemoryStream
+    {
+        private readonly TaskCompletionSource<bool> _entered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Entered => _entered.Task;
+        public void Release() => _release.TrySetResult(true);
+
+        public override async ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await base.WriteAsync(buffer, cancellationToken);
+            _entered.TrySetResult(true);
+            // Intentionally wait independently of token to prove that Dispose
+            // does NOT close the source before the outstanding await unwinds.
+            await _release.Task;
+            cancellationToken.ThrowIfCancellationRequested();
+        }
     }
 
     private sealed class CancelAfterFirstWriteStream : MemoryStream
