@@ -76,6 +76,11 @@ class RecoveryOwnedConsumerSourceContract(unittest.TestCase):
     def test_readonly_view_is_revoked_without_closing_held_handle_early(self):
         self.assertIn("new RevocableReadOnlyStream(source, abort)", self.read)
         self.assertIn("using var view =", self.read)
+        self.assertIn("view.Dispose();", self.read)
+        self.assertLess(self.read.index("T result = await reader(view, abort);"),
+                        self.read.index("view.Dispose();"))
+        self.assertLess(self.read.index("view.Dispose();"),
+                        self.read.rindex("VerifyOpenedPackage("))
         self.assertIn("public override bool CanWrite => false;", self.view)
         self.assertIn("public override void Write(byte[] buffer, int offset, int count)",
                       self.view)
