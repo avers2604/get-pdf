@@ -29,6 +29,19 @@ class WindowsDenialSourceContract(unittest.TestCase):
             with self.subTest(required=required):
                 self.assertIn(required, self.lab)
 
+    def test_client_byte_mode_no_unsupported_readmode_setter(self):
+        # .NET Standard NamedPipeClientStream may lack WRITE_ATTRIBUTES on
+        # the client handle: ReadMode=Message can fail with AccessDenied.
+        self.assertNotIn("pipe.ReadMode =", self.lab)
+        self.assertIn("ReadDenialToEofAsync(pipe, timeout.Token)", self.lab)
+        self.assertIn("internal static async Task<byte[]> ReadDenialToEofAsync(", self.lab)
+        self.assertIn("buffer = new byte[Denied.Length + 1]", self.lab)
+        self.assertIn("if (received == 0) break", self.lab)
+        self.assertIn('if (count > Denied.Length)', self.lab)
+        self.assertIn('if (count != Denied.Length)', self.lab)
+        self.assertIn("RequireExactDenial(response)", self.lab)
+        self.assertIn("PipeTransmissionMode.Message", self.lab)  # server only
+
     def test_denial_only_and_manual_vm_operator_gate(self):
         for required in (
             '"nativePublicationAuthorized', '"releaseReady',
