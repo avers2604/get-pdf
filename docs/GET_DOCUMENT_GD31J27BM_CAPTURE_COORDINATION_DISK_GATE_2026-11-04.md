@@ -50,3 +50,10 @@
 ## Следующий P1
 
 До релиза нужна доверенная системная граница владения root и lock-file inode (native no-follow/identity-bound root), проверка реального кросспроцессного locking NTFS/Astra, выработка механизма работы с SMB на нескольких ПК, управление общесистемным байтовым бюджетом и доказательство сохранности при power loss. Любые заявления, что эта реализация уже решает межмашинные гонки или гарантирует резервирование физического места, неверны.
+
+## Справочные материалы .NET (не доказательство выполнения)
+
+- [FileStream.Lock на Unix: advisory/shared semantics (.NET 6+)](https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/filestream-file-locks-unix)
+- [DriveInfo.DriveFormat на Linux в .NET 10](https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/10.0/driveinfo-driveformat-linux)
+
+Документация API не заменяет NTFS/Astra/SMB испытаний, и в данном этапе эти проверки **не проводились**.
