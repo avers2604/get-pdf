@@ -32,7 +32,7 @@ class RecoveryDiagnosticsSourceContract(unittest.TestCase):
         self.assertIn("_refresh.IsEnabled = false;", self.pane)
 
     def test_only_one_user_action_and_no_destructive_buttons(self):
-        self.assertEqual(1, self.pane.count("new Button"))
+        self.assertEqual(1, self.pane.count("readonly Button "))
         self.assertIn('Content = "Обновить сведения"', self.pane)
         self.assertIn("_refresh.Click +=", self.pane)
         self.assertNotIn('Content = "Удалить"', self.pane)
@@ -49,7 +49,7 @@ class RecoveryDiagnosticsSourceContract(unittest.TestCase):
             "Список неполон",
             "не подтверждают",
             "не проверен",
-            "не найдены",
+            "не обнаружены",
             "Доступ или безопасность каталога не подтверждены",
         ):
             with self.subTest(symbol=symbol):
