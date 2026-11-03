@@ -250,8 +250,9 @@ public sealed class OfficeRecoveryStore
             // FindLatest must pass before ANY deletion is attempted.
             OfficeRecoveryCopy? verified = ReadValidCopy(source, extension, manifest);
             if (verified is null) continue;
-            TryDelete(manifest);
-            TryDelete(verified.FilePath);
+            // Copy-first: a failed copy deletion must leave the recovery
+            // manifest in place so a still-valid snapshot stays discoverable.
+            DeleteVerifiedPair(verified.FilePath, manifest, TryDeleteVerifiedPart);
         }
     }
 
@@ -288,8 +289,10 @@ public sealed class OfficeRecoveryStore
             .Skip(RetainedCopies);
         foreach (var entry in entries)
         {
-            TryDelete(entry.Manifest);
-            TryDelete(entry.Copy!.FilePath);
+            // Retention is best-effort. If a copy is locked or deletion is
+            // denied, keep its manifest; never orphan a still-present copy
+            // merely to meet the three-snapshot limit.
+            DeleteVerifiedPair(entry.Copy!.FilePath, entry.Manifest, TryDeleteVerifiedPart);
         }
     }
 
@@ -475,6 +478,46 @@ public sealed class OfficeRecoveryStore
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 
+    /// <summary>
+    /// Deterministic ordering rule shared by Discard and Prune. The supplied
+    /// delete callback must only report success after removing an owned part.
+    /// An exception is allowed to propagate from a test callback; production
+    /// uses the exception-safe TryDeleteVerifiedPart implementation.
+    /// </summary>
+    internal static bool DeleteVerifiedPair(
+        string copyPath, string manifestPath, Func<string, bool> tryDelete)
+    {
+        ArgumentNullException.ThrowIfNull(tryDelete);
+        if (!tryDelete(copyPath)) return false;
+        return tryDelete(manifestPath);
+    }
+
+    private static bool TryDeleteVerifiedPart(string path)
+    {
+        try
+        {
+            // The prior ReadValidCopy() check is not a durable lock. Recheck
+            // link/file type immediately before deletion and fail closed if
+            // an entry disappeared or became a symlink/other reparse object.
+            var file = new FileInfo(path);
+            file.Refresh();
+            if (!file.Exists || IsLinkedFile(file) ||
+                (file.Attributes & (FileAttributes.Directory |
+                                    FileAttributes.Device |
+                                    FileAttributes.ReparsePoint)) != 0)
+                return false;
+            File.Delete(path);
+            return !File.Exists(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                                   System.Security.SecurityException)
+        {
+            return false;
+        }
+    }
+
+    // Cancellation/error cleanup of temporary objects predates this stage;
+    // it is intentionally separate from verified-pair deletion policy.
     private static void TryDelete(string path)
     {
         try { File.Delete(path); }

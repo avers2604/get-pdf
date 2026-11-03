@@ -13,6 +13,22 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27aw_partial_deletion_requires_real_windows_and_astra_acceptance(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            gate = "recovery-chain-consistency-source-tests"
+            self.assertEqual(1, names.count(gate))
+            self.assertLess(names.index(gate), names.index("solution-restore"))
+            report = acceptance.new_report("d" * 40, host, "GD-31I")
+            for name in (
+                "gd31j27aw-recovery-partial-delete-windows-ntfs-manual-e2e",
+                "gd31j27aw-recovery-partial-delete-astra-smb-manual-e2e",
+            ):
+                self.assertIn(name, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][name])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27av_discard_integrity_needs_platform_evidence(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
