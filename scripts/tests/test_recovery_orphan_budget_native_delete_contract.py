@@ -73,6 +73,10 @@ class RecoveryOrphanBudgetNativeDeleteSourceContract(unittest.TestCase):
         self.assertLess(self.capture.index("RecoveryCaptureAdmission.EnsureMayCapture("),
                         self.capture.index("Directory.CreateDirectory(folder);"))
         self.assertIn("MaxIncompleteCandidates = 16", self.budget)
+        self.assertIn("MaxDirectoryEntriesBeforeCapture = 64", self.budget)
+        self.assertIn("inventory.ObservedEntries >= MaxDirectoryEntriesBeforeCapture",
+                      self.budget)
+        self.assertIn("ObservedEntries: observedEntries.Count", self.inspect)
         self.assertIn("if (inventory.Truncated)", self.budget)
         self.assertIn("inventory.Candidates.Count >= MaxIncompleteCandidates",
                       self.budget)
@@ -118,9 +122,11 @@ class RecoveryOrphanBudgetNativeDeleteSourceContract(unittest.TestCase):
             "UntrustedOrphanCountAtLimitDeniesNewCaptureWithoutDeleting",
             "PartialDirectorySurveyFailsClosedRegardlessOfObservedCount",
             "CaptureAtOrphanBudgetRejectsBeforeCallingExporterAndPreservesBytes",
+            "TotalDirectoryBudgetRejectsEvenWhenAllManifestNamesArePresent",
+            "ManyMalformedManifestPairsCannotEvadeSourceAdmission",
         ):
             self.assertIn(name, self.budget_tests)
-        self.assertEqual(4, self.budget_tests.count("[TestMethod]"))
+        self.assertEqual(6, self.budget_tests.count("[TestMethod]"))
         self.assertIn("ConsistentFakeEvidenceCreatesAuditObservationButNeverDeletes",
                       self.delete_tests)
         self.assertIn("RealPlatformAdaptersRefuseAllDeletePreparations",
