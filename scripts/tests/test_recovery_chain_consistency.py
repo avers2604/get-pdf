@@ -44,6 +44,8 @@ REQUIRED = {
         "test_recovery_native_probes_contract.py",
     "recovery-verified-staging-source-tests":
         "test_recovery_verified_staging_contract.py",
+    "recovery-private-publication-source-tests":
+        "test_recovery_private_publication_contract.py",
 }
 
 
@@ -94,7 +96,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
                 self.assertIn('"-p", "' + file_name + '"', self.runner)
 
     def test_registered_recovery_manual_gates_are_unique_and_not_automated(self):
-        all_gates = re.findall(r'    "((?:gd31j27a[lnopqrstuvwxyz]|gd31j27b[abcdef])[^"]+-manual-e2e)",',
+        all_gates = re.findall(r'    "((?:gd31j27a[lnopqrstuvwxyz]|gd31j27b[abcdefg])[^"]+-manual-e2e)",',
                                self.runner)
         self.assertEqual(len(all_gates), len(set(all_gates)))
         self.assertGreaterEqual(len(all_gates), 8)
