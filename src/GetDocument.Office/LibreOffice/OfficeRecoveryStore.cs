@@ -64,7 +64,18 @@ public sealed class OfficeRecoveryStore
                 throw new InvalidDataException("Временная аварийная копия подменена ссылкой.");
             File.Move(temporaryCopy, finalCopy);
             var manifest = new RecoveryManifest(source, DateTimeOffset.UtcNow, sha);
-            await File.WriteAllTextAsync(temporaryManifest, JsonSerializer.Serialize(manifest), cancellationToken);
+            // Never use WriteAllText/Create: a malicious exporter could have
+            // created a sibling .json.tmp symlink and redirected the write to
+            // an unrelated document. CreateNew rejects every occupied name.
+            byte[] manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest);
+            if (manifestBytes.Length > 2048)
+                throw new InvalidDataException("Манифест аварийной копии превышает допустимый размер.");
+            await using (var output = new FileStream(temporaryManifest, FileMode.CreateNew,
+                FileAccess.Write, FileShare.None, bufferSize: 4096, FileOptions.Asynchronous))
+            {
+                await output.WriteAsync(manifestBytes, cancellationToken);
+                output.Flush(flushToDisk: true);
+            }
             // The manifest is the commit marker. Interrupted exports never become recoverable.
             RejectLinkedDirectories(folder);
             if (IsLinkedFile(new FileInfo(finalCopy)) ||
