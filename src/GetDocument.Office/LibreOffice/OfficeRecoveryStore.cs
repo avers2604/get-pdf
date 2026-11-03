@@ -623,12 +623,23 @@ public sealed class OfficeRecoveryStore
         return Path.Combine(_root, key);
     }
 
-    // The recovery copy is path-preflighted before opening. Keep the same
-    // FileStream for hashing and all ZIP/XML reads; no path-based reopen.
-    // FileShare.Read excludes cooperative writers/deleters on Windows, but
-    // cannot by itself enforce POSIX/SMB no-follow or immutable semantics.
+    // Test-only seam that simulates a path replacement after preflight.
+    // Normal production call sites never provide this callback.
+    internal static FileStream OpenRecoveryReadStreamForTest(
+        string path, Action<string> beforeOpen)
+    {
+        ArgumentNullException.ThrowIfNull(beforeOpen);
+        return OpenRecoveryReadStream(path, FileOptions.None, beforeOpen);
+    }
+
+    // Use one opened FileStream for SHA and ZIP. Recheck the path immediately
+    // AFTER opening and BEFORE any bytes are consumed, so ordinary path
+    // replacement and injected symlink swaps fail closed. These are still
+    // path-based checks: neither an atomic no-follow open nor an OS file-ID
+    // comparison. A privileged/same-metadata swap can evade them.
     private static FileStream OpenRecoveryReadStream(
-        string path, FileOptions options = FileOptions.None)
+        string path, FileOptions options = FileOptions.None,
+        Action<string>? beforeOpen = null)
     {
         var file = new FileInfo(path);
         file.Refresh();
@@ -636,13 +647,43 @@ public sealed class OfficeRecoveryStore
             IsLinkedFile(file))
             throw new InvalidDataException(
                 "Аварийная копия отсутствует, подменена ссылкой или превышает 128 МиБ.");
-        var input = new FileStream(path, FileMode.Open, FileAccess.Read,
-            FileShare.Read, bufferSize: 65536, options: options);
-        if (input.CanRead && input.CanSeek && input.Length > 0 &&
-            input.Length <= MaxCopyBytes)
+        long preOpenLength = file.Length;
+        DateTime preOpenModifiedUtc = file.LastWriteTimeUtc;
+
+        beforeOpen?.Invoke(path);
+        FileStream? input = null;
+        try
+        {
+            input = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.Read, bufferSize: 65536, options: options);
+
+            // The opened handle may refer to a different file if the path
+            // changed after the first FileInfo check. Verify the name and
+            // parent tree again before performing any SHA/ZIP reads.
+            RejectLinkedDirectories(Path.GetDirectoryName(path)!);
+            var current = new FileInfo(path);
+            current.Refresh();
+            if (!current.Exists || IsLinkedFile(current) ||
+                (current.Attributes & (FileAttributes.Directory |
+                                       FileAttributes.Device |
+                                       FileAttributes.ReparsePoint)) != 0 ||
+                current.Length != preOpenLength ||
+                current.LastWriteTimeUtc != preOpenModifiedUtc ||
+                !input.CanRead || !input.CanSeek ||
+                input.Length != preOpenLength ||
+                input.Length > MaxCopyBytes)
+                throw new InvalidDataException(
+                    "Файл аварийной копии изменился при открытии или не является обычным файлом.");
+
             return input;
-        input.Dispose();
-        throw new InvalidDataException("Недопустимое чтение аварийной копии.");
+        }
+        catch
+        {
+            // FileStream may already be open, including on an unrelated
+            // symlink target. Dispose it on EVERY failed post-open check.
+            input?.Dispose();
+            throw;
+        }
     }
 
     // Internal stream-level seam: both validators receive the SAME handle.
