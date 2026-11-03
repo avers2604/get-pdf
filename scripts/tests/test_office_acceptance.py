@@ -13,6 +13,26 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ba_concurrent_manifest_and_copy_checks_need_platform_proof(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            source = "recovery-concurrent-selection-source-tests"
+            self.assertEqual(1, names.count(source))
+            self.assertLess(names.index(source), names.index("solution-restore"))
+            source_step = next(s for s in steps if s.name == source)
+            self.assertIn("test_recovery_concurrent_selection_contract.py",
+                          source_step.command)
+
+            report = acceptance.new_report("a" * 40, host, "GD-31I")
+            for manual in (
+                "gd31j27ba-recovery-concurrent-windows-ntfs-manual-e2e",
+                "gd31j27ba-recovery-concurrent-astra-smb-manual-e2e",
+            ):
+                self.assertIn(manual, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][manual])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27az_fast_recovery_lookup_needs_real_os_benchmarks(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
