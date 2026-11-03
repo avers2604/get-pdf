@@ -71,7 +71,7 @@ public sealed class OfficeRecoveryStore
             if (manifestBytes.Length > 2048)
                 throw new InvalidDataException("Манифест аварийной копии превышает допустимый размер.");
             await using (var output = new FileStream(temporaryManifest, FileMode.CreateNew,
-                FileAccess.Write, FileShare.None, bufferSize: 4096, FileOptions.Asynchronous))
+                FileAccess.Write, FileShare.None, bufferSize: 4096, options: FileOptions.Asynchronous))
             {
                 await output.WriteAsync(manifestBytes, cancellationToken);
                 output.Flush(flushToDisk: true);
