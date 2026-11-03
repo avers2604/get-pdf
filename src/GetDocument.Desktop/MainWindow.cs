@@ -115,6 +115,18 @@ public sealed class MainWindow : Window
                     native.Value.Content is NativeOfficeDiagnosticPane pane)
                     _ = pane.SuspendLabInputAsync();
             }
+            // A hidden recovery diagnostic tab must not keep enumerating
+            // files while the user edits a different document. Re-selecting
+            // it requests a fresh observation, not cached "all clear" data.
+            foreach (var diagnostic in _recoveryTabs.Values)
+            {
+                if (diagnostic.Content is not RecoveryDiagnosticsPane inspection)
+                    continue;
+                if (ReferenceEquals(_tabs.SelectedItem, diagnostic))
+                    inspection.ResumeInspection();
+                else
+                    inspection.SuspendInspection();
+            }
             if (_tabs.SelectedItem is TabItem tab && tab.Tag is Guid id)
             {
                 if (_views.ContainsKey(id))
@@ -1426,12 +1438,12 @@ public sealed class MainWindow : Window
     {
         if (!_views.TryGetValue(id, out var view)) return;
         if (_officeBindingSourceId == id) CloseOfficeBinding();
-        // A diagnostics view belongs to the source document, not to a
-        // global user-selected path. Close it and cancel its metadata scan
-        // when that document is closed.
-        CloseRecoveryDiagnostics(id);
+        // Update active-document state before choosing a fallback. Otherwise
+        // closing an active document could briefly re-select that same,
+        // already-closing document through its diagnostic tab.
         _views.Remove(id);
         _workspace.Close(id);
+        CloseRecoveryDiagnostics(id, restoreSourceSelection: false);
         if (view.Content is IDisposable disposable) disposable.Dispose();
         _items.Remove(view);
         if (_tabs.SelectedItem is null || ReferenceEquals(_tabs.SelectedItem, view))
@@ -1772,15 +1784,46 @@ public sealed class MainWindow : Window
         _items.Add(view);
         _tabs.SelectedItem = view;
         _status.Text = "Диагностика временных файлов: только просмотр. Действия с копиями запрещены.";
-        _ = pane.RefreshAsync();
+        // SelectionChanged calls ResumeInspection on the selected tab.
+        // Do not schedule a second fire-and-forget scan here.
     }
 
-    private void CloseRecoveryDiagnostics(Guid sourceId)
+    private void CloseRecoveryDiagnostics(
+        Guid sourceId, bool restoreSourceSelection = true)
     {
         if (!_recoveryTabs.Remove(sourceId, out var view)) return;
+        // TabControl may auto-select a neighbor when an item is removed:
+        // capture which tab actually held focus BEFORE removing it.
+        bool wasSelected = ReferenceEquals(_tabs.SelectedItem, view);
         if (view.Content is IDisposable disposable) disposable.Dispose();
         _items.Remove(view);
-        if (_tabs.SelectedItem is null || ReferenceEquals(_tabs.SelectedItem, view))
+        if (!wasSelected) return;
+
+        if (restoreSourceSelection &&
+            _views.TryGetValue(sourceId, out var sourceTab))
+        {
+            _tabs.SelectedItem = sourceTab;
+            return;
+        }
+
+        if (!restoreSourceSelection)
+        {
+            // The source has already been removed from _views/_workspace.
+            // Never move focus back to a document that is being closed.
+            if (_workspace.ActiveId is { } nextId &&
+                _views.TryGetValue(nextId, out var nextTab))
+            {
+                _tabs.SelectedItem = nextTab;
+                return;
+            }
+            _tabs.SelectedIndex = 0;
+            return;
+        }
+
+        if (_workspace.ActiveId is { } activeId &&
+            _views.TryGetValue(activeId, out var fallbackTab))
+            _tabs.SelectedItem = fallbackTab;
+        else
             _tabs.SelectedIndex = 0;
     }
 
