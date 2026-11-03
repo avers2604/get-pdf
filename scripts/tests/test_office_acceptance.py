@@ -13,6 +13,24 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27ay_recovery_folder_unavailable_is_not_empty_or_release_ready(self):
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            source = "recovery-folder-state-source-tests"
+            self.assertEqual(1, names.count(source))
+            self.assertLess(names.index(source), names.index("solution-restore"))
+            target = next(step for step in steps if step.name == source)
+            self.assertIn("test_recovery_folder_state_contract.py", target.command)
+            report = acceptance.new_report("f" * 40, host, "GD-31I")
+            for manual in (
+                "gd31j27ay-recovery-folder-state-windows-ntfs-manual-e2e",
+                "gd31j27ay-recovery-folder-state-astra-smb-manual-e2e",
+            ):
+                self.assertIn(manual, acceptance.MANUAL_GATES)
+                self.assertEqual("not-run", report["manualAcceptance"][manual])
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27ax_corrupt_json_cleanup_and_acl_evidence_remains_manual(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
