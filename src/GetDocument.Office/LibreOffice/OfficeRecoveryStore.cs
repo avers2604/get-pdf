@@ -95,6 +95,107 @@ public sealed class OfficeRecoveryStore
         }
     }
 
+    /// <summary>
+    /// Read-only list of possible interrupted recovery artifacts for ONE source.
+    /// The mere presence or age of a file does not prove the writer has exited.
+    /// Never opens file contents, deletes anything, or authorizes restoration.
+    /// The scan is non-recursive and bounded across ALL directory entries.
+    /// </summary>
+    public OfficeRecoveryIncompleteInventory InspectIncomplete(
+        string sourcePath, int maxEntries = 256,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (maxEntries is < 1 or > 1024)
+            throw new ArgumentOutOfRangeException(nameof(maxEntries),
+                "Допустимый предел осмотра — от 1 до 1024 записей.");
+        string source = CanonicalSource(sourcePath);
+        string extension = AllowedExtension(source);
+        string folder = FolderFor(source);
+
+        // Do not follow linked/junction roots even when the last component
+        // is missing. This remains a path-based inspection, not a sandbox.
+        RejectLinkedDirectories(folder);
+        if (!Directory.Exists(folder))
+            return new OfficeRecoveryIncompleteInventory(
+                Array.Empty<OfficeRecoveryIncompleteCandidate>(), false);
+
+        var candidates = new List<OfficeRecoveryIncompleteCandidate>();
+        bool truncated = false;
+        int visited = 0;
+        foreach (string entry in Directory.EnumerateFileSystemEntries(
+                     folder, "*", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (++visited > maxEntries)
+            {
+                truncated = true;
+                break;
+            }
+
+            string name = Path.GetFileName(entry);
+            if (!TryClassifyIncompleteName(name, extension, out var kind))
+                continue;
+
+            // FileInfo.LinkTarget can identify a dangling symlink without
+            // opening its target. Never read file bytes, hashes or JSON here.
+            OfficeRecoveryIncompleteStatus status;
+            long? length = null;
+            DateTimeOffset? changed = null;
+            try
+            {
+                var metadata = new FileInfo(entry);
+                metadata.Refresh();
+                if (metadata.LinkTarget is not null ||
+                    (metadata.Attributes & (FileAttributes.ReparsePoint |
+                                            FileAttributes.Directory |
+                                            FileAttributes.Device)) != 0)
+                {
+                    status = OfficeRecoveryIncompleteStatus.UntrustedLinkOrNonFile;
+                }
+                else
+                {
+                    length = metadata.Length;
+                    changed = new DateTimeOffset(metadata.LastWriteTimeUtc, TimeSpan.Zero);
+                    status = OfficeRecoveryIncompleteStatus.RegularUnverified;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                                       System.Security.SecurityException)
+            {
+                // Concurrent disappearance / inaccessible metadata is NOT a
+                // clean bill of health. Expose no external target details.
+                status = OfficeRecoveryIncompleteStatus.MetadataUnavailable;
+            }
+
+            candidates.Add(new OfficeRecoveryIncompleteCandidate(
+                name, kind, status, length, changed));
+        }
+
+        return new OfficeRecoveryIncompleteInventory(
+            candidates.OrderBy(item => item.FileName, StringComparer.Ordinal).ToArray(),
+            truncated);
+    }
+
+    private static bool TryClassifyIncompleteName(
+        string fileName, string extension, out OfficeRecoveryIncompleteKind kind)
+    {
+        const int GuidLength = 32;
+        kind = default;
+        if (fileName.Length <= GuidLength)
+            return false;
+
+        string tail = fileName[GuidLength..];
+        if (tail.Equals(".part" + extension, StringComparison.OrdinalIgnoreCase))
+            kind = OfficeRecoveryIncompleteKind.StagedOfficeCopy;
+        else if (tail.Equals(".json.tmp", StringComparison.OrdinalIgnoreCase))
+            kind = OfficeRecoveryIncompleteKind.TemporaryManifest;
+        else
+            return false;
+
+        return Guid.TryParseExact(fileName[..GuidLength], "N", out _);
+    }
+
     public OfficeRecoveryCopy? FindLatest(string sourcePath)
     {
         string source = CanonicalSource(sourcePath);
@@ -362,3 +463,35 @@ public sealed class OfficeRecoveryStore
 }
 
 public sealed record OfficeRecoveryCopy(string FilePath, DateTimeOffset CapturedUtc);
+
+public enum OfficeRecoveryIncompleteKind
+{
+    StagedOfficeCopy,
+    TemporaryManifest
+}
+
+public enum OfficeRecoveryIncompleteStatus
+{
+    RegularUnverified,
+    UntrustedLinkOrNonFile,
+    MetadataUnavailable
+}
+
+/// <summary>
+/// FileName contains ONLY the final name in the per-source folder, not an
+/// arbitrary filesystem path. All metadata is unverified and read-only.
+/// </summary>
+public sealed record OfficeRecoveryIncompleteCandidate(
+    string FileName,
+    OfficeRecoveryIncompleteKind Kind,
+    OfficeRecoveryIncompleteStatus Status,
+    long? LengthBytes,
+    DateTimeOffset? LastWriteUtc);
+
+/// <summary>
+/// Truncated=true means the inspector hit its budget and is NOT an exhaustive
+/// list. It never grants deletion, restoration or production SaveAs rights.
+/// </summary>
+public sealed record OfficeRecoveryIncompleteInventory(
+    IReadOnlyList<OfficeRecoveryIncompleteCandidate> Candidates,
+    bool Truncated);
