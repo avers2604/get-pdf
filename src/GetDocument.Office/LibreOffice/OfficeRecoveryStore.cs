@@ -124,7 +124,17 @@ public sealed class OfficeRecoveryStore
     public OfficeRecoveryIncompleteInventory InspectIncomplete(
         string sourcePath, int maxEntries = 256,
         CancellationToken cancellationToken = default)
+        => InspectIncompleteWithEnumerator(sourcePath, maxEntries, cancellationToken,
+            folder => Directory.EnumerateFileSystemEntries(
+                folder, "*", SearchOption.TopDirectoryOnly));
+
+    // Internal seam for deterministic faults AFTER a successful directory
+    // probe; never treats a failed enumeration as a clean, empty inventory.
+    internal OfficeRecoveryIncompleteInventory InspectIncompleteWithEnumerator(
+        string sourcePath, int maxEntries, CancellationToken cancellationToken,
+        Func<string, IEnumerable<string>> enumerateEntries)
     {
+        ArgumentNullException.ThrowIfNull(enumerateEntries);
         cancellationToken.ThrowIfCancellationRequested();
         if (maxEntries is < 1 or > 1024)
             throw new ArgumentOutOfRangeException(nameof(maxEntries),
@@ -136,15 +146,14 @@ public sealed class OfficeRecoveryStore
         // Do not follow linked/junction roots even when the last component
         // is missing. This remains a path-based inspection, not a sandbox.
         RejectLinkedDirectories(folder);
-        if (!Directory.Exists(folder))
+        if (!RecoveryFolderExists(folder))
             return new OfficeRecoveryIncompleteInventory(
                 Array.Empty<OfficeRecoveryIncompleteCandidate>(), false);
 
         var candidates = new List<OfficeRecoveryIncompleteCandidate>();
         bool truncated = false;
         int visited = 0;
-        foreach (string entry in Directory.EnumerateFileSystemEntries(
-                     folder, "*", SearchOption.TopDirectoryOnly))
+        foreach (string entry in enumerateEntries(folder))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (++visited > maxEntries)
@@ -217,14 +226,22 @@ public sealed class OfficeRecoveryStore
     }
 
     public OfficeRecoveryCopy? FindLatest(string sourcePath)
+        => FindLatestWithEnumerator(sourcePath,
+            folder => Directory.EnumerateFiles(folder, "*.json"));
+
+    // An enumeration that fails after the probe (including lazy MoveNext)
+    // must propagate its OS error instead of returning a partial/empty scan.
+    internal OfficeRecoveryCopy? FindLatestWithEnumerator(
+        string sourcePath, Func<string, IEnumerable<string>> enumerateManifests)
     {
+        ArgumentNullException.ThrowIfNull(enumerateManifests);
         string source = CanonicalSource(sourcePath);
         string extension = AllowedExtension(source);
         string folder = FolderFor(source);
         RejectLinkedDirectories(folder);
-        if (!Directory.Exists(folder)) return null;
+        if (!RecoveryFolderExists(folder)) return null;
         OfficeRecoveryCopy? latest = null;
-        foreach (string manifestPath in Directory.EnumerateFiles(folder, "*.json"))
+        foreach (string manifestPath in enumerateManifests(folder))
         {
             var candidate = ReadValidCopy(source, extension, manifestPath);
             if (candidate is not null && (latest is null || candidate.CapturedUtc > latest.CapturedUtc))
@@ -240,7 +257,7 @@ public sealed class OfficeRecoveryStore
         string extension = AllowedExtension(source);
         string folder = FolderFor(source);
         RejectLinkedDirectories(folder);
-        if (!Directory.Exists(folder)) return;
+        if (!RecoveryFolderExists(folder)) return;
         foreach (string manifest in Directory.EnumerateFiles(folder, "*.json"))
         {
             // Path equality in a manifest does NOT prove the sibling copy
@@ -462,6 +479,37 @@ public sealed class OfficeRecoveryStore
         if (extension is not (".docx" or ".xlsx" or ".pptx"))
             throw new NotSupportedException("Аварийное восстановление допускает только DOCX, XLSX и PPTX.");
         return extension;
+    }
+
+    /// <summary>
+    /// Only a confirmed missing directory means "no recovery files".
+    /// Directory.Exists returns false for some ACL/IO failures as well as
+    /// absence, so it is NOT suitable for recovery status decisions.
+    /// Other failures deliberately propagate to the caller (and the UI).
+    /// A network host reporting "path not found" is indistinguishable from
+    /// genuine absence at this OS API level; see the manual SMB gate.
+    /// </summary>
+    internal static bool RecoveryFolderExists(
+        string folder, Func<string, FileAttributes>? getAttributes = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(folder);
+        try
+        {
+            FileAttributes attributes = (getAttributes ?? File.GetAttributes)(folder);
+            if ((attributes & FileAttributes.Directory) == 0 ||
+                (attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException(
+                    "Путь аварийного восстановления не является обычным каталогом.");
+            return true;
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return false;
+        }
     }
 
     private string FolderFor(string source)
