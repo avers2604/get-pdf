@@ -199,7 +199,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
 
     def test_verified_deletion_rejects_missing_or_linked_parts(self):
         delete = self.store.split("private static bool TryDeleteVerifiedPart(", 1)[1].split(
-            "private static void TryDelete(", 1)[0]
+            "internal static void TryDelete(", 1)[0]
         self.assertIn("if (!file.Exists || IsLinkedFile(file)", delete)
         self.assertIn("FileAttributes.ReparsePoint", delete)
         self.assertIn("return false;", delete)
@@ -219,6 +219,58 @@ class RecoveryChainIntegrity(unittest.TestCase):
             with self.subTest(case=case):
                 self.assertIn(case, tests)
         self.assertEqual(4, tests.count("[TestMethod]"))
+
+    def test_manifest_and_copy_security_denials_are_isolated_per_candidate(self):
+        read_manifest = self.store.split(
+            "private static RecoveryManifest? ReadManifest(", 1
+        )[1].split("private static void EnsureValidPackage(", 1)[0]
+        read_copy = self.store.split("private OfficeRecoveryCopy? ReadValidCopy(", 1
+                                    )[1].split("private void Prune(", 1)[0]
+        for label, method in (("json", read_manifest), ("copy", read_copy)):
+            with self.subTest(label=label):
+                self.assertIn("System.Security.SecurityException", method)
+                self.assertIn("return null;", method)
+        self.assertIn("JsonException", read_manifest)
+        self.assertIn("NotSupportedException", read_copy)
+        self.assertIn("if (IsLinkedFile(info) || info.Length > 2048) return null;",
+                      read_manifest)
+
+    def test_temporary_cleanup_is_best_effort_for_expected_denials_only(self):
+        cleanup = self.store.split("internal static void TryDelete(", 1)[1].split(
+            "private sealed record RecoveryManifest(", 1
+        )[0]
+        for marker in (
+            "Action<string>? deleteFile = null",
+            "if (deleteFile is null) File.Delete(path);",
+            "else deleteFile(path);",
+            "IOException or UnauthorizedAccessException",
+            "System.Security.SecurityException",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, "internal static void TryDelete(" + cleanup)
+        self.assertNotIn("catch (Exception)", cleanup)
+        self.assertNotIn("catch {", cleanup)
+
+    def test_json_and_cleanup_regressions_are_written_without_real_user_files(self):
+        for case in (
+            "FindLatestSkipsMalformedAndOversizedJsonAndKeepsValidCopy",
+            "FindLatestFallsBackToOlderValidCopyWhenNewerIsCorrupted",
+        ):
+            with self.subTest(case=case):
+                self.assertIn(case, self.store_tests)
+        test_file = ROOT / "tests/GetDocument.Office.Tests/OfficeRecoveryCleanupFailureTests.cs"
+        tests = test_file.read_text(encoding="utf-8")
+        for case in (
+            "IoCleanupDenialDoesNotReplacePrimaryExportFailure",
+            "AccessDeniedCleanupDoesNotReplacePrimaryExportFailure",
+            "SecurityPolicyCleanupDenialIsBestEffort",
+            "UnexpectedProgrammingErrorsAreNotSilentlyIgnored",
+        ):
+            with self.subTest(case=case):
+                self.assertIn(case, tests)
+        self.assertEqual(4, tests.count("[TestMethod]"))
+        self.assertIn("InternalsVisibleTo", (ROOT /
+            "src/GetDocument.Office/GetDocument.Office.csproj").read_text(encoding="utf-8"))
 
     def test_no_new_user_data_operations_in_diagnostics_pane(self):
         for forbidden in (
