@@ -93,6 +93,13 @@ class RecoveryChainIntegrity(unittest.TestCase):
         self.assertIn("CloseRecoveryDiagnostics(id, restoreSourceSelection: false);",
                       self.window)
 
+    def test_old_ui_contract_uses_per_inspection_token_not_disposed_parent(self):
+        legacy = (TESTS / "test_recovery_diagnostics_ui_contract.py").read_text(
+            encoding="utf-8")
+        self.assertNotIn('CancellationToken token = _lifetime.Token;', legacy)
+        self.assertIn('CancellationToken token = inspection.Token;', legacy)
+        self.assertIn('CreateLinkedTokenSource(', self.pane)
+
     def test_no_new_user_data_operations_in_diagnostics_pane(self):
         for forbidden in (
             "File.Delete(", "File.Move(", "File.Read", "File.Write",
