@@ -188,6 +188,80 @@ public sealed class OfficeRecoveryIncompleteInventoryTests
         Assert.IsFalse(Directory.Exists(fixture.RecoveryRoot));
     }
 
+    [TestMethod]
+    public void RenamedFinalCopyWithoutManifestIsListedOnlyAsUnverifiedCandidate()
+    {
+        using var fixture = new Scratch();
+        string folder = fixture.CreateSourceRecoveryFolder();
+        string name = Guid.NewGuid().ToString("N") + ".docx";
+        string orphan = Path.Combine(folder, name);
+        File.WriteAllText(orphan, "SYNTHETIC_NOT_RESTORABLE");
+
+        var inventory = new OfficeRecoveryStore(fixture.RecoveryRoot)
+            .InspectIncomplete(fixture.Source);
+        var candidate = inventory.Candidates.Single();
+
+        Assert.AreEqual(name, candidate.FileName);
+        Assert.AreEqual(OfficeRecoveryIncompleteKind.FinalCopyWithoutObservedManifest,
+            candidate.Kind);
+        Assert.AreEqual(OfficeRecoveryIncompleteStatus.RegularUnverified, candidate.Status);
+        Assert.IsFalse(inventory.Truncated);
+        Assert.AreEqual("SYNTHETIC_NOT_RESTORABLE", File.ReadAllText(orphan));
+    }
+
+    [TestMethod]
+    public void FinalCopyWithEvenMalformedManifestIsNotCalledOrphan()
+    {
+        using var fixture = new Scratch();
+        string folder = fixture.CreateSourceRecoveryFolder();
+        string id = Guid.NewGuid().ToString("N");
+        File.WriteAllText(Path.Combine(folder, id + ".docx"), "COPY_UNVERIFIED");
+        File.WriteAllText(Path.Combine(folder, id + ".json"), "INVALID_JSON");
+
+        var inventory = new OfficeRecoveryStore(fixture.RecoveryRoot)
+            .InspectIncomplete(fixture.Source);
+        Assert.AreEqual(0, inventory.Candidates.Count);
+        Assert.IsFalse(inventory.Truncated);
+    }
+
+    [TestMethod]
+    public void TruncatedEnumerationMustNotClaimFinalCopyHasNoManifest()
+    {
+        using var fixture = new Scratch();
+        string folder = fixture.CreateSourceRecoveryFolder();
+        string id = Guid.NewGuid().ToString("N");
+        string copy = Path.Combine(folder, id + ".docx");
+        string manifest = Path.Combine(folder, id + ".json");
+        File.WriteAllText(copy, "COPY");
+        File.WriteAllText(manifest, "MANIFEST");
+
+        // Order is deterministic; the real enumerator is not.
+        var inventory = new OfficeRecoveryStore(fixture.RecoveryRoot)
+            .InspectIncompleteWithEnumerator(fixture.Source, 1, CancellationToken.None,
+                _ => new[] { copy, manifest });
+
+        Assert.IsTrue(inventory.Truncated);
+        Assert.IsFalse(inventory.Candidates.Any(c =>
+            c.Kind == OfficeRecoveryIncompleteKind.FinalCopyWithoutObservedManifest));
+        Assert.AreEqual("COPY", File.ReadAllText(copy));
+        Assert.AreEqual("MANIFEST", File.ReadAllText(manifest));
+    }
+
+    [TestMethod]
+    public void FinalCopyForOtherFormatOrNonGuidNameIsNeverClassified()
+    {
+        using var fixture = new Scratch();
+        string folder = fixture.CreateSourceRecoveryFolder();
+        File.WriteAllText(Path.Combine(folder, Guid.NewGuid().ToString("N") + ".xlsx"),
+            "OTHER");
+        File.WriteAllText(Path.Combine(folder, "not-a-guid.docx"), "FOREIGN");
+
+        var inventory = new OfficeRecoveryStore(fixture.RecoveryRoot)
+            .InspectIncomplete(fixture.Source);
+        Assert.AreEqual(0, inventory.Candidates.Count);
+        Assert.IsFalse(inventory.Truncated);
+    }
+
     private sealed class Scratch : IDisposable
     {
         public string Root { get; } = Path.Combine(Path.GetTempPath(),
