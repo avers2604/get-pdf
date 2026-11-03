@@ -495,7 +495,9 @@ public sealed class OfficeRecoveryStore
         ArgumentException.ThrowIfNullOrWhiteSpace(folder);
         try
         {
-            FileAttributes attributes = (getAttributes ?? File.GetAttributes)(folder);
+            FileAttributes attributes = getAttributes is null
+                ? File.GetAttributes(folder)
+                : getAttributes(folder);
             if ((attributes & FileAttributes.Directory) == 0 ||
                 (attributes & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidDataException(
