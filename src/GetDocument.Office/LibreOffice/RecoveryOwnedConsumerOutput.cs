@@ -135,6 +135,10 @@ internal sealed class RecoveryOwnedConsumerOutput : IDisposable, IAsyncDisposabl
             source.Position = 0;
             using var view = new RevocableReadOnlyStream(source, abort);
             T result = await reader(view, abort);
+            // Revoke access immediately when callback returns, BEFORE
+            // post-read SHA/ZIP verification. A retained wrapper cannot
+            // read concurrently with this final integrity check.
+            view.Dispose();
             abort.ThrowIfCancellationRequested();
 
             // A consumer might have read an inconsistent or mutated stream.
@@ -291,7 +295,10 @@ internal sealed class RecoveryOwnedConsumerOutput : IDisposable, IAsyncDisposabl
         public override long Seek(long offset, SeekOrigin origin) =>
             Check().Seek(offset, origin);
 
-        public override void Flush() => _ = Check();
+        public override void Flush()
+        {
+            _ = Check();
+        }
 
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) =>
