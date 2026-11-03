@@ -93,7 +93,7 @@ class RecoveryFastSelectionSourceContract(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 self.assertIn(name, self.tests)
-        self.assertEqual(3, self.tests.count("[TestMethod]"))
+        self.assertEqual(7, self.tests.count("[TestMethod]"))
         self.assertIn("FindLatestWithEnumerator(", self.tests)
         self.assertIn("Assert.ThrowsExactly<InvalidDataException>", self.tests)
 
