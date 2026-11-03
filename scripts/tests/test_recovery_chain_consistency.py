@@ -78,7 +78,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
                 self.assertIn('"-p", "' + file_name + '"', self.runner)
 
     def test_registered_recovery_manual_gates_are_unique_and_not_automated(self):
-        all_gates = re.findall(r'    "(gd31j27a[lnopqrstuvw][^"]+-manual-e2e)",',
+        all_gates = re.findall(r'    "(gd31j27a[lnopqrstuvwx][^"]+-manual-e2e)",',
                                self.runner)
         self.assertEqual(len(all_gates), len(set(all_gates)))
         self.assertGreaterEqual(len(all_gates), 8)
