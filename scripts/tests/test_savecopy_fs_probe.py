@@ -35,7 +35,7 @@ class ProbeTests(unittest.TestCase):
             try:
                 alias.symlink_to(root, target_is_directory=True)
             except (OSError, NotImplementedError):
-                self.skipTest('Host cannot create a symlink')
+                self.fail('Required symlink security test unavailable; configure disposable VM')
             try:
                 with self.assertRaises(probe.ProbeError):
                     probe.observe(alias)
