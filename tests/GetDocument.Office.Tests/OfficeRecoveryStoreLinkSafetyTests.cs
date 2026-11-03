@@ -55,6 +55,86 @@ public sealed class OfficeRecoveryStoreLinkSafetyTests
     }
 
     [TestMethod]
+    public async Task PreexistingFinalCopyCollisionMustNotDeleteUnrelatedFile()
+    {
+        using var fixture = new RecoveryScratch();
+        var store = new OfficeRecoveryStore(fixture.RecoveryRoot);
+        string? destination = null;
+        const string unrelated = "KEEP_UNRELATED_SNAPSHOT_NAME";
+
+        await Assert.ThrowsExactlyAsync<IOException>(() =>
+            store.CaptureAsync(fixture.Source, temporary =>
+            {
+                File.Copy(fixture.Source, temporary);
+                string id = Path.GetFileName(temporary).Split('.')[0];
+                destination = Path.Combine(Path.GetDirectoryName(temporary)!,
+                    id + ".docx");
+                File.WriteAllText(destination, unrelated);
+                return Task.CompletedTask;
+            }));
+
+        Assert.IsNotNull(destination);
+        Assert.AreEqual(unrelated, File.ReadAllText(destination));
+        Assert.IsTrue(File.Exists(fixture.Source));
+        Assert.IsNull(store.FindLatest(fixture.Source));
+    }
+
+    [TestMethod]
+    public async Task PreexistingRegularTemporaryManifestCollisionMustNotDeleteIt()
+    {
+        using var fixture = new RecoveryScratch();
+        var store = new OfficeRecoveryStore(fixture.RecoveryRoot);
+        string? preexisting = null;
+        const string unrelated = "KEEP_PREEXISTING_MANIFEST_BYTES";
+
+        await Assert.ThrowsExactlyAsync<IOException>(() =>
+            store.CaptureAsync(fixture.Source, temporary =>
+            {
+                File.Copy(fixture.Source, temporary);
+                string id = Path.GetFileName(temporary).Split('.')[0];
+                preexisting = Path.Combine(Path.GetDirectoryName(temporary)!,
+                    id + ".json.tmp");
+                File.WriteAllText(preexisting, unrelated);
+                return Task.CompletedTask;
+            }));
+
+        Assert.IsNotNull(preexisting);
+        Assert.AreEqual(unrelated, File.ReadAllText(preexisting));
+        Assert.IsNull(store.FindLatest(fixture.Source));
+        Assert.IsTrue(File.Exists(fixture.Source));
+    }
+
+    [TestMethod]
+    public async Task PreexistingFinalManifestCollisionDoesNotPublishOrDeleteIt()
+    {
+        using var fixture = new RecoveryScratch();
+        var store = new OfficeRecoveryStore(fixture.RecoveryRoot);
+        string? destination = null;
+        string? failedPublishedCopy = null;
+        const string unrelated = "KEEP_UNRELATED_FINAL_MANIFEST";
+
+        await Assert.ThrowsExactlyAsync<IOException>(() =>
+            store.CaptureAsync(fixture.Source, temporary =>
+            {
+                File.Copy(fixture.Source, temporary);
+                string id = Path.GetFileName(temporary).Split('.')[0];
+                string folder = Path.GetDirectoryName(temporary)!;
+                destination = Path.Combine(folder, id + ".json");
+                failedPublishedCopy = Path.Combine(folder, id + ".docx");
+                File.WriteAllText(destination, unrelated);
+                return Task.CompletedTask;
+            }));
+
+        Assert.IsNotNull(destination);
+        Assert.IsNotNull(failedPublishedCopy);
+        Assert.AreEqual(unrelated, File.ReadAllText(destination));
+        Assert.IsFalse(File.Exists(failedPublishedCopy),
+            "Only the copy successfully published by this failed capture may be removed.");
+        Assert.IsNull(store.FindLatest(fixture.Source));
+        Assert.IsTrue(File.Exists(fixture.Source));
+    }
+
+    [TestMethod]
     public async Task LatestRecoveryCopyMustNotBeSymlinkedToValidOriginal()
     {
         using var fixture = new RecoveryScratch();
