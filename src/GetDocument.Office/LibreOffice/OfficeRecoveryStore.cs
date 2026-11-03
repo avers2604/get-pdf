@@ -257,15 +257,40 @@ public sealed class OfficeRecoveryStore
         // a fresh full manifest, SHA-256 and ZIP/XML check before returning.
         // Invalid or foreign manifests never enter the expensive queue.
         DateTimeOffset latestAllowed = DateTimeOffset.UtcNow.AddMinutes(5);
-        var ordered = manifestPaths
+        var observations = manifestPaths
             .Where(path => Guid.TryParseExact(
                 Path.GetFileNameWithoutExtension(path), "N", out _))
             .Select(path => new { Path = path, Metadata = ReadManifest(path) })
+            .ToArray();
+        var ordered = observations
             .Where(entry => entry.Metadata is not null &&
                 string.Equals(entry.Metadata.SourcePath, source, PathComparison) &&
                 entry.Metadata.CapturedUtc != default &&
                 entry.Metadata.CapturedUtc <= latestAllowed)
             .OrderByDescending(entry => entry.Metadata!.CapturedUtc);
+
+        // A preliminary JSON timestamp is an untrusted ordering hint.
+        // Concurrent edits to any observed manifest, or additions/removals
+        // from the manifest set, invalidate the entire selection. Never return
+        // a partially checked newest candidate on a moving dataset.
+        void EnsureSurveyStillValid()
+        {
+            string[] currentPaths = enumerateManifests(folder)
+                .Take(MaxManifestCandidates + 1).ToArray();
+            var comparer = OperatingSystem.IsWindows()
+                ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+            if (currentPaths.Length > MaxManifestCandidates ||
+                currentPaths.Length != manifestPaths.Length ||
+                !new HashSet<string>(manifestPaths, comparer).SetEquals(currentPaths))
+                throw new InvalidDataException(
+                    "Набор манифестов изменился во время поиска аварийных копий.");
+            foreach (var observation in observations)
+            {
+                if (!Equals(observation.Metadata, ReadManifest(observation.Path)))
+                    throw new InvalidDataException(
+                        "Манифест изменился во время поиска аварийных копий.");
+            }
+        }
 
         foreach (var entry in ordered)
         {
@@ -275,8 +300,17 @@ public sealed class OfficeRecoveryStore
                 ? ReadValidCopy(source, extension, entry.Path)
                 : verifyCandidate(entry.Path);
             if (candidate is not null)
+            {
+                // A manifest can change between preliminary sort and the
+                // final candidate check. Reject stale ranking, not just hashes.
+                if (candidate.CapturedUtc != entry.Metadata!.CapturedUtc)
+                    throw new InvalidDataException(
+                        "Время манифеста изменилось во время проверки копии.");
+                EnsureSurveyStillValid();
                 return candidate;
+            }
         }
+        EnsureSurveyStillValid();
         return null;
     }
 
@@ -303,7 +337,18 @@ public sealed class OfficeRecoveryStore
         }
     }
 
-    private OfficeRecoveryCopy? ReadValidCopy(string source, string extension, string manifestPath)
+    // Internal-only test seam to simulate a file edit precisely after SHA
+    // calculation. Normal production search never supplies this callback.
+    internal OfficeRecoveryCopy? ReadValidCopyWithPostHashMutation(
+        string sourcePath, string manifestPath, Action<string> afterHash)
+    {
+        ArgumentNullException.ThrowIfNull(afterHash);
+        string source = CanonicalSource(sourcePath);
+        return ReadValidCopy(source, AllowedExtension(source), manifestPath, afterHash);
+    }
+
+    private OfficeRecoveryCopy? ReadValidCopy(
+        string source, string extension, string manifestPath, Action<string>? afterHash = null)
     {
         string name = Path.GetFileNameWithoutExtension(manifestPath);
         if (!Guid.TryParseExact(name, "N", out _)) return null;
@@ -320,12 +365,24 @@ public sealed class OfficeRecoveryStore
             if (!info.Exists || info.Length == 0 || info.Length > MaxCopyBytes ||
                 IsLinkedFile(info))
                 return null;
+            long beforeLength = info.Length;
+            DateTime beforeModifiedUtc = info.LastWriteTimeUtc;
             string sha = HashFile(copy);
             if (!string.Equals(sha, manifest.Sha256, StringComparison.OrdinalIgnoreCase))
                 return null; // avoid costly ZIP inflation for tampered copies
+            afterHash?.Invoke(copy);
             // Still fully re-check ZIP/XML, length and link status after hash.
             // Never accept a copy on SHA or cached metadata alone.
             EnsureValidPackage(copy, extension);
+            var after = new FileInfo(copy);
+            after.Refresh();
+            // This detects ordinary concurrent replacement or modification.
+            // Equal-size/equal-timestamp hostile swaps still require an OS
+            // handle-bound verification protocol (not provided here).
+            if (!after.Exists || IsLinkedFile(after) ||
+                after.Length != beforeLength ||
+                after.LastWriteTimeUtc != beforeModifiedUtc)
+                return null;
             return new OfficeRecoveryCopy(copy, manifest.CapturedUtc);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or
