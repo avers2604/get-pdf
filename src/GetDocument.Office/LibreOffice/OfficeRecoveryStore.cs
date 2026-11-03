@@ -19,6 +19,9 @@ public sealed class OfficeRecoveryStore
     private const int MaxEntryCount = 4096;
     private const int MaxCompressionRatio = 500;
     private const int RetainedCopies = 3;
+    // Bound manifest path materialization independently of ZIP entry count.
+    // Over-budget lookup fails with an error, never with "no copies".
+    private const int MaxManifestCandidates = 4096;
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     private readonly string _root;
@@ -232,7 +235,8 @@ public sealed class OfficeRecoveryStore
     // An enumeration that fails after the probe (including lazy MoveNext)
     // must propagate its OS error instead of returning a partial/empty scan.
     internal OfficeRecoveryCopy? FindLatestWithEnumerator(
-        string sourcePath, Func<string, IEnumerable<string>> enumerateManifests)
+        string sourcePath, Func<string, IEnumerable<string>> enumerateManifests,
+        Func<string, OfficeRecoveryCopy?>? verifyCandidate = null)
     {
         ArgumentNullException.ThrowIfNull(enumerateManifests);
         string source = CanonicalSource(sourcePath);
@@ -240,14 +244,40 @@ public sealed class OfficeRecoveryStore
         string folder = FolderFor(source);
         RejectLinkedDirectories(folder);
         if (!RecoveryFolderExists(folder)) return null;
-        OfficeRecoveryCopy? latest = null;
-        foreach (string manifestPath in enumerateManifests(folder))
+
+        // Complete bounded enumeration FIRST. If lazy MoveNext fails at any
+        // point, do not publish an incomplete or falsely empty selection.
+        string[] manifestPaths = enumerateManifests(folder)
+            .Take(MaxManifestCandidates + 1).ToArray();
+        if (manifestPaths.Length > MaxManifestCandidates)
+            throw new InvalidDataException(
+                "Слишком много манифестов аварийных копий для безопасной проверки.");
+
+        // Cheap JSON metadata is only a sorting HINT. A candidate still gets
+        // a fresh full manifest, SHA-256 and ZIP/XML check before returning.
+        // Invalid or foreign manifests never enter the expensive queue.
+        DateTimeOffset latestAllowed = DateTimeOffset.UtcNow.AddMinutes(5);
+        var ordered = manifestPaths
+            .Where(path => Guid.TryParseExact(
+                Path.GetFileNameWithoutExtension(path), "N", out _))
+            .Select(path => new { Path = path, Metadata = ReadManifest(path) })
+            .Where(entry => entry.Metadata is not null &&
+                string.Equals(entry.Metadata.SourcePath, source, PathComparison) &&
+                entry.Metadata.CapturedUtc != default &&
+                entry.Metadata.CapturedUtc <= latestAllowed)
+            .OrderByDescending(entry => entry.Metadata!.CapturedUtc);
+
+        foreach (var entry in ordered)
         {
-            var candidate = ReadValidCopy(source, extension, manifestPath);
-            if (candidate is not null && (latest is null || candidate.CapturedUtc > latest.CapturedUtc))
-                latest = candidate;
+            // The optional delegate is internal-only deterministic test
+            // instrumentation; real callers ALWAYS use ReadValidCopy.
+            OfficeRecoveryCopy? candidate = verifyCandidate is null
+                ? ReadValidCopy(source, extension, entry.Path)
+                : verifyCandidate(entry.Path);
+            if (candidate is not null)
+                return candidate;
         }
-        return latest;
+        return null;
     }
 
     /// <summary>Call only after the original file has been saved successfully and without conflict.</summary>
@@ -283,9 +313,19 @@ public sealed class OfficeRecoveryStore
         string copy = Path.Combine(FolderFor(source), name + extension);
         try
         {
-            EnsureValidPackage(copy, extension);
+            // Before hashing, refuse linked, missing and oversized paths.
+            // This preflight is required: hashing before the ZIP guard without
+            // it could follow an unsafe symlink or read arbitrary huge bytes.
+            var info = new FileInfo(copy);
+            if (!info.Exists || info.Length == 0 || info.Length > MaxCopyBytes ||
+                IsLinkedFile(info))
+                return null;
             string sha = HashFile(copy);
-            if (!string.Equals(sha, manifest.Sha256, StringComparison.OrdinalIgnoreCase)) return null;
+            if (!string.Equals(sha, manifest.Sha256, StringComparison.OrdinalIgnoreCase))
+                return null; // avoid costly ZIP inflation for tampered copies
+            // Still fully re-check ZIP/XML, length and link status after hash.
+            // Never accept a copy on SHA or cached metadata alone.
+            EnsureValidPackage(copy, extension);
             return new OfficeRecoveryCopy(copy, manifest.CapturedUtc);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or
