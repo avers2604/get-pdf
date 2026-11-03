@@ -39,7 +39,12 @@ public sealed class OfficeRecoveryStore
 
         string extension = AllowedExtension(source);
         string folder = FolderFor(source);
+        // Refuse recovery roots, parents or per-document folders that are
+        // symbolic links/junctions. Check before and after directory creation.
+        // These checks fail closed; they do not defeat hostile TOCTOU changes.
+        RejectLinkedDirectories(folder);
         Directory.CreateDirectory(folder);
+        RejectLinkedDirectories(folder);
         string name = Guid.NewGuid().ToString("N");
         string temporaryCopy = Path.Combine(folder, name + ".part" + extension);
         string finalCopy = Path.Combine(folder, name + extension);
@@ -75,6 +80,7 @@ public sealed class OfficeRecoveryStore
         string source = CanonicalSource(sourcePath);
         string extension = AllowedExtension(source);
         string folder = FolderFor(source);
+        RejectLinkedDirectories(folder);
         if (!Directory.Exists(folder)) return null;
         OfficeRecoveryCopy? latest = null;
         foreach (string manifestPath in Directory.EnumerateFiles(folder, "*.json"))
@@ -92,6 +98,7 @@ public sealed class OfficeRecoveryStore
         string source = CanonicalSource(sourcePath);
         string extension = AllowedExtension(source);
         string folder = FolderFor(source);
+        RejectLinkedDirectories(folder);
         if (!Directory.Exists(folder)) return;
         foreach (string manifest in Directory.EnumerateFiles(folder, "*.json"))
         {
@@ -143,12 +150,37 @@ public sealed class OfficeRecoveryStore
         }
     }
 
+    /// <summary>
+    /// Do not traverse pre-existing symbolic links or junctions anywhere in
+    /// the recovery tree. Missing components are permitted only before mkdir;
+    /// filesystem race resistance requires an OS-handle-bound implementation.
+    /// </summary>
+    private static void RejectLinkedDirectories(string directory)
+    {
+        for (DirectoryInfo? part = new(directory); part is not null; part = part.Parent)
+        {
+            part.Refresh();
+            // LinkTarget is needed even if Exists is false for a broken link.
+            if (part.LinkTarget is not null ||
+                (part.Exists && (part.Attributes & FileAttributes.ReparsePoint) != 0))
+                throw new InvalidDataException(
+                    "Аварийное восстановление через символическую ссылку или junction запрещено.");
+        }
+    }
+
+    private static bool IsLinkedFile(FileInfo file)
+    {
+        file.Refresh();
+        return file.LinkTarget is not null ||
+               (file.Exists && (file.Attributes & FileAttributes.ReparsePoint) != 0);
+    }
+
     private static RecoveryManifest? ReadManifest(string path)
     {
         try
         {
             var info = new FileInfo(path);
-            if (info.Length > 2048) return null;
+            if (IsLinkedFile(info) || info.Length > 2048) return null;
             return JsonSerializer.Deserialize<RecoveryManifest>(File.ReadAllText(path));
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
@@ -162,6 +194,8 @@ public sealed class OfficeRecoveryStore
         var info = new FileInfo(path);
         if (!info.Exists || info.Length == 0 || info.Length > MaxCopyBytes)
             throw new InvalidDataException("Резервная копия отсутствует или превышает лимит 128 МиБ.");
+        if (IsLinkedFile(info))
+            throw new InvalidDataException("Символическая ссылка не является независимой резервной копией.");
 
         // This is a bounded ZIP envelope check, NOT a complete OOXML semantic check or AV scan.
         // Reuse the same ZIP safety limits as the server's OfficePackageGuard where practical,
