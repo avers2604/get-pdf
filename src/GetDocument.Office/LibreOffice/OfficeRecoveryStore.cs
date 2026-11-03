@@ -89,6 +89,10 @@ public sealed class OfficeRecoveryStore
             if (IsLinkedFile(new FileInfo(finalCopy)) ||
                 IsLinkedFile(new FileInfo(temporaryManifest)))
                 throw new InvalidDataException("Аварийная копия или манифест подменены ссылкой.");
+            // Final cooperative cancellation checkpoint before the manifest
+            // becomes the commit marker. After File.Move succeeds the
+            // snapshot is published and must not be rolled back on cancel.
+            cancellationToken.ThrowIfCancellationRequested();
             File.Move(temporaryManifest, finalManifest);
             createdTemporaryManifest = false; // moved to final name
             publishedManifest = true;
