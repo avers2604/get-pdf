@@ -111,7 +111,7 @@ class RecoveryPreOpenSourceContract(unittest.TestCase):
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, self.open)
-        self.assertIn("path-based checks", self.open)
+        self.assertIn("path-based checks", self.store)
 
     def test_manual_os_gates_and_release_block_are_registered(self):
         step = "recovery-preopen-guard-source-tests"
