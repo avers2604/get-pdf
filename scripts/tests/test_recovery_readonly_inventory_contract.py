@@ -40,6 +40,7 @@ class RecoveryInventorySourceContract(unittest.TestCase):
             "if (maxEntries is < 1 or > 1024)",
             "SearchOption.TopDirectoryOnly",
             "if (++visited > maxEntries)",
+            "cancellationToken.ThrowIfCancellationRequested()",
             "truncated = true",
             "FileInfo(entry)",
             "metadata.LinkTarget is not null",
@@ -70,10 +71,12 @@ class RecoveryInventorySourceContract(unittest.TestCase):
             "DifferentDocumentsNeverShareTheSameRecoveryListing",
             "LinkedRecoveryRootIsRejectedBeforeEnumeration",
             "InvalidBudgetAndUnsupportedFileTypeFailBeforeReadingAnything",
+            "DanglingSymlinkIsReportedAsUntrustedWithoutFollowingIt",
+            "CancelledInventoryFailsInsteadOfReportingEmpty",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, self.tests)
-        self.assertEqual(8, self.tests.count("[TestMethod]"))
+        self.assertEqual(10, self.tests.count("[TestMethod]"))
 
 
 if __name__ == "__main__":
