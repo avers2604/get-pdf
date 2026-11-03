@@ -76,8 +76,9 @@ class RecoveryChainIntegrity(unittest.TestCase):
                                self.runner)
         self.assertEqual(len(all_gates), len(set(all_gates)))
         self.assertGreaterEqual(len(all_gates), 8)
-        self.assertIn('return report', self.runner)
-        self.assertIn('"releaseReady"', self.runner)
+        self.assertIn("def new_report(", self.runner)
+        self.assertIn('"manualAcceptance": {name: "not-run" for name in MANUAL_GATES}', self.runner)
+        self.assertIn('"releaseReady": False', self.runner)
 
     def test_no_retired_close_api_assertion_in_active_recovery_tests(self):
         for file_name in (
