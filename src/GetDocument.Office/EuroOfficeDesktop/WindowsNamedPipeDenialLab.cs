@@ -73,7 +73,7 @@ public static class WindowsNamedPipeDenialLab
         await using var pipe = new NamedPipeServerStream(
             pipeName, PipeDirection.InOut, maxNumberOfServerInstances: 1,
             PipeTransmissionMode.Message,
-            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly | PipeOptions.FirstPipeInstance);
 
         await pipe.WaitForConnectionAsync(timeout.Token);
         if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle, out uint connectedPid))
@@ -98,7 +98,8 @@ public static class WindowsNamedPipeDenialLab
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         await using var pipe = new NamedPipeClientStream(
-            ".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            ".", pipeName, PipeDirection.InOut,
+            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         await pipe.ConnectAsync(30_000, timeout.Token);
         pipe.ReadMode = PipeTransmissionMode.Message;
 
