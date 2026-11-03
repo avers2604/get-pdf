@@ -28,6 +28,14 @@ class ProbeTests(unittest.TestCase):
                 probe.observe(root)
             self.assertEqual('DO_NOT_TOUCH', original.read_text())
 
+    def test_reject_noncanonical_dotdot_alias_to_approved_sandbox(self):
+        with tempfile.TemporaryDirectory(prefix=probe.SANDBOX_PREFIX) as dirname:
+            root = Path(dirname)
+            aliased = root / '..' / root.name
+            with self.assertRaises(probe.ProbeError):
+                probe.observe(aliased)
+            self.assertEqual([], list(root.iterdir()))
+
     def test_reject_symlinked_root_without_following_target(self):
         with tempfile.TemporaryDirectory(prefix=probe.SANDBOX_PREFIX) as dirname:
             root = Path(dirname)
