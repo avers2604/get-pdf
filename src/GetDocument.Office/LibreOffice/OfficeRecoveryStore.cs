@@ -272,8 +272,10 @@ public sealed class OfficeRecoveryStore
             return new OfficeRecoveryCopy(copy, manifest.CapturedUtc);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or
-                                   NotSupportedException)
+                                   NotSupportedException or System.Security.SecurityException)
         {
+            // A single unreadable/replaced copy is NOT proof that the other
+            // manifests in this per-document folder are invalid.
             return null;
         }
     }
@@ -329,8 +331,11 @@ public sealed class OfficeRecoveryStore
             if (IsLinkedFile(info) || info.Length > 2048) return null;
             return JsonSerializer.Deserialize<RecoveryManifest>(File.ReadAllText(path));
         }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException or
+                                   System.Security.SecurityException)
         {
+            // Malformed, oversized or access-denied individual JSON entries
+            // are never trusted and do not hide other valid snapshots.
             return null;
         }
     }
@@ -516,12 +521,23 @@ public sealed class OfficeRecoveryStore
         }
     }
 
-    // Cancellation/error cleanup of temporary objects predates this stage;
-    // it is intentionally separate from verified-pair deletion policy.
-    private static void TryDelete(string path)
+    // Error/cancellation cleanup is best-effort: an ACL or OS security-policy
+    // denial must not replace the original exporter failure/cancellation.
+    // The optional internal delegate is solely a deterministic fault-injection
+    // seam for the offline test assembly; production always uses File.Delete.
+    internal static void TryDelete(string path, Action<string>? deleteFile = null)
     {
-        try { File.Delete(path); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        try
+        {
+            if (deleteFile is null) File.Delete(path);
+            else deleteFile(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                                   System.Security.SecurityException)
+        {
+            // Do not hide the original export/cancellation exception.
+            // Unexpected programming errors are intentionally not swallowed.
+        }
     }
 
     private sealed record RecoveryManifest(string SourcePath, DateTimeOffset CapturedUtc, string Sha256);
