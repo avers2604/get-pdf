@@ -20,6 +20,9 @@ class ConcurrentRecoverySelectionSourceContract(unittest.TestCase):
         cls.copy = cls.store.split("private OfficeRecoveryCopy? ReadValidCopy(", 1)[1].split(
             "private void Prune(", 1
         )[0]
+        cls.verify = cls.store.split("internal static bool VerifyOpenedPackage(", 1)[1].split(
+            "private static async Task<string> VerifyAndHashExportAsync(", 1
+        )[0]
 
     def test_snapshot_is_materialized_before_candidate_sorting(self):
         self.assertIn("var observations = manifestPaths", self.find)
@@ -57,8 +60,8 @@ class ConcurrentRecoverySelectionSourceContract(unittest.TestCase):
         for marker in (
             "long beforeLength = info.Length;",
             "DateTime beforeModifiedUtc = info.LastWriteTimeUtc;",
-            "string sha = HashFile(copy);",
-            "EnsureValidPackage(copy, extension);",
+            "using var input = OpenRecoveryReadStream(copy);",
+            "VerifyOpenedPackage(input, extension, manifest.Sha256,",
             "var after = new FileInfo(copy);",
             "after.Length != beforeLength",
             "after.LastWriteTimeUtc != beforeModifiedUtc",
@@ -66,18 +69,23 @@ class ConcurrentRecoverySelectionSourceContract(unittest.TestCase):
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.copy)
-        self.assertLess(self.copy.index("string sha = HashFile(copy);"),
-                        self.copy.index("EnsureValidPackage(copy, extension);"))
-        self.assertLess(self.copy.index("EnsureValidPackage(copy, extension);"),
+        self.assertLess(self.copy.index("using var input = OpenRecoveryReadStream(copy);"),
+                        self.copy.index("VerifyOpenedPackage(input, extension, manifest.Sha256,"))
+        self.assertLess(self.copy.index("VerifyOpenedPackage(input, extension, manifest.Sha256,"),
                         self.copy.index("after.Length != beforeLength"))
+        self.assertLess(self.verify.index("SHA256.HashData(input)"),
+                        self.verify.index("EnsureValidPackage(input, extension);"))
 
     def test_test_only_posthash_callback_cannot_replace_production_validator(self):
         self.assertIn("internal OfficeRecoveryCopy? ReadValidCopyWithPostHashMutation(",
                       self.store)
         self.assertIn("Action<string>? afterHash = null", self.store)
-        self.assertIn("afterHash?.Invoke(copy);", self.copy)
-        self.assertLess(self.copy.index("string sha = HashFile(copy);"),
-                        self.copy.index("afterHash?.Invoke(copy);"))
+        self.assertIn("afterHash is null ? null : () => afterHash(copy)", self.copy)
+        self.assertIn("afterHash?.Invoke();", self.verify)
+        self.assertLess(self.verify.index("SHA256.HashData(input)"),
+                        self.verify.index("afterHash?.Invoke();"))
+        self.assertLess(self.verify.index("afterHash?.Invoke();"),
+                        self.verify.index("EnsureValidPackage(input, extension);"))
         self.assertIn("verifyCandidate is null", self.find)
         self.assertIn("ReadValidCopy(source, extension, entry.Path)", self.find)
         self.assertNotIn("ReadValidCopyWithPostHashMutation(", self.find)
