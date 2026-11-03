@@ -48,7 +48,7 @@ public sealed class OfficeRecoveryStore
         // This is a conservative per-source limit, NOT a cross-process lock
         // or a complete disk-space budget.
         RecoveryCaptureAdmission.EnsureMayCapture(
-            InspectIncomplete(source, maxEntries: 1024, cancellationToken));
+            InspectIncomplete(source, maxEntries: 1024, cancellationToken: cancellationToken));
 
         // Refuse recovery roots, parents or per-document folders that are
         // symbolic links/junctions. Check before and after directory creation.
@@ -183,7 +183,7 @@ public sealed class OfficeRecoveryStore
         }
 
         var observedNames = new HashSet<string>(
-            observedEntries.Select(Path.GetFileName),
+            observedEntries.Select(entry => Path.GetFileName(entry)!),
             OperatingSystem.IsWindows()
                 ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var candidates = new List<OfficeRecoveryIncompleteCandidate>();
@@ -239,7 +239,7 @@ public sealed class OfficeRecoveryStore
 
         return new OfficeRecoveryIncompleteInventory(
             candidates.OrderBy(item => item.FileName, StringComparer.Ordinal).ToArray(),
-            truncated);
+            truncated, ObservedEntries: observedEntries.Count);
     }
 
     private static bool TryClassifyIncompleteName(
@@ -864,4 +864,7 @@ public sealed record OfficeRecoveryIncompleteCandidate(
 /// </summary>
 public sealed record OfficeRecoveryIncompleteInventory(
     IReadOnlyList<OfficeRecoveryIncompleteCandidate> Candidates,
-    bool Truncated);
+    bool Truncated,
+    // Counts ALL immediate entries observed, including unrecognized names.
+    // Not a global disk-space quota and never a delete authorization.
+    int ObservedEntries = 0);
