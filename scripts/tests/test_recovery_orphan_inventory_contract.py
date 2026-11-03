@@ -80,6 +80,7 @@ class RecoveryOrphanInventorySourceContract(unittest.TestCase):
             "cancellationToken.ThrowIfCancellationRequested();",
             "Path.GetDirectoryName(candidatePath)",
             "RejectLinkedDirectoryTree(root)",
+            "if (rootMetadata.LinkTarget is not null)",
             "metadata.LinkTarget is not null",
             "FileAttributes.ReparsePoint",
             "RecoveryDetachedWorkspaceStatus.UntrustedLinkOrNonDirectory",
@@ -109,10 +110,11 @@ class RecoveryOrphanInventorySourceContract(unittest.TestCase):
             "LazyEnumerationIOExceptionPropagatesInsteadOfReportingEmptyScan",
             "CancelledScanDoesNotEnumerateOrMutate",
             "LinkedWorkspaceIsMarkedUntrustedIfSymlinksAreAvailable",
+            "LinkedTemporaryRootIsRejectedIfSymlinksAreAvailable",
         ):
             with self.subTest(name=name):
                 self.assertIn(name, self.tests)
-        self.assertEqual(8, self.tests.count("[TestMethod]"))
+        self.assertEqual(9, self.tests.count("[TestMethod]"))
         self.assertIn("CancelledExporterLeavesUntrustedCopyForReadOnlyInventory",
                       self.store_tests)
         self.assertIn("OfficeRecoveryIncompleteStatus.UntrustedLinkOrNonFile",
