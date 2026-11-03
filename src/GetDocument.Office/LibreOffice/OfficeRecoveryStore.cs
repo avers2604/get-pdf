@@ -64,8 +64,9 @@ public sealed class OfficeRecoveryStore
             cancellationToken.ThrowIfCancellationRequested();
             await exportCopy(temporaryCopy);
             cancellationToken.ThrowIfCancellationRequested();
-            EnsureValidPackage(temporaryCopy, extension);
-            string sha = await HashFileAsync(temporaryCopy, cancellationToken);
+            // Hash and ZIP must observe the same opened filesystem object.
+            string sha = await VerifyAndHashExportAsync(
+                temporaryCopy, extension, cancellationToken);
             // Re-evaluate the path after the hash operation: it is possible
             // for a concurrent writer to replace it while it is being read.
             RejectLinkedDirectories(folder);
@@ -367,13 +368,14 @@ public sealed class OfficeRecoveryStore
                 return null;
             long beforeLength = info.Length;
             DateTime beforeModifiedUtc = info.LastWriteTimeUtc;
-            string sha = HashFile(copy);
-            if (!string.Equals(sha, manifest.Sha256, StringComparison.OrdinalIgnoreCase))
-                return null; // avoid costly ZIP inflation for tampered copies
-            afterHash?.Invoke(copy);
-            // Still fully re-check ZIP/XML, length and link status after hash.
-            // Never accept a copy on SHA or cached metadata alone.
-            EnsureValidPackage(copy, extension);
+            // Hold exactly one read handle for SHA and the ZIP/XML scan.
+            // FileShare.Read also rejects cooperative writers on Windows;
+            // POSIX and SMB mutation semantics need real platform testing.
+            using var input = OpenRecoveryReadStream(copy);
+            if (input.Length != beforeLength) return null;
+            if (!VerifyOpenedPackage(input, extension, manifest.Sha256,
+                    afterHash is null ? null : () => afterHash(copy)))
+                return null;
             var after = new FileInfo(copy);
             after.Refresh();
             // This detects ordinary concurrent replacement or modification.
@@ -454,18 +456,21 @@ public sealed class OfficeRecoveryStore
         }
     }
 
-    private static void EnsureValidPackage(string path, string extension)
+    private static void EnsureValidPackage(Stream input, string extension)
     {
-        var info = new FileInfo(path);
-        if (!info.Exists || info.Length == 0 || info.Length > MaxCopyBytes)
-            throw new InvalidDataException("Резервная копия отсутствует или превышает лимит 128 МиБ.");
-        if (IsLinkedFile(info))
-            throw new InvalidDataException("Символическая ссылка не является независимой резервной копией.");
+        if (!input.CanRead || !input.CanSeek ||
+            input.Length == 0 || input.Length > MaxCopyBytes)
+            throw new InvalidDataException(
+                "Резервная копия не поддерживает безопасное чтение или превышает 128 МиБ.");
 
+        // Read only the SAME caller-owned seekable handle as SHA-256.
+        // ZipArchive must not close this stream: the caller checks its
+        // metadata and disposes the handle after both validations.
+        input.Position = 0;
+        using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: true);
         // This is a bounded ZIP envelope check, NOT a complete OOXML semantic check or AV scan.
         // Reuse the same ZIP safety limits as the server's OfficePackageGuard where practical,
         // without pulling a server project into the offline desktop/editor dependency graph.
-        using var archive = ZipFile.OpenRead(path);
         if (archive.Entries.Count is < 2 or > MaxEntryCount)
             throw new InvalidDataException("Недопустимое количество ZIP-частей в аварийной копии.");
 
@@ -618,16 +623,75 @@ public sealed class OfficeRecoveryStore
         return Path.Combine(_root, key);
     }
 
-    private static async Task<string> HashFileAsync(string path, CancellationToken cancellationToken)
+    // The recovery copy is path-preflighted before opening. Keep the same
+    // FileStream for hashing and all ZIP/XML reads; no path-based reopen.
+    // FileShare.Read excludes cooperative writers/deleters on Windows, but
+    // cannot by itself enforce POSIX/SMB no-follow or immutable semantics.
+    private static FileStream OpenRecoveryReadStream(
+        string path, FileOptions options = FileOptions.None)
     {
-        await using var stream = File.OpenRead(path);
-        return Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken));
+        var file = new FileInfo(path);
+        file.Refresh();
+        if (!file.Exists || file.Length == 0 || file.Length > MaxCopyBytes ||
+            IsLinkedFile(file))
+            throw new InvalidDataException(
+                "Аварийная копия отсутствует, подменена ссылкой или превышает 128 МиБ.");
+        var input = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read, bufferSize: 65536, options: options);
+        if (input.CanRead && input.CanSeek && input.Length > 0 &&
+            input.Length <= MaxCopyBytes)
+            return input;
+        input.Dispose();
+        throw new InvalidDataException("Недопустимое чтение аварийной копии.");
     }
 
-    private static string HashFile(string path)
+    // Internal stream-level seam: both validators receive the SAME handle.
+    // Synthetic tests can simulate a change between SHA and ZIP without
+    // touching any actual user files.
+    internal static bool VerifyOpenedPackage(
+        Stream input, string extension, string expectedSha, Action? afterHash = null)
     {
-        using var stream = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(stream));
+        ArgumentNullException.ThrowIfNull(input);
+        if (!input.CanRead || !input.CanSeek ||
+            input.Length == 0 || input.Length > MaxCopyBytes)
+            throw new InvalidDataException("ZIP/SHA-проверка требует обычного seekable-файла.");
+        input.Position = 0;
+        string sha = Convert.ToHexString(SHA256.HashData(input));
+        if (!string.Equals(sha, expectedSha, StringComparison.OrdinalIgnoreCase))
+            return false;
+        afterHash?.Invoke();
+        input.Position = 0;
+        EnsureValidPackage(input, extension);
+        return true;
+    }
+
+    // CaptureAsync also validates its staging copy on one handle, retaining
+    // asynchronous SHA-256 cancellation and full bounded ZIP/XML inspection.
+    private static async Task<string> VerifyAndHashExportAsync(
+        string path, string extension, CancellationToken cancellationToken)
+    {
+        var info = new FileInfo(path);
+        info.Refresh();
+        if (!info.Exists || info.Length == 0 || info.Length > MaxCopyBytes ||
+            IsLinkedFile(info))
+            throw new InvalidDataException("Неверная временная аварийная копия.");
+        long beforeLength = info.Length;
+        DateTime beforeModifiedUtc = info.LastWriteTimeUtc;
+        await using var input = OpenRecoveryReadStream(path, FileOptions.Asynchronous);
+        if (input.Length != beforeLength)
+            throw new InvalidDataException("Временная копия изменена до проверки.");
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureValidPackage(input, extension);
+        cancellationToken.ThrowIfCancellationRequested();
+        input.Position = 0;
+        string sha = Convert.ToHexString(await SHA256.HashDataAsync(input, cancellationToken));
+        var after = new FileInfo(path);
+        after.Refresh();
+        if (!after.Exists || IsLinkedFile(after) ||
+            after.Length != beforeLength ||
+            after.LastWriteTimeUtc != beforeModifiedUtc)
+            throw new InvalidDataException("Временная копия изменена во время проверки.");
+        return sha;
     }
 
     /// <summary>
