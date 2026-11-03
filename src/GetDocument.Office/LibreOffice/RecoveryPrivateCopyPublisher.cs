@@ -7,8 +7,18 @@ namespace GetDocument.Office.LibreOffice;
 /// </summary>
 internal sealed class RecoveryPrivatePublication : IDisposable
 {
+    private const int TransferBufferBytes = 64 * 1024;
+    private const long MaxCopyBytes = 128L * 1024 * 1024;
+
     private FileStream? _heldStream;
     private readonly string _privateDirectory;
+    private readonly CancellationTokenSource _lifetimeCancellation = new();
+
+    // 0 = ready, 1 = transferring, 2 = consumed, 3 = disposed.
+    // Closing during an active transfer cancels it; cleanup runs only
+    // AFTER the consumer has stopped using the held file descriptor.
+    private int _deliveryState;
+    private int _cleanupStarted;
 
     internal string FilePath { get; }
     internal RecoveryStagedCopyReceipt Receipt { get; }
@@ -23,19 +33,193 @@ internal sealed class RecoveryPrivatePublication : IDisposable
         Receipt = receipt;
     }
 
+    /// <summary>
+    /// Transfer the verified bytes to a NEW caller-owned output stream,
+    /// keeping the original publication handle open until the operation is
+    /// finished or cancelled. The source file is NEVER reopened by pathname.
+    /// The returned receipt is not permission to commit a WORM revision.
+    /// </summary>
+    internal async Task<RecoveryStagedCopyReceipt> ConsumeVerifiedToAsync(
+        Stream destination, CancellationToken cancellationToken = default)
+    {
+        if (Volatile.Read(ref _deliveryState) == 3)
+            throw new ObjectDisposedException(nameof(RecoveryPrivatePublication));
+        if (Interlocked.CompareExchange(ref _deliveryState, 1, 0) != 0)
+            throw new InvalidOperationException(
+                "Опубликованная временная копия может быть передана только один раз.");
+
+        bool ownedEmptyDestination = false;
+        try
+        {
+            ArgumentNullException.ThrowIfNull(destination);
+            if (!destination.CanRead || !destination.CanWrite ||
+                !destination.CanSeek || destination.Length != 0 ||
+                destination.Position != 0)
+                throw new ArgumentException(
+                    "Приёмник должен быть новым пустым читаемым и записываемым потоком.",
+                    nameof(destination));
+
+            // This flag is set only AFTER checking that the caller-provided
+            // stream is empty. Never truncate a preexisting consumer file.
+            ownedEmptyDestination = true;
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _lifetimeCancellation.Token);
+            CancellationToken abort = linked.Token;
+            abort.ThrowIfCancellationRequested();
+
+            FileStream source = _heldStream
+                ?? throw new ObjectDisposedException(nameof(RecoveryPrivatePublication));
+            if (!source.CanRead || !source.CanSeek ||
+                source.Length != Receipt.Length ||
+                source.Length == 0 || source.Length > MaxCopyBytes)
+                throw new InvalidDataException(
+                    "Состояние открытой временной копии не соответствует квитанции.");
+
+            // Fresh SHA-256 and bounded ZIP/XML on the SAME held descriptor
+            // before the first byte is copied to the consumer.
+            source.Position = 0;
+            if (!OfficeRecoveryStore.VerifyOpenedPackage(
+                    source, Receipt.Extension, Receipt.Sha256))
+                throw new InvalidDataException(
+                    "Открытая временная копия не прошла повторную проверку.");
+            abort.ThrowIfCancellationRequested();
+
+            source.Position = 0;
+            using var hasher = System.Security.Cryptography.IncrementalHash.CreateHash(
+                System.Security.Cryptography.HashAlgorithmName.SHA256);
+            byte[] buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(TransferBufferBytes);
+            long transferred = 0;
+            try
+            {
+                while (true)
+                {
+                    abort.ThrowIfCancellationRequested();
+                    int limit = (int)Math.Min(buffer.Length,
+                        MaxCopyBytes - transferred + 1);
+                    int bytes = await source.ReadAsync(
+                        buffer.AsMemory(0, limit), abort);
+                    if (bytes == 0) break;
+
+                    transferred += bytes;
+                    if (transferred > MaxCopyBytes)
+                        throw new InvalidDataException(
+                            "Размер аварийной копии превысил лимит 128 МиБ.");
+                    await destination.WriteAsync(
+                        buffer.AsMemory(0, bytes), abort);
+                    hasher.AppendData(buffer, 0, bytes);
+                    abort.ThrowIfCancellationRequested();
+                }
+
+                if (transferred != Receipt.Length)
+                    throw new InvalidDataException(
+                        "Количество переданных байтов не соответствует квитанции.");
+                await destination.FlushAsync(abort);
+                abort.ThrowIfCancellationRequested();
+
+                string digest = Convert.ToHexString(hasher.GetHashAndReset());
+                if (!string.Equals(digest, Receipt.Sha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException(
+                        "SHA-256 фактически переданных байтов не совпал с квитанцией.");
+
+                // Independent verification of the exact consumer-owned bytes.
+                // Output was checked empty before writing; an invalid copy
+                // is cleared best effort and NEVER yields a receipt.
+                if (destination.Length != Receipt.Length)
+                    throw new InvalidDataException(
+                        "Размер файла у потребителя изменился после передачи.");
+                destination.Position = 0;
+                if (!OfficeRecoveryStore.VerifyOpenedPackage(
+                        destination, Receipt.Extension, digest))
+                    throw new InvalidDataException(
+                        "Контрольная SHA/ZIP-проверка потребителя не пройдена.");
+
+                destination.Position = 0;
+                abort.ThrowIfCancellationRequested();
+                if (Interlocked.CompareExchange(ref _deliveryState, 2, 1) != 1)
+                    throw new ObjectDisposedException(nameof(RecoveryPrivatePublication));
+
+                // The consumer now owns destination. This success is
+                // linearized BEFORE a later independent Dispose call.
+                return new RecoveryStagedCopyReceipt(
+                    transferred, digest, Receipt.Extension);
+            }
+            finally
+            {
+                System.Buffers.ArrayPool<byte>.Shared.Return(
+                    buffer, clearArray: true);
+            }
+        }
+        catch
+        {
+            if (ownedEmptyDestination)
+                TryClearConsumerDestination(destination);
+            throw;
+        }
+        finally
+        {
+            // All source reads have completed/aborted. Disposal while the
+            // transfer was active only cancelled it; actual file cleanup
+            // is deferred until this final release.
+            CloseAndCleanup();
+        }
+    }
+
+    private static void TryClearConsumerDestination(Stream destination)
+    {
+        try
+        {
+            if (destination.CanSeek && destination.CanWrite)
+            {
+                destination.SetLength(0);
+                destination.Position = 0;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                   or NotSupportedException or ObjectDisposedException
+                                   or System.Security.SecurityException)
+        {
+            // Never report success. Caller must discard the untrusted sink if
+            // the best-effort cleanup could not complete.
+        }
+    }
+
     public void Dispose()
     {
+        int previous = Interlocked.Exchange(ref _deliveryState, 3);
+        if (previous == 3) return;
+        try
+        {
+            _lifetimeCancellation.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // A consumer may have finished and already released the CTS.
+        }
+
+        if (previous != 1)
+            CloseAndCleanup(); // active transfer closes itself in finally
+    }
+
+    private void CloseAndCleanup()
+    {
+        if (Interlocked.Exchange(ref _cleanupStarted, 1) != 0) return;
         FileStream? handle = Interlocked.Exchange(ref _heldStream, null);
-        if (handle is null) return;
-        handle.Dispose();
-        // Delete ONLY the exact file allocated in our unique private
-        // directory. Never recursively remove a directory containing foreign
-        // entries. This remains path-based; hostile local rename races require
-        // native handle-bound cleanup on an approved OS test rig.
-        RecoveryPrivateCopyPublisher.TryDeleteOwnRegularFile(
-            _privateDirectory, FilePath);
-        RecoveryPrivateCopyPublisher.TryRemoveEmptyPrivateDirectory(
-            _privateDirectory);
+        try
+        {
+            handle?.Dispose();
+        }
+        finally
+        {
+            _lifetimeCancellation.Dispose();
+            // Delete ONLY if the current path still matches the verified
+            // content, reducing accidental deletion after simple rename
+            // swaps. This remains PATH-BASED and cannot eliminate TOCTOU.
+            RecoveryPrivateCopyPublisher.TryDeleteOwnRegularFile(
+                _privateDirectory, FilePath, Receipt);
+            RecoveryPrivateCopyPublisher.TryRemoveEmptyPrivateDirectory(
+                _privateDirectory);
+        }
     }
 }
 
@@ -178,7 +362,9 @@ internal static class RecoveryPrivateCopyPublisher
         }
     }
 
-    internal static void TryDeleteOwnRegularFile(string privateDirectory, string filePath)
+    internal static void TryDeleteOwnRegularFile(
+        string privateDirectory, string filePath,
+        RecoveryStagedCopyReceipt? expected = null)
     {
         try
         {
@@ -198,6 +384,25 @@ internal static class RecoveryPrivateCopyPublisher
                                     FileAttributes.Directory |
                                     FileAttributes.Device)) != 0)
                 return;
+
+            // When an owned publication is released, the filename may have
+            // been replaced by a foreign file. Never delete a different
+            // length or SHA/ZIP payload just because it uses our old name.
+            // Still not an atomic File ID comparison: native cleanup is
+            // needed before this can run in a hostile production workspace.
+            if (expected is not null)
+            {
+                if (info.Length != expected.Length) return;
+                using (var check = new FileStream(filePath, FileMode.Open,
+                    FileAccess.Read, FileShare.Read | FileShare.Delete))
+                {
+                    if (check.Length != expected.Length ||
+                        !OfficeRecoveryStore.VerifyOpenedPackage(
+                            check, expected.Extension, expected.Sha256))
+                        return;
+                }
+            }
+
             File.Delete(filePath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
