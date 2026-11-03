@@ -141,6 +141,9 @@ internal static class RecoveryNativeIdentityGate
         IRecoveryNativeIdentityAdapter adapter, RecoveryRelativeKey key)
     {
         ArgumentNullException.ThrowIfNull(adapter);
+        // A default-initialized record struct must not bypass the only
+        // allowed relative-name grammar before any native adapter is called.
+        RecoveryRelativeKey.Create(key.SourceFolderHash, key.CopyFileName);
         if (!adapter.SupportsVerifiedDirectoryRelativeOpen)
             throw new PlatformNotSupportedException(
                 "Нативное относительное открытие с no-follow не подтверждено на данной платформе.");
