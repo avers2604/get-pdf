@@ -52,6 +52,8 @@ REQUIRED = {
         "test_recovery_owned_consumer_contract.py",
     "recovery-lifecycle-audit-source-tests":
         "test_recovery_lifecycle_audit_contract.py",
+    "recovery-orphan-inventory-source-tests":
+        "test_recovery_orphan_inventory_contract.py",
 }
 
 
@@ -102,7 +104,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
                 self.assertIn('"-p", "' + file_name + '"', self.runner)
 
     def test_registered_recovery_manual_gates_are_unique_and_not_automated(self):
-        all_gates = re.findall(r'    "((?:gd31j27a[lnopqrstuvwxyz]|gd31j27b[abcdefghij])[^"]+-manual-e2e)",',
+        all_gates = re.findall(r'    "((?:gd31j27a[lnopqrstuvwxyz]|gd31j27b[abcdefghijk])[^"]+-manual-e2e)",',
                                self.runner)
         self.assertEqual(len(all_gates), len(set(all_gates)))
         self.assertGreaterEqual(len(all_gates), 8)
@@ -130,29 +132,23 @@ class RecoveryChainIntegrity(unittest.TestCase):
         self.assertIn('CancellationToken token = inspection.Token;', legacy)
         self.assertIn('CreateLinkedTokenSource(', self.pane)
 
-    def test_capture_cleanup_uses_operation_ownership_not_path_existence(self):
+    def test_capture_failure_never_deletes_exporter_names_without_native_ownership(self):
         capture = self.store.split(
             "public async Task<OfficeRecoveryCopy> CaptureAsync(", 1
         )[1].split("public OfficeRecoveryIncompleteInventory InspectIncomplete(", 1)[0]
-        for marker in (
-            "bool publishedCopy = false;",
-            "bool createdTemporaryManifest = false;",
-            "bool publishedManifest = false;",
-            "publishedCopy = true;",
-            "createdTemporaryManifest = true;",
-            "createdTemporaryManifest = false;",
-            "publishedManifest = true;",
-            "if (createdTemporaryManifest)",
-            "if (publishedCopy && !publishedManifest)",
-        ):
-            with self.subTest(marker=marker):
-                self.assertIn(marker, capture)
+        self.assertIn("await exportCopy(temporaryCopy);", capture)
+        self.assertIn("File.Move(temporaryCopy, finalCopy);", capture)
+        self.assertIn("File.Move(temporaryManifest, finalManifest);", capture)
+        self.assertNotIn("TryDelete(temporaryCopy);", capture)
+        self.assertNotIn("TryDelete(temporaryManifest);", capture)
+        self.assertNotIn("TryDelete(finalCopy);", capture)
+        self.assertNotIn("File.Delete(", capture)
+        self.assertNotIn("Directory.Delete(", capture)
+        self.assertIn("Read-only inventory can report", capture)
+        self.assertLess(capture.index("await exportCopy(temporaryCopy);"),
+                        capture.index("File.Move(temporaryCopy, finalCopy);"))
         self.assertLess(capture.index("File.Move(temporaryCopy, finalCopy);"),
-                        capture.index("publishedCopy = true;"))
-        self.assertLess(capture.index("File.Move(temporaryManifest, finalManifest);"),
-                        capture.index("publishedManifest = true;"))
-        self.assertNotIn("if (!File.Exists(finalManifest)) TryDelete(finalCopy)", capture)
-        self.assertNotIn("TryDelete(temporaryManifest);\n            // If publishing failed", capture)
+                        capture.index("File.Move(temporaryManifest, finalManifest);"))
 
     def test_collision_regressions_cover_all_publication_names(self):
         for name in (
@@ -184,7 +180,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
             "DiscardRetainsTamperedSnapshotAndManifestForManualInvestigation",
             "DiscardDoesNotUnlinkSymlinkReplacedRecoveryCopy",
             "DiscardPreservesOrphanManifestWhenItsCopyDisappeared",
-            "CancelledExporterLeavesNoPublishedCopyOrTemporaryFile",
+            "CancelledExporterLeavesUntrustedCopyForReadOnlyInventory",
         ):
             with self.subTest(name=name):
                 self.assertIn(name, self.store_tests)
