@@ -89,8 +89,8 @@ class RecoveryVerifiedStagingSourceContract(unittest.TestCase):
             "ArrayPool<byte>.Shared.Rent(BufferBytes)",
             "MaxCopyBytes - copied + 1",
             "if (copied > MaxCopyBytes)",
-            "await staging.FlushAsync(cancellationToken);",
-            "cancellationToken.ThrowIfCancellationRequested();",
+            "await staging.FlushAsync(abort);",
+            "abort.ThrowIfCancellationRequested();",
             "ArrayPool<byte>.Shared.Return(buffer, clearArray: true);",
         ):
             with self.subTest(marker=marker):
@@ -120,7 +120,7 @@ class RecoveryVerifiedStagingSourceContract(unittest.TestCase):
         for name in names:
             with self.subTest(name=name):
                 self.assertIn(name, self.tests)
-        self.assertEqual(8, self.tests.count("[TestMethod]"))
+        self.assertEqual(10, self.tests.count("[TestMethod]"))
         self.assertIn("new FakeAdapter(", self.tests)
         self.assertIn("File.ReadAllBytes(fixture.FilePath)", self.tests)
 
