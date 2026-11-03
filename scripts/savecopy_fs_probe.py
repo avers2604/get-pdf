@@ -2,8 +2,8 @@
 """GD31J27al: opt-in synthetic filesystem facts, NOT production SaveAs E2E.
 
 Run only in an independently approved disposable OFFLINE VM and a freshly
-created, EMPTY, owner-private sandbox directory. No document paths, file
-handles, network requests, subprocesses or corporate services are touched.
+created, EMPTY, owner-private sandbox directory. No user document paths or descriptors, network requests, subprocesses
+or corporate services are touched.
 
 This probes os.link exclusive-name behavior; it DOES NOT execute .NET
 File.Move and must never be cited as proof of its behavior on NTFS/SMB/ext4.
@@ -38,6 +38,8 @@ def _guard(root: Path) -> None:
         raise ProbeError("Use a uniquely named absolute disposable sandbox")
     if len(root.name) < len(SANDBOX_PREFIX) + 8:
         raise ProbeError("Use a unique sandbox name")
+    if root.resolve(strict=True) != root or os.path.normpath(str(root)) != str(root):
+        raise ProbeError("Sandbox must be a canonical path without aliases")
     # Check every path component without following symlinks/junctions.
     for segment in (root, *root.parents):
         try:
