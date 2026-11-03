@@ -239,13 +239,15 @@ public sealed class OfficeRecoveryStore
         if (!Directory.Exists(folder)) return;
         foreach (string manifest in Directory.EnumerateFiles(folder, "*.json"))
         {
-            string name = Path.GetFileNameWithoutExtension(manifest);
-            if (!Guid.TryParseExact(name, "N", out _)) continue;
-            // Verify ownership before deletion; do not erase recovery data for a different source.
-            RecoveryManifest? metadata = ReadManifest(manifest);
-            if (metadata is null || !string.Equals(metadata.SourcePath, source, PathComparison)) continue;
+            // Path equality in a manifest does NOT prove the sibling copy
+            // still belongs to us. It may have been corrupted, removed, or
+            // replaced by a symlink since the capture was published.
+            // The same read-only, bounded package/hash check used by
+            // FindLatest must pass before ANY deletion is attempted.
+            OfficeRecoveryCopy? verified = ReadValidCopy(source, extension, manifest);
+            if (verified is null) continue;
             TryDelete(manifest);
-            TryDelete(Path.Combine(folder, name + extension));
+            TryDelete(verified.FilePath);
         }
     }
 
