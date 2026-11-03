@@ -31,7 +31,9 @@ public static class OfficeCopyPublisher
             (stem.Length == 4 &&
              (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
               stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
-             stem[3] is >= '1' and <= '9'))
+             // Windows also treats ISO-8859-1 superscript ¹²³ as
+             // device-number suffixes (COM¹, LPT², etc.).
+             "123456789¹²³".Contains(stem[3])))
             throw new ArgumentException(
                 "Зарезервированное Windows-имя не допускается.", nameof(fileName));
     }
