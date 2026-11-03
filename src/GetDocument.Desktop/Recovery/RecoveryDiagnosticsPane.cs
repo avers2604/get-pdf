@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using GetDocument.Office.LibreOffice;
@@ -33,6 +34,16 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
     {
         _sourcePath = Path.GetFullPath(sourcePath);
         Padding = new Thickness(28);
+        Focusable = true;
+        Avalonia.Automation.AutomationProperties.SetName(this,
+            "Диагностика аварийных копий. Только просмотр.");
+        // The tab content is attached after TabControl selects it. Focus
+        // this read-only surface, not its temporarily disabled refresh button.
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (!_disposed) Focus();
+        };
+        KeyDown += OnPaneKeyDown;
 
         var body = new StackPanel
         {
@@ -68,12 +79,13 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
         fileCard.Child = fileStack;
         body.Children.Add(fileCard);
 
-        var controls = new StackPanel
+        // A horizontal StackPanel clips the long hint on compact displays.
+        // WrapPanel preserves tab order while moving the hint to a new row.
+        var controls = new WrapPanel
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 14,
-            VerticalAlignment = VerticalAlignment.Center
+            Orientation = Orientation.Horizontal
         };
+        _refresh.Margin = new Thickness(0, 0, 14, 8);
         _refresh.Classes.Add("toolbar");
         Avalonia.Automation.AutomationProperties.SetName(
             _refresh, "Обновить сведения об аварийных копиях");
@@ -83,6 +95,7 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
         {
             Text = "Один документ · до 256 записей · без доступа к содержимому",
             VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 8),
             TextWrapping = TextWrapping.Wrap
         };
         scope.Classes.Add("hint");
@@ -92,11 +105,11 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
         var summaryCard = Card();
         var summaryStack = new StackPanel { Spacing = 8 };
         _summary.Text = "Сведения ещё не проверялись";
-        Avalonia.Automation.AutomationProperties.SetName(_summary, "Состояние диагностики");
         Avalonia.Automation.AutomationProperties.SetLiveSetting(
             _summary, Avalonia.Automation.AutomationLiveSetting.Polite);
         _details.Text = "Обновите сведения, чтобы проверить наличие незавершённых файлов.";
         _details.Classes.Add("hint");
+        UpdateAccessibleStatus();
         summaryStack.Children.Add(_summary);
         summaryStack.Children.Add(_details);
         summaryCard.Child = summaryStack;
@@ -120,6 +133,24 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
         Child = new ScrollViewer { Content = body };
     }
 
+    /// <summary>F5 refresh works from either the pane or its single button.</summary>
+    private void OnPaneKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || _disposed || e.Key != Key.F5) return;
+        e.Handled = true;
+        _ = RefreshAsync();
+    }
+
+    /// <summary>
+    /// A static automation name masks a changing TextBlock in some readers.
+    /// Keep the announced name in sync with both status and limitations.
+    /// </summary>
+    private void UpdateAccessibleStatus()
+    {
+        Avalonia.Automation.AutomationProperties.SetName(
+            _summary, "Состояние диагностики: " + _summary.Text + ". " + _details.Text);
+    }
+
     internal async Task RefreshAsync()
     {
         if (_disposed || _busy) return;
@@ -129,6 +160,7 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
         _summary.Foreground = Brush("GetNavyBrush");
         _summary.Text = "Проверка временных объектов…";
         _details.Text = "Читаются только имена и доступные метаданные в каталоге выбранного документа.";
+        UpdateAccessibleStatus();
         _entries.Children.Clear();
 
         try
@@ -155,6 +187,7 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
             _summary.Foreground = Brush("GetRedBrush");
             _details.Text = "Доступ или безопасность каталога не подтверждены. " +
                             "Ничего не удалено и не восстановлено.";
+            UpdateAccessibleStatus();
         }
         finally
         {
@@ -176,14 +209,19 @@ internal sealed class RecoveryDiagnosticsPane : Border, IDisposable
             1 => "Обнаружен 1 временный объект — не проверен",
             _ => $"Обнаружено {result.Candidates.Count} временных объектов — не проверены"
         };
-        _details.Text = result.Truncated
-            ? "Превышен предел просмотра (256 записей). Список неполон; " +
-              "отсутствие объекта в нём ничего не доказывает."
-            : untrusted > 0
-                ? $"Недоверенных или недоступных объектов: {untrusted}. " +
-                  "Не открывайте и не удаляйте их автоматически."
-                : "Показаны только имена и метаданные. " +
-                  "Наличие файла не подтверждает его пригодность для восстановления.";
+        // Both problems can coexist: a truncated listing may ALSO contain
+        // untrusted entries. Never mask one warning with the other.
+        var warnings = new List<string>();
+        if (result.Truncated)
+            warnings.Add("Превышен предел просмотра (256 записей). Список неполон; " +
+                         "отсутствие объекта в нём ничего не доказывает.");
+        if (untrusted > 0)
+            warnings.Add($"Недоверенных или недоступных объектов: {untrusted}. " +
+                         "Не открывайте и не удаляйте их автоматически.");
+        warnings.Add("Показаны только имена и метаданные. " +
+                     "Наличие файла не подтверждает его пригодность для восстановления.");
+        _details.Text = string.Join(" ", warnings);
+        UpdateAccessibleStatus();
 
         _entries.Children.Clear();
         foreach (OfficeRecoveryIncompleteCandidate item in result.Candidates)
