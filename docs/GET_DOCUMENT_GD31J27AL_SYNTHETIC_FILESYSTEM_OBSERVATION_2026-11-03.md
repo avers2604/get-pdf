@@ -17,7 +17,7 @@
 - через `os.link(stage, existing, follow_symlinks=False)` проверяет, что существующее имя не было перезаписано;
 - через `os.link(stage, fresh, follow_symlinks=False)` проверяет появление новых синтетических байт;
 - удаляет только имена, которые создала сама, без recursive delete, и оставляет sandbox-каталог оператору;
-- при неподдерживаемом hardlink получает `unsupported_not_attested`, **никогда не положительную публикационную авторизацию**.
+- при неподдерживаемом hardlink (включая исключение NotImplementedError) получает `unsupported_not_attested`, **никогда не положительную публикационную авторизацию**.
 
 **Это наблюдение свойств `os.link` на данном filesystem, НЕ проверка реализации `.NET File.Move(staging,target,overwrite:false)`.** Пробник не выполняет native SaveAs, не подтверждает атомарность SMB/CAS, аварийное восстановление, ACL, OOXML или защиту от злонамеренного оператора. Отчёт всегда содержит `netFileMoveTested=false`, `nativeSaveProven=false`, `productionStorageAttested=false`, `releaseReady=false`; процесс возвращает **exit 2** даже при `observed_not_attested`.
 
@@ -43,9 +43,9 @@ python -E -s -S .\scripts\savecopy_fs_probe.py --sandbox 'C:\DISPOSABLE_LAB\getd
 
 ## Реально выполненная локальная проверка (не Astra, не Windows)
 
-На отдельном временном каталоге среды Linux с Python 3.13 проведён red→green тест: сначала `ModuleNotFoundError` (модуль отсутствовал), затем исправлена излишняя проверка длины уникального имени `TemporaryDirectory`, после чего **7/7 локальных тестов PASSED**. Выполнен отдельный `observe()` на временном sandbox; подтверждены `collisionPreserved=true`, `newCopyBytesVerified=true`, `netFileMoveTested=false`, `releaseReady=false`. Файлы удалены. Это не доказательство работы на NTFS/ext4/SMB.
+На отдельном временном каталоге среды Linux с Python 3.13 проведён red→green тест: сначала `ModuleNotFoundError` (модуль отсутствовал), затем исправлена излишняя проверка длины уникального имени `TemporaryDirectory`, после чего **8/8 локальных тестов PASSED**. Выполнен отдельный `observe()` на временном sandbox; подтверждены `collisionPreserved=true`, `newCopyBytesVerified=true`, `netFileMoveTested=false`, `releaseReady=false`. Файлы удалены. Это не доказательство работы на NTFS/ext4/SMB.
 
-Тесты: `scripts/tests/test_savecopy_fs_probe.py` — ранний отказ, сохранность чужого файла, symlink на root, неканонический `..` путь, реальный локальный hardlink без замены, mock unsupported, отсутствие CLI-доступа без флага. Symlink-test **не пропускается** при отсутствии права: сначала необходимо отдельно настроить офлайн-VM.
+Тесты: `scripts/tests/test_savecopy_fs_probe.py` — ранний отказ, сохранность чужого файла, symlink на root, неканонический `..` путь, реальный локальный hardlink без замены, mock unsupported, отсутствие поддержки link API на Windows, отсутствие CLI-доступа без флага. Symlink-test **не пропускается** при отсутствии права: сначала необходимо отдельно настроить офлайн-VM.
 
 Локальная команда теста из корня репозитория:
 
