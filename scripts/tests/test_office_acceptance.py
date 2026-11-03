@@ -13,6 +13,31 @@ import office_acceptance as acceptance
 
 
 class AcceptancePlanTests(unittest.TestCase):
+    def test_gd31j27at_recovery_chain_checks_are_offline_and_release_remains_blocked(self):
+        expected = (
+            "recovery-readonly-inventory-source-tests",
+            "recovery-diagnostics-ui-source-tests",
+            "recovery-diagnostics-a11y-source-tests",
+            "recovery-tab-lifecycle-source-tests",
+            "recovery-reopen-shutdown-source-tests",
+            "recovery-chain-consistency-source-tests",
+        )
+        for host in ("Windows", "Linux"):
+            steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
+            names = [step.name for step in steps]
+            for name in expected:
+                with self.subTest(host=host, name=name):
+                    self.assertEqual(1, names.count(name))
+                    self.assertLess(names.index(name), names.index("solution-restore"))
+            check = next(step for step in steps if
+                         step.name == "recovery-chain-consistency-source-tests")
+            self.assertIn("test_recovery_chain_consistency.py", check.command)
+            report = acceptance.new_report("a" * 40, host, "GD-31I")
+            self.assertTrue(report["manualAcceptance"])
+            self.assertTrue(all(state == "not-run"
+                                for state in report["manualAcceptance"].values()))
+            self.assertFalse(report["releaseReady"])
+
     def test_gd31j27as_reopen_shutdown_requires_manual_windows_astra_acceptance(self):
         for host in ("Windows", "Linux"):
             steps = acceptance.build_steps(Path("/getdoc"), Path("/offline-feed"), host)
