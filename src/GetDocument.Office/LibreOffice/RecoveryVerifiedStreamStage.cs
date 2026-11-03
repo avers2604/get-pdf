@@ -23,9 +23,12 @@ internal sealed class RecoveryVerifiedStreamStage : IDisposable, IAsyncDisposabl
 
     private RecoveryNativeReadLease? _lease;
     private readonly RecoveryRelativeKey _key;
+    private readonly CancellationTokenSource _lifetimeCancellation = new();
+    private int _cleanupStarted;
 
     // 0 = ready; 1 = copying; 2 = consumed; 3 = disposed.
-    // No second transfer may reuse a descriptor or a partial stage.
+    // Disposal while state 1 requests cancellation; only the copy's finally
+    // may release the source handle after its outstanding I/O has exited.
     private int _state;
 
     private RecoveryVerifiedStreamStage(
@@ -70,6 +73,9 @@ internal sealed class RecoveryVerifiedStreamStage : IDisposable, IAsyncDisposabl
         bool privateEmptyStaging = false;
         try
         {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _lifetimeCancellation.Token);
+            CancellationToken abort = linked.Token;
             ArgumentNullException.ThrowIfNull(staging);
             if (!staging.CanRead || !staging.CanWrite || !staging.CanSeek ||
                 staging.Length != 0 || staging.Position != 0)
@@ -92,7 +98,7 @@ internal sealed class RecoveryVerifiedStreamStage : IDisposable, IAsyncDisposabl
             // Only from this point may failure cleanup truncate the stage:
             // the caller-provided stream was VERIFIED EMPTY beforehand.
             privateEmptyStaging = true;
-            cancellationToken.ThrowIfCancellationRequested();
+            abort.ThrowIfCancellationRequested();
 
             Stream source = _lease?.Stream
                 ?? throw new ObjectDisposedException(nameof(RecoveryVerifiedStreamStage));
@@ -105,11 +111,11 @@ internal sealed class RecoveryVerifiedStreamStage : IDisposable, IAsyncDisposabl
             {
                 while (true)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    abort.ThrowIfCancellationRequested();
                     int allowed = (int)Math.Min(
                         buffer.Length, MaxCopyBytes - copied + 1);
                     int read = await source.ReadAsync(
-                        buffer.AsMemory(0, allowed), cancellationToken);
+                        buffer.AsMemory(0, allowed), abort);
                     if (read == 0) break;
 
                     copied += read;
@@ -118,15 +124,15 @@ internal sealed class RecoveryVerifiedStreamStage : IDisposable, IAsyncDisposabl
                             "Превышен предел аварийной копии в 128 МиБ.");
 
                     await staging.WriteAsync(
-                        buffer.AsMemory(0, read), cancellationToken);
+                        buffer.AsMemory(0, read), abort);
                     hasher.AppendData(buffer, 0, read);
-                    cancellationToken.ThrowIfCancellationRequested();
+                    abort.ThrowIfCancellationRequested();
                 }
 
                 if (copied == 0)
                     throw new InvalidDataException("Пустая аварийная копия.");
-                await staging.FlushAsync(cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
+                await staging.FlushAsync(abort);
+                abort.ThrowIfCancellationRequested();
 
                 string digest = Convert.ToHexString(hasher.GetHashAndReset());
                 if (!string.Equals(digest, expectedSha256,
@@ -141,7 +147,7 @@ internal sealed class RecoveryVerifiedStreamStage : IDisposable, IAsyncDisposabl
                         staging, extension, digest))
                     throw new InvalidDataException(
                         "Временная копия не выдержала независимую проверку SHA-256.");
-                cancellationToken.ThrowIfCancellationRequested();
+                abort.ThrowIfCancellationRequested();
 
                 staging.Position = 0;
                 if (Interlocked.CompareExchange(ref _state, 2, 1) != 1)
@@ -165,7 +171,9 @@ internal sealed class RecoveryVerifiedStreamStage : IDisposable, IAsyncDisposabl
         }
         finally
         {
-            Interlocked.Exchange(ref _lease, null)?.Dispose();
+            // If Dispose raced a pending read/write, THIS continuation is
+            // the only owner permitted to close the verified descriptor.
+            CloseAndCleanup();
         }
     }
 
@@ -190,8 +198,26 @@ internal sealed class RecoveryVerifiedStreamStage : IDisposable, IAsyncDisposabl
 
     public void Dispose()
     {
-        Interlocked.Exchange(ref _state, 3);
-        Interlocked.Exchange(ref _lease, null)?.Dispose();
+        int previous = Interlocked.Exchange(ref _state, 3);
+        if (previous == 3) return;
+        try { _lifetimeCancellation.Cancel(); }
+        catch (ObjectDisposedException) { }
+
+        if (previous != 1)
+            CloseAndCleanup(); // active copy closes its own handle in finally
+    }
+
+    private void CloseAndCleanup()
+    {
+        if (Interlocked.Exchange(ref _cleanupStarted, 1) != 0) return;
+        try
+        {
+            Interlocked.Exchange(ref _lease, null)?.Dispose();
+        }
+        finally
+        {
+            _lifetimeCancellation.Dispose();
+        }
     }
 
     public ValueTask DisposeAsync()
