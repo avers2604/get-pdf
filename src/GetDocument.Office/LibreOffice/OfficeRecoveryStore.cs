@@ -25,12 +25,22 @@ public sealed class OfficeRecoveryStore
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     private readonly string _root;
+    // Internal deterministic test seam only; no volume override in public API.
+    private readonly Func<string, RecoveryCaptureVolumeObservation>? _testVolumeObservation;
 
     public OfficeRecoveryStore(string? root = null)
     {
         _root = Path.GetFullPath(root ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "GET-Document", "recovery"));
+    }
+
+    internal OfficeRecoveryStore(
+        string root, Func<string, RecoveryCaptureVolumeObservation> testVolumeObservation)
+        : this(root)
+    {
+        _testVolumeObservation = testVolumeObservation
+            ?? throw new ArgumentNullException(nameof(testVolumeObservation));
     }
 
     public async Task<OfficeRecoveryCopy> CaptureAsync(
@@ -50,7 +60,7 @@ public sealed class OfficeRecoveryStore
         // Network/unknown volumes must fail closed. This does not establish
         // cross-host SMB locking or protect against uncooperative processes.
         using var captureLease = await RecoveryCaptureVolumeGate.AcquireAsync(
-            _root, cancellationToken: cancellationToken);
+            _root, _testVolumeObservation, cancellationToken);
 
         // Do not start another 128 MiB export when this source already has
         // too many untrusted incomplete artifacts (including final copies
