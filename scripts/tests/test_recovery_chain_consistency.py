@@ -36,6 +36,8 @@ REQUIRED = {
         "test_recovery_concurrent_selection_contract.py",
     "recovery-single-stream-source-tests":
         "test_recovery_single_stream_contract.py",
+    "recovery-preopen-guard-source-tests":
+        "test_recovery_preopen_guard_contract.py",
 }
 
 
@@ -86,7 +88,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
                 self.assertIn('"-p", "' + file_name + '"', self.runner)
 
     def test_registered_recovery_manual_gates_are_unique_and_not_automated(self):
-        all_gates = re.findall(r'    "((?:gd31j27a[lnopqrstuvwxyz]|gd31j27b[ab])[^"]+-manual-e2e)",',
+        all_gates = re.findall(r'    "((?:gd31j27a[lnopqrstuvwxyz]|gd31j27b[abc])[^"]+-manual-e2e)",',
                                self.runner)
         self.assertEqual(len(all_gates), len(set(all_gates)))
         self.assertGreaterEqual(len(all_gates), 8)
