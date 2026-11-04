@@ -171,7 +171,7 @@ public sealed class RecoverySharedVolumeCoordinatorTests
         Directory.CreateDirectory(scratch.CoordinatorRoot);
         UnixFileMode original = UnixFileMode.UserRead | UnixFileMode.UserWrite |
             UnixFileMode.UserExecute | UnixFileMode.GroupRead;
-        Directory.SetUnixFileMode(scratch.CoordinatorRoot, original);
+        File.SetUnixFileMode(scratch.CoordinatorRoot, original);
 
         await Assert.ThrowsExactlyAsync<InvalidDataException>(async () =>
         {
@@ -191,7 +191,7 @@ public sealed class RecoverySharedVolumeCoordinatorTests
         UnixFileMode original = UnixFileMode.UserRead | UnixFileMode.UserWrite |
             UnixFileMode.UserExecute | UnixFileMode.GroupWrite |
             UnixFileMode.GroupExecute;
-        Directory.SetUnixFileMode(scratch.CoordinatorRoot, original);
+        File.SetUnixFileMode(scratch.CoordinatorRoot, original);
         await Assert.ThrowsExactlyAsync<InvalidDataException>(async () =>
         {
             using var ignored = await RecoverySharedVolumeCoordinator.AcquireAsync(
