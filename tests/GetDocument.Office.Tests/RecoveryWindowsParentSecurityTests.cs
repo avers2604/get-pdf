@@ -88,6 +88,62 @@ public sealed class RecoveryWindowsParentSecurityTests
         }
     }
 
+    [TestMethod]
+    public void WindowsPinnedDirectoryRequiresAbsolutePath()
+    {
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            RecoveryWindowsPinnedParentProbe.OpenForDiagnostics("relative-dir"));
+    }
+
+    [TestMethod]
+    public void WindowsPinnedDirectoryReportsSameHandleIdentityWithoutMutation()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string dir = Path.Combine(Path.GetTempPath(),
+            "getdoc-bq-win-parent-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            using var pinned = RecoveryWindowsPinnedParentProbe.OpenForDiagnostics(dir);
+            Assert.IsTrue(pinned.Security.FileId.IsComplete);
+            Assert.IsTrue(pinned.Security.OwnerSid.StartsWith("S-1-",
+                StringComparison.Ordinal));
+            Assert.AreEqual(pinned.Security.FileId,
+                RecoveryNativeHandleIdProbe.ReadFromExistingHandle(pinned.Handle));
+            Assert.IsFalse(RecoveryWindowsParentSecurityGate.CanAuthorizeCapture(
+                RecoveryWindowsParentSecurityGate.Evaluate(
+                    pinned.Security, pinned.Security.OwnerSid)));
+        }
+        finally { Directory.Delete(dir); }
+    }
+
+    [TestMethod]
+    public void WindowsPinnedDirectoryRejectsFinalReparsePoint()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string root = Path.Combine(Path.GetTempPath(),
+            "getdoc-bq-win-link-" + Guid.NewGuid().ToString("N"));
+        string real = Path.Combine(root, "real");
+        string link = Path.Combine(root, "linked");
+        Directory.CreateDirectory(real);
+        try
+        {
+            try { Directory.CreateSymbolicLink(link, real); }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or
+                                       IOException or PlatformNotSupportedException)
+            { return; }
+
+            Assert.ThrowsExactly<InvalidDataException>(() =>
+                RecoveryWindowsPinnedParentProbe.OpenForDiagnostics(link));
+            Assert.IsTrue(Directory.Exists(real));
+        }
+        finally
+        {
+            if (Directory.Exists(link)) Directory.Delete(link);
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static RecoveryNativeFileId GoodId() =>
         new(RecoveryNativePlatform.Windows, 44, 123, 456);
 }
