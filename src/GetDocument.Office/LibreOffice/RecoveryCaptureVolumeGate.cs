@@ -60,8 +60,14 @@ internal static class RecoveryCaptureVolumeGate
             // The SAME OS-held byte-range coordinator is derived from the
             // volume key, not the individual recovery root. Cooperating
             // processes on the same machine/user must acquire it first.
+            // Explicit fake-volume observers are an internal testing seam.
+            // Keep synthetic lock files beneath their fixture recovery root
+            // unless a test explicitly passes a shared coordinator path.
+            string? sharedRoot = coordinatorDirectory ??
+                (observeVolume is null ? null :
+                    Path.Combine(root, ".getdoc-synthetic-volume-locks"));
             sharedLease = await RecoverySharedVolumeCoordinator.AcquireAsync(
-                volumeKey, coordinatorDirectory, cancellationToken);
+                volumeKey, sharedRoot, cancellationToken);
 
             // Lock file is in the dedicated recovery root, NOT in any user's
             // source directory or the per-document recovery folder. It is never
