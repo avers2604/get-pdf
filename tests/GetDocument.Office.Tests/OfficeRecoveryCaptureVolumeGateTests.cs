@@ -210,6 +210,76 @@ public sealed class OfficeRecoveryCaptureVolumeGateTests
             RecoveryCaptureVolumeGate.LockFileName)));
     }
 
+    [TestMethod]
+    public async Task TwoDistinctRecoveryRootsOnSameVolumeCannotOverlapInOneProcess()
+    {
+        using var scratch = new Scratch();
+        string firstRoot = Path.Combine(scratch.Root, "first-root");
+        string secondRoot = Path.Combine(scratch.Root, "second-root");
+        Func<string, RecoveryCaptureVolumeObservation> sameVolume = _ =>
+            new RecoveryCaptureVolumeObservation(true,
+                RecoveryCaptureVolumeGate.MinimumFreeBytes + 1, "synthetic",
+                VolumeKey: "volume-one");
+
+        using var first = await RecoveryCaptureVolumeGate.AcquireAsync(
+            firstRoot, sameVolume);
+        await Assert.ThrowsExactlyAsync<IOException>(async () =>
+        {
+            using var rejected = await RecoveryCaptureVolumeGate.AcquireAsync(
+                secondRoot, sameVolume);
+        });
+        Assert.IsFalse(Directory.Exists(secondRoot),
+            "A rejected second root must not be created or modified.");
+    }
+
+    [TestMethod]
+    public async Task IndependentSyntheticVolumeKeysDoNotShareLocalGate()
+    {
+        using var scratch = new Scratch();
+        string firstRoot = Path.Combine(scratch.Root, "first-other");
+        string secondRoot = Path.Combine(scratch.Root, "second-other");
+        Func<string, RecoveryCaptureVolumeObservation> firstVolume = _ =>
+            new RecoveryCaptureVolumeObservation(true,
+                RecoveryCaptureVolumeGate.MinimumFreeBytes + 1, "synthetic",
+                VolumeKey: "volume-one");
+        Func<string, RecoveryCaptureVolumeObservation> secondVolume = _ =>
+            new RecoveryCaptureVolumeObservation(true,
+                RecoveryCaptureVolumeGate.MinimumFreeBytes + 1, "synthetic",
+                VolumeKey: "volume-two");
+
+        using var first = await RecoveryCaptureVolumeGate.AcquireAsync(
+            firstRoot, firstVolume);
+        using var second = await RecoveryCaptureVolumeGate.AcquireAsync(
+            secondRoot, secondVolume);
+        Assert.IsTrue(File.Exists(Path.Combine(firstRoot,
+            RecoveryCaptureVolumeGate.LockFileName)));
+        Assert.IsTrue(File.Exists(Path.Combine(secondRoot,
+            RecoveryCaptureVolumeGate.LockFileName)));
+    }
+
+    [TestMethod]
+    public async Task VolumeChangedBetweenProbesFailsClosedAndReleasesGate()
+    {
+        using var scratch = new Scratch();
+        string targetRoot = Path.Combine(scratch.Root, "switched-volume");
+        int reads = 0;
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(async () =>
+        {
+            using var rejected = await RecoveryCaptureVolumeGate.AcquireAsync(
+                targetRoot, _ => new RecoveryCaptureVolumeObservation(
+                    true, RecoveryCaptureVolumeGate.MinimumFreeBytes + 1,
+                    "synthetic", ++reads == 1 ? "volume-one" : "volume-two"));
+        });
+        Assert.AreEqual(2, reads);
+
+        using var accepted = await RecoveryCaptureVolumeGate.AcquireAsync(
+            targetRoot, _ => new RecoveryCaptureVolumeObservation(
+                true, RecoveryCaptureVolumeGate.MinimumFreeBytes + 1,
+                "synthetic", VolumeKey: "volume-one"));
+        Assert.IsTrue(File.Exists(Path.Combine(targetRoot,
+            RecoveryCaptureVolumeGate.LockFileName)));
+    }
+
     private sealed class Scratch : IDisposable
     {
         internal string Root { get; } = Path.Combine(Path.GetTempPath(),
