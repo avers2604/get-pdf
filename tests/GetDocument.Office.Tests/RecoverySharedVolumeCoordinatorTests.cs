@@ -82,6 +82,10 @@ public sealed class RecoverySharedVolumeCoordinatorTests
     {
         using var scratch = new Scratch();
         Directory.CreateDirectory(scratch.CoordinatorRoot);
+        if (OperatingSystem.IsLinux())
+            File.SetUnixFileMode(scratch.CoordinatorRoot,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                UnixFileMode.UserExecute);
         string target = Path.Combine(scratch.Root, "protected.txt");
         File.WriteAllText(target, "KEEP_UNCHANGED");
         string link = RecoverySharedVolumeCoordinator.GetLockPathForPlanning(
@@ -103,6 +107,10 @@ public sealed class RecoverySharedVolumeCoordinatorTests
     {
         using var scratch = new Scratch();
         Directory.CreateDirectory(scratch.CoordinatorRoot);
+        if (OperatingSystem.IsLinux())
+            File.SetUnixFileMode(scratch.CoordinatorRoot,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                UnixFileMode.UserExecute);
         string path = RecoverySharedVolumeCoordinator.GetLockPathForPlanning(
             scratch.CoordinatorRoot, "test-volume");
         File.WriteAllText(path, "NOT_OUR_LOCK_FILE");
@@ -141,6 +149,63 @@ public sealed class RecoverySharedVolumeCoordinatorTests
                 "test-volume", scratch.CoordinatorRoot);
         });
         Assert.AreEqual(0, Directory.GetFileSystemEntries(real).Length);
+    }
+
+    [TestMethod]
+    public async Task NewLinuxCoordinatorDirectoryUsesPrivateOwnerOnlyMode()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var scratch = new Scratch();
+        using var held = await RecoverySharedVolumeCoordinator.AcquireAsync(
+            "synthetic-private-volume", scratch.CoordinatorRoot);
+        UnixFileMode mode = Directory.GetUnixFileMode(scratch.CoordinatorRoot);
+        Assert.IsTrue((mode & (UnixFileMode.UserRead |
+                               UnixFileMode.UserWrite |
+                               UnixFileMode.UserExecute)) ==
+                       (UnixFileMode.UserRead |
+                        UnixFileMode.UserWrite |
+                        UnixFileMode.UserExecute));
+        Assert.AreEqual(UnixFileMode.None,
+            mode & (UnixFileMode.GroupRead | UnixFileMode.GroupWrite |
+                    UnixFileMode.GroupExecute | UnixFileMode.OtherRead |
+                    UnixFileMode.OtherWrite | UnixFileMode.OtherExecute));
+    }
+
+    [TestMethod]
+    public async Task ExistingWorldReadableLinuxCoordinatorIsDeniedNotChmodded()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var scratch = new Scratch();
+        Directory.CreateDirectory(scratch.CoordinatorRoot);
+        UnixFileMode original = UnixFileMode.UserRead | UnixFileMode.UserWrite |
+            UnixFileMode.UserExecute | UnixFileMode.GroupRead;
+        File.SetUnixFileMode(scratch.CoordinatorRoot, original);
+
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(async () =>
+        {
+            using var ignored = await RecoverySharedVolumeCoordinator.AcquireAsync(
+                "synthetic-private-volume", scratch.CoordinatorRoot);
+        });
+        Assert.AreEqual(original, Directory.GetUnixFileMode(scratch.CoordinatorRoot));
+        Assert.AreEqual(0, Directory.GetFileSystemEntries(scratch.CoordinatorRoot).Length);
+    }
+
+    [TestMethod]
+    public async Task ExistingGroupWritableLinuxCoordinatorFailsBeforeLockCreation()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var scratch = new Scratch();
+        Directory.CreateDirectory(scratch.CoordinatorRoot);
+        UnixFileMode original = UnixFileMode.UserRead | UnixFileMode.UserWrite |
+            UnixFileMode.UserExecute | UnixFileMode.GroupWrite |
+            UnixFileMode.GroupExecute;
+        File.SetUnixFileMode(scratch.CoordinatorRoot, original);
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(async () =>
+        {
+            using var ignored = await RecoverySharedVolumeCoordinator.AcquireAsync(
+                "synthetic-private-volume", scratch.CoordinatorRoot);
+        });
+        Assert.AreEqual(original, Directory.GetUnixFileMode(scratch.CoordinatorRoot));
     }
 
     private sealed class Scratch : IDisposable

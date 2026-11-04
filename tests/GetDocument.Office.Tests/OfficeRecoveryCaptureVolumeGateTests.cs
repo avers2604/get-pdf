@@ -319,6 +319,10 @@ public sealed class OfficeRecoveryCaptureVolumeGateTests
         string firstRoot = Path.Combine(scratch.Root, "not-created");
         string coordinatorRoot = Path.Combine(scratch.Root, "shared-coordinator");
         Directory.CreateDirectory(coordinatorRoot);
+        if (OperatingSystem.IsLinux())
+            File.SetUnixFileMode(coordinatorRoot,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                UnixFileMode.UserExecute);
         const string volume = "synthetic-local-volume";
         string protectedPath = Path.Combine(scratch.Root, "protected.bin");
         File.WriteAllText(protectedPath, "KEEP");
