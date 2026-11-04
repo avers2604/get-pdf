@@ -108,10 +108,13 @@ class SharedVolumeCoordinatorSourceContract(unittest.TestCase):
             "ExistingNonemptyCoordinatorLockIsRejectedAndRetained",
             "EmptyOrInvalidVolumeIdentityCannotCreateCoordinatorPath",
             "SymlinkedCoordinatorDirectoryIsRejectedBeforeLockCreation",
+            "NewLinuxCoordinatorDirectoryUsesPrivateOwnerOnlyMode",
+            "ExistingWorldReadableLinuxCoordinatorIsDeniedNotChmodded",
+            "ExistingGroupWritableLinuxCoordinatorFailsBeforeLockCreation",
         ):
             with self.subTest(name=name):
                 self.assertIn(name, self.coord_tests)
-        self.assertEqual(8, self.coord_tests.count("[TestMethod]"))
+        self.assertEqual(11, self.coord_tests.count("[TestMethod]"))
         for name in (
             "DistinctRootsReusePersistentSharedCoordinatorFileAfterRelease",
             "LinkedSharedCoordinatorFileRejectsBeforeCreatingRecoveryRoot",
