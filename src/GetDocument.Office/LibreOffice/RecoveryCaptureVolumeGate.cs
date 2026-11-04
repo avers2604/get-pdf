@@ -17,6 +17,13 @@ internal static class RecoveryCaptureVolumeGate
         new(OperatingSystem.IsWindows()
             ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
+    // Additional *process-local* serialization for independently configured
+    // recovery roots reporting the same mounted volume. This is NOT a native
+    // per-volume cross-process broker or a disk-space reservation.
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> VolumeGates =
+        new(OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
     internal static async Task<RecoveryCaptureVolumeLease> AcquireAsync(
         string recoveryRoot,
         Func<string, RecoveryCaptureVolumeObservation>? observeVolume = null,
@@ -33,62 +40,106 @@ internal static class RecoveryCaptureVolumeGate
 
         Func<string, RecoveryCaptureVolumeObservation> probe =
             observeVolume ?? ObserveRealVolume;
-        RequireAvailableLocalSpace(probe(root));
-
-        // Lock file is in the dedicated recovery root, NOT in any user's
-        // source directory or the per-document recovery folder. It is never
-        // removed, even after cancellation or a crash.
-        Directory.CreateDirectory(root);
-        RequirePlainDirectoryAncestors(root);
-        var local = LocalGates.GetOrAdd(root, _ => new SemaphoreSlim(1, 1));
-        if (!await local.WaitAsync(0, cancellationToken))
+        RecoveryCaptureVolumeObservation firstVolume = probe(root);
+        RequireAvailableLocalSpace(firstVolume);
+        string volumeKey = LocalVolumeGateKey(firstVolume, root);
+        var volumeLocal = VolumeGates.GetOrAdd(
+            volumeKey, _ => new SemaphoreSlim(1, 1));
+        if (!await volumeLocal.WaitAsync(0, cancellationToken))
             throw new IOException(
-                "Другой сеанс уже создаёт аварийный снимок в этом хранилище.");
+                "Другой сеанс уже создаёт аварийный снимок на этом томе.");
 
-        FileStream? handle = null;
-        bool locked = false;
+        // The local volume gate is transferred to the returned lease; on any
+        // error it is released here. Root path and per-root OS lock are still
+        // separately protected as in GD-31J.27bm.
+        bool volumeTransferred = false;
         try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            string lockPath = Path.Combine(root, LockFileName);
-            RequirePlainLockFileIfPresent(lockPath);
-            // OpenOrCreate leaves a stable, EMPTY coordination inode in place.
-            // No path cleanup: deleting a lock pathname would permit separate
-            // processes to coordinate on DIFFERENT inodes after a rename.
-            handle = new FileStream(lockPath, FileMode.OpenOrCreate,
-                FileAccess.ReadWrite, FileShare.ReadWrite,
-                bufferSize: 1, options: FileOptions.None);
+            // Lock file is in the dedicated recovery root, NOT in any user's
+            // source directory or the per-document recovery folder. It is never
+            // removed, even after cancellation or a crash.
+            Directory.CreateDirectory(root);
             RequirePlainDirectoryAncestors(root);
-            RequirePlainLockFileIfPresent(lockPath);
-            if (handle.Length != 0)
-                throw new InvalidDataException(
-                    "Файл координации аварийных снимков имеет неожиданные данные.");
+            var local = LocalGates.GetOrAdd(root, _ => new SemaphoreSlim(1, 1));
+            if (!await local.WaitAsync(0, cancellationToken))
+                throw new IOException(
+                    "Другой сеанс уже создаёт аварийный снимок в этом хранилище.");
 
-            // Same-host cooperative byte-range lock, held across all awaits
-            // until the owner's finally/Dispose. On Unix this is advisory.
-            // A cooperating second process must fail closed on contention.
-            handle.Lock(0, 1);
-            locked = true;
-            cancellationToken.ThrowIfCancellationRequested();
-            // Reobserve under the lock to avoid starting on a stale reading.
-            RequireAvailableLocalSpace(probe(root));
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var lease = new RecoveryCaptureVolumeLease(handle, local);
-            handle = null;
-            return lease;
-        }
-        catch
-        {
-            if (locked && handle is not null)
+            FileStream? handle = null;
+            bool locked = false;
+            try
             {
-                try { handle.Unlock(0, 1); }
-                catch (IOException) { } // preserve the original failure
+                cancellationToken.ThrowIfCancellationRequested();
+                string lockPath = Path.Combine(root, LockFileName);
+                RequirePlainLockFileIfPresent(lockPath);
+                // OpenOrCreate leaves a stable, EMPTY coordination inode in place.
+                // No path cleanup: deleting a lock pathname would permit separate
+                // processes to coordinate on DIFFERENT inodes after a rename.
+                handle = new FileStream(lockPath, FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite, FileShare.ReadWrite,
+                    bufferSize: 1, options: FileOptions.None);
+                RequirePlainDirectoryAncestors(root);
+                RequirePlainLockFileIfPresent(lockPath);
+                if (handle.Length != 0)
+                    throw new InvalidDataException(
+                        "Файл координации аварийных снимков имеет неожиданные данные.");
+
+                // Same-host cooperative byte-range lock, held across all awaits
+                // until the owner's finally/Dispose. On Unix this is advisory.
+                // A cooperating second process must fail closed on contention.
+                handle.Lock(0, 1);
+                locked = true;
+                // Cheap path sanity check only. A successful File.Exists cannot
+                // prove this NAME still denotes the locked handle's OS file ID.
+                // The identity-bound requirement is GD-31J.27bn's disabled native
+                // attestation contract, pending real Windows/Astra implementations.
+                RequirePlainLockFileIfPresent(lockPath);
+                if (!File.Exists(lockPath))
+                    throw new InvalidDataException(
+                        "Имя lock-файла исчезло при удерживаемом дескрипторе.");
+                cancellationToken.ThrowIfCancellationRequested();
+                // Reobserve under the lock to avoid starting on a stale reading.
+                RecoveryCaptureVolumeObservation recheckedVolume = probe(root);
+                RequireAvailableLocalSpace(recheckedVolume);
+                if (!string.Equals(LocalVolumeGateKey(recheckedVolume, root),
+                        volumeKey,
+                        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase
+                                                    : StringComparison.Ordinal))
+                    throw new InvalidDataException(
+                        "Том аварийного восстановления изменился во время захвата блокировки.");
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var lease = new RecoveryCaptureVolumeLease(handle, local, volumeLocal);
+                handle = null;
+                volumeTransferred = true;
+                return lease;
             }
-            handle?.Dispose();
-            local.Release();
-            throw;
+            catch
+            {
+                if (locked && handle is not null)
+                {
+                    try { handle.Unlock(0, 1); }
+                    catch (IOException) { } // preserve the original failure
+                }
+                handle?.Dispose();
+                local.Release();
+                throw;
+            }
         }
+        finally
+        {
+            if (!volumeTransferred) volumeLocal.Release();
+        }
+    }
+
+    private static string LocalVolumeGateKey(
+        RecoveryCaptureVolumeObservation observation, string root)
+    {
+        // Production uses a drive/mount path from DriveInfo. Synthetic probes
+        // without a volume ID retain the existing per-root behavior.
+        // The key coordinates only threads in THIS process, not OS identities.
+        return string.IsNullOrWhiteSpace(observation.VolumeKey)
+            ? root : observation.VolumeKey;
     }
 
     private static bool LockingDisabledByRuntime()
@@ -143,7 +194,8 @@ internal static class RecoveryCaptureVolumeGate
         // CIFS, SMB, NFS, unknown mount types and Windows UNC mappings are
         // rejected. No cross-host lease is claimed by this implementation.
         return new RecoveryCaptureVolumeObservation(
-            local, drive.AvailableFreeSpace, kind);
+            local, drive.AvailableFreeSpace, kind,
+            VolumeKey: Path.GetFullPath(drive.Name));
     }
 
     private static void RequirePlainDirectoryAncestors(string root)
@@ -177,18 +229,23 @@ internal static class RecoveryCaptureVolumeGate
 /// reads the live mounted volume. This is NOT an actual byte reservation.
 /// </summary>
 internal sealed record RecoveryCaptureVolumeObservation(
-    bool IsApprovedLocalVolume, long AvailableFreeBytes, string FileSystemType);
+    bool IsApprovedLocalVolume, long AvailableFreeBytes, string FileSystemType,
+    // DriveInfo mount name in production; synthetic unit tests may omit it.
+    string? VolumeKey = null);
 
 internal sealed class RecoveryCaptureVolumeLease : IDisposable
 {
     private FileStream? _handle;
     private readonly SemaphoreSlim _local;
+    private readonly SemaphoreSlim _volumeLocal;
     private int _disposed;
 
-    internal RecoveryCaptureVolumeLease(FileStream handle, SemaphoreSlim local)
+    internal RecoveryCaptureVolumeLease(
+        FileStream handle, SemaphoreSlim local, SemaphoreSlim volumeLocal)
     {
         _handle = handle;
         _local = local;
+        _volumeLocal = volumeLocal;
     }
 
     public void Dispose()
@@ -206,7 +263,11 @@ internal sealed class RecoveryCaptureVolumeLease : IDisposable
         finally
         {
             try { handle?.Dispose(); }
-            finally { _local.Release(); }
+            finally
+            {
+                try { _local.Release(); }
+                finally { _volumeLocal.Release(); }
+            }
         }
     }
 }

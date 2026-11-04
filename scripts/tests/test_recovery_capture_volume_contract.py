@@ -73,12 +73,18 @@ class CaptureVolumeGateSourceContract(unittest.TestCase):
             '"ext4" or "xfs" or "btrfs" or "overlay" or "tmpfs"',
             "DOTNET_SYSTEM_IO_DISABLEFILELOCKING",
             "System.IO.DisableFileLocking",
-            "RequireAvailableLocalSpace(probe(root));",
+            "RequireAvailableLocalSpace(firstVolume);",
+            "RequireAvailableLocalSpace(recheckedVolume);",
         ):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.gate)
-        self.assertEqual(2, self.acquire.count(
-            "RequireAvailableLocalSpace(probe(root));"))
+        self.assertEqual(1, self.acquire.count(
+            "RequireAvailableLocalSpace(firstVolume);"))
+        self.assertEqual(1, self.acquire.count(
+            "RequireAvailableLocalSpace(recheckedVolume);"))
+        self.assertIn("volumeLocal.WaitAsync(0, cancellationToken)", self.acquire)
+        self.assertIn("if (!volumeTransferred) volumeLocal.Release();",
+                      self.acquire)
 
     def test_lease_uses_thread_independent_dispose(self):
         self.assertIn("internal sealed class RecoveryCaptureVolumeLease : IDisposable",
@@ -100,11 +106,14 @@ class CaptureVolumeGateSourceContract(unittest.TestCase):
             "LockIsReleasedOnCaptureFailureWithoutDeletingScratch",
             "SeparateStoresSharingRootRejectOverlappingExportBeforeItRuns",
             "LowSpaceStoreRefusesExporterAndPreservesSourceWithoutRecoveryFolder",
+            "TwoDistinctRecoveryRootsOnSameVolumeCannotOverlapInOneProcess",
+            "IndependentSyntheticVolumeKeysDoNotShareLocalGate",
+            "VolumeChangedBetweenProbesFailsClosedAndReleasesGate",
         )
         for name in names:
             with self.subTest(name=name):
                 self.assertIn(name, self.tests)
-        self.assertEqual(10, self.tests.count("[TestMethod]"))
+        self.assertEqual(13, self.tests.count("[TestMethod]"))
 
     def test_gates_remain_not_run_and_release_closed(self):
         step = 'CommandStep("recovery-capture-volume-source-tests"'
