@@ -82,6 +82,10 @@ public sealed class RecoverySharedVolumeCoordinatorTests
     {
         using var scratch = new Scratch();
         Directory.CreateDirectory(scratch.CoordinatorRoot);
+        if (OperatingSystem.IsLinux())
+            File.SetUnixFileMode(scratch.CoordinatorRoot,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                UnixFileMode.UserExecute);
         string target = Path.Combine(scratch.Root, "protected.txt");
         File.WriteAllText(target, "KEEP_UNCHANGED");
         string link = RecoverySharedVolumeCoordinator.GetLockPathForPlanning(
@@ -103,6 +107,10 @@ public sealed class RecoverySharedVolumeCoordinatorTests
     {
         using var scratch = new Scratch();
         Directory.CreateDirectory(scratch.CoordinatorRoot);
+        if (OperatingSystem.IsLinux())
+            File.SetUnixFileMode(scratch.CoordinatorRoot,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                UnixFileMode.UserExecute);
         string path = RecoverySharedVolumeCoordinator.GetLockPathForPlanning(
             scratch.CoordinatorRoot, "test-volume");
         File.WriteAllText(path, "NOT_OUR_LOCK_FILE");
