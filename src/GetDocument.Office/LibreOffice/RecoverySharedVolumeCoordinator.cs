@@ -53,6 +53,17 @@ internal static class RecoverySharedVolumeCoordinator
         cancellationToken.ThrowIfCancellationRequested();
         string root = Path.GetFullPath(coordinatorRoot ?? DefaultCoordinatorRoot());
         string lockPath = GetLockPathForPlanning(root, volumeKey);
+        if (coordinatorRoot is null)
+        {
+            // The real local coordinator itself must be on a recognized
+            // LOCAL volume. A redirected AppData folder or network mount
+            // is not a supported local cross-process lock backend.
+            RecoveryCaptureVolumeObservation location =
+                RecoveryCaptureVolumeGate.ObserveRealVolume(root);
+            if (!location.IsApprovedLocalVolume)
+                throw new PlatformNotSupportedException(
+                    "Каталог координатора расположен на неподтверждённом или сетевом томе.");
+        }
         RequirePlainDirectoryTree(root);
         cancellationToken.ThrowIfCancellationRequested();
 
