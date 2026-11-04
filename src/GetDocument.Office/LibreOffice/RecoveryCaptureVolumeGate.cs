@@ -17,6 +17,13 @@ internal static class RecoveryCaptureVolumeGate
         new(OperatingSystem.IsWindows()
             ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
+    // Additional *process-local* serialization for independently configured
+    // recovery roots reporting the same mounted volume. This is NOT a native
+    // per-volume cross-process broker or a disk-space reservation.
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> VolumeGates =
+        new(OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
     internal static async Task<RecoveryCaptureVolumeLease> AcquireAsync(
         string recoveryRoot,
         Func<string, RecoveryCaptureVolumeObservation>? observeVolume = null,
@@ -33,8 +40,21 @@ internal static class RecoveryCaptureVolumeGate
 
         Func<string, RecoveryCaptureVolumeObservation> probe =
             observeVolume ?? ObserveRealVolume;
-        RequireAvailableLocalSpace(probe(root));
+        RecoveryCaptureVolumeObservation firstVolume = probe(root);
+        RequireAvailableLocalSpace(firstVolume);
+        string volumeKey = LocalVolumeGateKey(firstVolume, root);
+        var volumeLocal = VolumeGates.GetOrAdd(
+            volumeKey, _ => new SemaphoreSlim(1, 1));
+        if (!await volumeLocal.WaitAsync(0, cancellationToken))
+            throw new IOException(
+                "Другой сеанс уже создаёт аварийный снимок на этом томе.");
 
+        // The local volume gate is transferred to the returned lease; on any
+        // error it is released here. Root path and per-root OS lock are still
+        // separately protected as in GD-31J.27bm.
+        bool volumeTransferred = false;
+        try
+        {
         // Lock file is in the dedicated recovery root, NOT in any user's
         // source directory or the per-document recovery folder. It is never
         // removed, even after cancellation or a crash.
@@ -71,11 +91,19 @@ internal static class RecoveryCaptureVolumeGate
             locked = true;
             cancellationToken.ThrowIfCancellationRequested();
             // Reobserve under the lock to avoid starting on a stale reading.
-            RequireAvailableLocalSpace(probe(root));
+            RecoveryCaptureVolumeObservation recheckedVolume = probe(root);
+            RequireAvailableLocalSpace(recheckedVolume);
+            if (!string.Equals(LocalVolumeGateKey(recheckedVolume, root),
+                    volumeKey,
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase
+                                                : StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    "Том аварийного восстановления изменился во время захвата блокировки.");
             cancellationToken.ThrowIfCancellationRequested();
 
-            var lease = new RecoveryCaptureVolumeLease(handle, local);
+            var lease = new RecoveryCaptureVolumeLease(handle, local, volumeLocal);
             handle = null;
+            volumeTransferred = true;
             return lease;
         }
         catch
@@ -89,6 +117,21 @@ internal static class RecoveryCaptureVolumeGate
             local.Release();
             throw;
         }
+        }
+        finally
+        {
+            if (!volumeTransferred) volumeLocal.Release();
+        }
+    }
+
+    private static string LocalVolumeGateKey(
+        RecoveryCaptureVolumeObservation observation, string root)
+    {
+        // Production uses a drive/mount path from DriveInfo. Synthetic probes
+        // without a volume ID retain the existing per-root behavior.
+        // The key coordinates only threads in THIS process, not OS identities.
+        return string.IsNullOrWhiteSpace(observation.VolumeKey)
+            ? root : observation.VolumeKey;
     }
 
     private static bool LockingDisabledByRuntime()
@@ -143,7 +186,8 @@ internal static class RecoveryCaptureVolumeGate
         // CIFS, SMB, NFS, unknown mount types and Windows UNC mappings are
         // rejected. No cross-host lease is claimed by this implementation.
         return new RecoveryCaptureVolumeObservation(
-            local, drive.AvailableFreeSpace, kind);
+            local, drive.AvailableFreeSpace, kind,
+            VolumeKey: Path.GetFullPath(drive.Name));
     }
 
     private static void RequirePlainDirectoryAncestors(string root)
@@ -177,18 +221,23 @@ internal static class RecoveryCaptureVolumeGate
 /// reads the live mounted volume. This is NOT an actual byte reservation.
 /// </summary>
 internal sealed record RecoveryCaptureVolumeObservation(
-    bool IsApprovedLocalVolume, long AvailableFreeBytes, string FileSystemType);
+    bool IsApprovedLocalVolume, long AvailableFreeBytes, string FileSystemType,
+    // DriveInfo mount name in production; synthetic unit tests may omit it.
+    string? VolumeKey = null);
 
 internal sealed class RecoveryCaptureVolumeLease : IDisposable
 {
     private FileStream? _handle;
     private readonly SemaphoreSlim _local;
+    private readonly SemaphoreSlim _volumeLocal;
     private int _disposed;
 
-    internal RecoveryCaptureVolumeLease(FileStream handle, SemaphoreSlim local)
+    internal RecoveryCaptureVolumeLease(
+        FileStream handle, SemaphoreSlim local, SemaphoreSlim volumeLocal)
     {
         _handle = handle;
         _local = local;
+        _volumeLocal = volumeLocal;
     }
 
     public void Dispose()
@@ -206,7 +255,11 @@ internal sealed class RecoveryCaptureVolumeLease : IDisposable
         finally
         {
             try { handle?.Dispose(); }
-            finally { _local.Release(); }
+            finally
+            {
+                try { _local.Release(); }
+                finally { _volumeLocal.Release(); }
+            }
         }
     }
 }
