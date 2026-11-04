@@ -32,7 +32,8 @@ class RecoveryVolumeIdentitySourceContract(unittest.TestCase):
             "LocalVolumeGateKey(firstVolume, root)",
             "LocalVolumeGateKey(recheckedVolume, root)",
             "if (!volumeTransferred) volumeLocal.Release();",
-            "new RecoveryCaptureVolumeLease(handle, local, volumeLocal);",
+            "new RecoveryCaptureVolumeLease(",
+            "handle, local, volumeLocal, sharedLease);",
             "finally { _volumeLocal.Release(); }",
             "VolumeKey: Path.GetFullPath(drive.Name)",
             "VolumeKey = null",
@@ -95,7 +96,7 @@ class RecoveryVolumeIdentitySourceContract(unittest.TestCase):
                 self.assertIn(marker, self.native)
 
     def test_test_specs_cover_volume_races_and_native_denial(self):
-        self.assertEqual(13, self.test_gate.count("[TestMethod]"))
+        self.assertEqual(15, self.test_gate.count("[TestMethod]"))
         for required in (
             "TwoDistinctRecoveryRootsOnSameVolumeCannotOverlapInOneProcess",
             "IndependentSyntheticVolumeKeysDoNotShareLocalGate",

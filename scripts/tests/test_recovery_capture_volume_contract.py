@@ -83,8 +83,8 @@ class CaptureVolumeGateSourceContract(unittest.TestCase):
         self.assertEqual(1, self.acquire.count(
             "RequireAvailableLocalSpace(recheckedVolume);"))
         self.assertIn("volumeLocal.WaitAsync(0, cancellationToken)", self.acquire)
-        self.assertIn("if (!volumeTransferred) volumeLocal.Release();",
-                      self.acquire)
+        self.assertIn("if (!volumeTransferred)", self.acquire)
+        self.assertIn("finally { volumeLocal.Release(); }", self.acquire)
 
     def test_lease_uses_thread_independent_dispose(self):
         self.assertIn("internal sealed class RecoveryCaptureVolumeLease : IDisposable",
@@ -109,11 +109,13 @@ class CaptureVolumeGateSourceContract(unittest.TestCase):
             "TwoDistinctRecoveryRootsOnSameVolumeCannotOverlapInOneProcess",
             "IndependentSyntheticVolumeKeysDoNotShareLocalGate",
             "VolumeChangedBetweenProbesFailsClosedAndReleasesGate",
+            "DistinctRootsReusePersistentSharedCoordinatorFileAfterRelease",
+            "LinkedSharedCoordinatorFileRejectsBeforeCreatingRecoveryRoot",
         )
         for name in names:
             with self.subTest(name=name):
                 self.assertIn(name, self.tests)
-        self.assertEqual(13, self.tests.count("[TestMethod]"))
+        self.assertEqual(15, self.tests.count("[TestMethod]"))
 
     def test_gates_remain_not_run_and_release_closed(self):
         step = 'CommandStep("recovery-capture-volume-source-tests"'

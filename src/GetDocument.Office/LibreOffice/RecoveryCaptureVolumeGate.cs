@@ -27,7 +27,8 @@ internal static class RecoveryCaptureVolumeGate
     internal static async Task<RecoveryCaptureVolumeLease> AcquireAsync(
         string recoveryRoot,
         Func<string, RecoveryCaptureVolumeObservation>? observeVolume = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? coordinatorDirectory = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(recoveryRoot);
         cancellationToken.ThrowIfCancellationRequested();
@@ -53,8 +54,21 @@ internal static class RecoveryCaptureVolumeGate
         // error it is released here. Root path and per-root OS lock are still
         // separately protected as in GD-31J.27bm.
         bool volumeTransferred = false;
+        RecoverySharedVolumeLease? sharedLease = null;
         try
         {
+            // The SAME OS-held byte-range coordinator is derived from the
+            // volume key, not the individual recovery root. Cooperating
+            // processes on the same machine/user must acquire it first.
+            // Explicit fake-volume observers are an internal testing seam.
+            // Keep synthetic lock files beneath their fixture recovery root
+            // unless a test explicitly passes a shared coordinator path.
+            string? sharedRoot = coordinatorDirectory ??
+                (observeVolume is null ? null :
+                    Path.Combine(root, ".getdoc-synthetic-volume-locks"));
+            sharedLease = await RecoverySharedVolumeCoordinator.AcquireAsync(
+                volumeKey, sharedRoot, cancellationToken);
+
             // Lock file is in the dedicated recovery root, NOT in any user's
             // source directory or the per-document recovery folder. It is never
             // removed, even after cancellation or a crash.
@@ -109,26 +123,42 @@ internal static class RecoveryCaptureVolumeGate
                         "Том аварийного восстановления изменился во время захвата блокировки.");
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var lease = new RecoveryCaptureVolumeLease(handle, local, volumeLocal);
+                var lease = new RecoveryCaptureVolumeLease(
+                    handle, local, volumeLocal, sharedLease);
                 handle = null;
+                sharedLease = null;
                 volumeTransferred = true;
                 return lease;
             }
             catch
             {
-                if (locked && handle is not null)
+                try
                 {
-                    try { handle.Unlock(0, 1); }
-                    catch (IOException) { } // preserve the original failure
+                    if (locked && handle is not null)
+                    {
+                        try { handle.Unlock(0, 1); }
+                        catch (IOException) { } // preserve the original failure
+                    }
+                    handle?.Dispose();
                 }
-                handle?.Dispose();
-                local.Release();
+                finally
+                {
+                    // A failed unlock/close must not strand the local gate.
+                    // The outer finally also releases shared and volume gates.
+                    local.Release();
+                }
                 throw;
             }
         }
         finally
         {
-            if (!volumeTransferred) volumeLocal.Release();
+            if (!volumeTransferred)
+            {
+                // Release the shared kernel coordinator even if acquiring
+                // the root lock/volume recheck fails after it was obtained.
+                try { sharedLease?.Dispose(); }
+                finally { volumeLocal.Release(); }
+            }
         }
     }
 
@@ -162,7 +192,7 @@ internal static class RecoveryCaptureVolumeGate
                 "Недостаточно свободного места для аварийной копии и резерва диска.");
     }
 
-    private static RecoveryCaptureVolumeObservation ObserveRealVolume(string root)
+    internal static RecoveryCaptureVolumeObservation ObserveRealVolume(string root)
     {
         // Longest mounted path wins. On Linux this can distinguish an ext4
         // mount from a nested CIFS/NFS mount; don't mistake '/' for the latter.
@@ -238,14 +268,17 @@ internal sealed class RecoveryCaptureVolumeLease : IDisposable
     private FileStream? _handle;
     private readonly SemaphoreSlim _local;
     private readonly SemaphoreSlim _volumeLocal;
+    private readonly RecoverySharedVolumeLease _sharedLease;
     private int _disposed;
 
     internal RecoveryCaptureVolumeLease(
-        FileStream handle, SemaphoreSlim local, SemaphoreSlim volumeLocal)
+        FileStream handle, SemaphoreSlim local, SemaphoreSlim volumeLocal,
+        RecoverySharedVolumeLease sharedLease)
     {
         _handle = handle;
         _local = local;
         _volumeLocal = volumeLocal;
+        _sharedLease = sharedLease;
     }
 
     public void Dispose()
@@ -266,7 +299,11 @@ internal sealed class RecoveryCaptureVolumeLease : IDisposable
             finally
             {
                 try { _local.Release(); }
-                finally { _volumeLocal.Release(); }
+                finally
+                {
+                    try { _sharedLease.Dispose(); }
+                    finally { _volumeLocal.Release(); }
+                }
             }
         }
     }
