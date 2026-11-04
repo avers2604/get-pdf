@@ -70,17 +70,25 @@ internal static class RecoverySharedVolumeCoordinator
         // The directory is app-local, not a user document/recovery source.
         // Any path change (symlink/junction/reparse) seen at a checkpoint
         // fails closed, but this DOES NOT close the hostile rename TOCTOU.
-        Directory.CreateDirectory(root);
+        // Create new Linux coordinator directories as 0700, never apply chmod
+        // to an existing path that may belong to somebody else. Existing
+        // loose directories must be inspected/migrated out of band.
+        const UnixFileMode OwnerOnly = UnixFileMode.UserRead |
+            UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+        if (OperatingSystem.IsLinux())
+            Directory.CreateDirectory(root, OwnerOnly);
+        else
+            Directory.CreateDirectory(root);
         RequirePlainDirectoryTree(root);
 
         if (OperatingSystem.IsLinux())
         {
-            // Reject shared-writable directories. Do not chmod a possibly
-            // pre-existing caller-owned directory by path.
             UnixFileMode mode = Directory.GetUnixFileMode(root);
-            if ((mode & (UnixFileMode.GroupWrite | UnixFileMode.OtherWrite)) != 0)
+            if ((mode & OwnerOnly) != OwnerOnly ||
+                (mode & ~OwnerOnly) != (UnixFileMode)0)
                 throw new InvalidDataException(
-                    "Каталог координатора доступен для записи посторонним.");
+                    "Каталог координатора должен иметь приватные права 0700 " +
+                    "и не исправляется автоматически.");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
