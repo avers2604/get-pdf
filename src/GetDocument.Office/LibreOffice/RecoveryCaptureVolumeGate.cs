@@ -132,13 +132,21 @@ internal static class RecoveryCaptureVolumeGate
             }
             catch
             {
-                if (locked && handle is not null)
+                try
                 {
-                    try { handle.Unlock(0, 1); }
-                    catch (IOException) { } // preserve the original failure
+                    if (locked && handle is not null)
+                    {
+                        try { handle.Unlock(0, 1); }
+                        catch (IOException) { } // preserve the original failure
+                    }
+                    handle?.Dispose();
                 }
-                handle?.Dispose();
-                local.Release();
+                finally
+                {
+                    // A failed unlock/close must not strand the local gate.
+                    // The outer finally also releases shared and volume gates.
+                    local.Release();
+                }
                 throw;
             }
         }
