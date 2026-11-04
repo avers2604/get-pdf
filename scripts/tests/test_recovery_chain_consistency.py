@@ -62,6 +62,8 @@ REQUIRED = {
         "test_recovery_volume_identity_contract.py",
     "recovery-shared-volume-coordinator-source-tests":
         "test_recovery_shared_volume_coordinator_contract.py",
+    "recovery-native-handle-probe-source-tests":
+        "test_recovery_native_handle_probe_contract.py",
 }
 
 
@@ -112,7 +114,7 @@ class RecoveryChainIntegrity(unittest.TestCase):
                 self.assertIn('"-p", "' + file_name + '"', self.runner)
 
     def test_registered_recovery_manual_gates_are_unique_and_not_automated(self):
-        all_gates = re.findall(r'    "((?:gd31j27a[lnopqrstuvwxyz]|gd31j27b[abcdefghijklmno])[^"]+-manual-e2e)",',
+        all_gates = re.findall(r'    "((?:gd31j27a[lnopqrstuvwxyz]|gd31j27b[abcdefghijklmnop])[^"]+-manual-e2e)",',
                                self.runner)
         self.assertEqual(len(all_gates), len(set(all_gates)))
         self.assertGreaterEqual(len(all_gates), 8)
