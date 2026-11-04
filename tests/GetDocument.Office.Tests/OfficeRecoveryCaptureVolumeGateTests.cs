@@ -280,6 +280,67 @@ public sealed class OfficeRecoveryCaptureVolumeGateTests
             RecoveryCaptureVolumeGate.LockFileName)));
     }
 
+    [TestMethod]
+    public async Task DistinctRootsReusePersistentSharedCoordinatorFileAfterRelease()
+    {
+        using var scratch = new Scratch();
+        string firstRoot = Path.Combine(scratch.Root, "root-one");
+        string secondRoot = Path.Combine(scratch.Root, "root-two");
+        string coordinatorRoot = Path.Combine(scratch.Root, "shared-coordinator");
+        const string volume = "synthetic-local-volume";
+        Func<string, RecoveryCaptureVolumeObservation> fake = _ =>
+            new RecoveryCaptureVolumeObservation(true,
+                RecoveryCaptureVolumeGate.MinimumFreeBytes + 1, "synthetic",
+                VolumeKey: volume);
+        string expected = RecoverySharedVolumeCoordinator.GetLockPathForPlanning(
+            coordinatorRoot, volume);
+
+        using (var first = await RecoveryCaptureVolumeGate.AcquireAsync(
+            firstRoot, fake, coordinatorDirectory: coordinatorRoot))
+        {
+            Assert.IsTrue(File.Exists(expected));
+            Assert.IsTrue(File.Exists(Path.Combine(firstRoot,
+                RecoveryCaptureVolumeGate.LockFileName)));
+        }
+        using (var second = await RecoveryCaptureVolumeGate.AcquireAsync(
+            secondRoot, fake, coordinatorDirectory: coordinatorRoot))
+        {
+            Assert.IsTrue(File.Exists(expected));
+            Assert.IsTrue(File.Exists(Path.Combine(secondRoot,
+                RecoveryCaptureVolumeGate.LockFileName)));
+        }
+        Assert.IsTrue(File.Exists(expected));
+    }
+
+    [TestMethod]
+    public async Task LinkedSharedCoordinatorFileRejectsBeforeCreatingRecoveryRoot()
+    {
+        using var scratch = new Scratch();
+        string firstRoot = Path.Combine(scratch.Root, "not-created");
+        string coordinatorRoot = Path.Combine(scratch.Root, "shared-coordinator");
+        Directory.CreateDirectory(coordinatorRoot);
+        const string volume = "synthetic-local-volume";
+        string protectedPath = Path.Combine(scratch.Root, "protected.bin");
+        File.WriteAllText(protectedPath, "KEEP");
+        string link = RecoverySharedVolumeCoordinator.GetLockPathForPlanning(
+            coordinatorRoot, volume);
+        try { File.CreateSymbolicLink(link, protectedPath); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                   or PlatformNotSupportedException) { return; }
+
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(async () =>
+        {
+            using var ignored = await RecoveryCaptureVolumeGate.AcquireAsync(
+                firstRoot,
+                _ => new RecoveryCaptureVolumeObservation(true,
+                    RecoveryCaptureVolumeGate.MinimumFreeBytes + 1,
+                    "synthetic", VolumeKey: volume),
+                coordinatorDirectory: coordinatorRoot);
+        });
+        Assert.IsFalse(Directory.Exists(firstRoot));
+        Assert.AreEqual("KEEP", File.ReadAllText(protectedPath));
+    }
+
     private sealed class Scratch : IDisposable
     {
         internal string Root { get; } = Path.Combine(Path.GetTempPath(),
