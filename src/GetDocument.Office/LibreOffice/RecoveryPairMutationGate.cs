@@ -14,7 +14,7 @@ internal static class RecoveryPairMutationGate
     internal static bool CanPublishByPath => false;
 
     internal static RecoveryPairMutationDecision Evaluate(
-        RecoveryRecoveryPairIdentityEvidence evidence)
+        RecoveryPairIdentityEvidence evidence)
     {
         RecoveryNativeFileId parent = evidence.Parent;
         RecoveryNativeFileId copy = evidence.Copy;
@@ -51,7 +51,7 @@ internal static class RecoveryPairMutationGate
     }
 
     internal static bool CanAuthorizeNativeMutation(
-        RecoveryRecoveryPairIdentityEvidence evidence)
+        RecoveryPairIdentityEvidence evidence)
     {
         _ = Evaluate(evidence);
         return false;
@@ -63,7 +63,7 @@ internal static class RecoveryPairMutationGate
     /// identity can remain stable even when a directory ENTRY is renamed;
     /// hence this evidence still cannot approve any destructive operation.
     /// </summary>
-    internal static RecoveryRecoveryPairIdentityEvidence ObserveHeldPair(
+    internal static RecoveryPairIdentityEvidence ObserveHeldPair(
         SafeFileHandle heldParent, SafeFileHandle heldCopy,
         SafeFileHandle heldManifest, CancellationToken cancellationToken = default)
     {
@@ -86,7 +86,7 @@ internal static class RecoveryPairMutationGate
         // This method did NOT prove the parent handle is trusted, an entry
         // name refers to the held copy/manifest, or any exclusive writer lock.
         // These fields therefore remain false without any caller override.
-        return new RecoveryRecoveryPairIdentityEvidence(parent, copy, manifest,
+        return new RecoveryPairIdentityEvidence(parent, copy, manifest,
             afterCopy, afterManifest, ParentHandleHeld: false,
             NamesOpenedRelativeToParent: false, NoFollowEnforced: false,
             WriterIsolationConfirmed: false, LockHeld: false);
@@ -114,7 +114,7 @@ internal enum RecoveryPairMutationDecision
 /// Conceptual evidence contract, not a capability/token. The booleans are
 /// synthetic claims and cannot be used to promote identity to write access.
 /// </summary>
-internal readonly record struct RecoveryRecoveryPairIdentityEvidence(
+internal readonly record struct RecoveryPairIdentityEvidence(
     RecoveryNativeFileId Parent,
     RecoveryNativeFileId Copy,
     RecoveryNativeFileId Manifest,
