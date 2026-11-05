@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Security.Cryptography;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
@@ -98,7 +99,8 @@ internal static class RecoveryLinuxAnchoredDirectoryAudit
             bytesRead > MaxXattrBytes)
             throw new InvalidDataException("Размер списка xattr недопустим.");
         if (bytesRead == 0)
-            return new RecoveryLinuxXattrEvidence(0, false, false, false);
+            return new RecoveryLinuxXattrEvidence(0, false, false, false,
+                Convert.ToHexString(SHA256.HashData(Array.Empty<byte>())));
 
         if (source[bytesRead - 1] != 0)
             throw new InvalidDataException("Список xattr не завершён NUL.");
@@ -131,7 +133,13 @@ internal static class RecoveryLinuxAnchoredDirectoryAudit
                 other = true;
             start = pos + 1;
         }
-        return new RecoveryLinuxXattrEvidence(count, acl, security, other);
+        // Kernel order is unspecified: canonicalize before digesting. This is
+        // a change detector for visible xattr NAMES only, not their values.
+        string canonical = string.Join("\0", unique.OrderBy(x => x,
+            StringComparer.Ordinal)) + "\0";
+        string digest = Convert.ToHexString(
+            SHA256.HashData(StrictUtf8.GetBytes(canonical)));
+        return new RecoveryLinuxXattrEvidence(count, acl, security, other, digest);
     }
 
     internal static RecoveryLinuxAnchoredDirectoryLease InspectExisting(
@@ -305,7 +313,7 @@ internal static class RecoveryLinuxAnchoredDirectoryAudit
 
 internal readonly record struct RecoveryLinuxXattrEvidence(
     int NameCount, bool PosixAclPresent, bool SecurityAttributePresent,
-    bool OtherUnreviewedAttributesPresent)
+    bool OtherUnreviewedAttributesPresent, string NamesSha256)
 {
     // Listing may omit attributes inaccessible to this user; no security
     // authorization can be inferred from an apparently empty xattr list.
