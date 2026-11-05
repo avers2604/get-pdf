@@ -74,6 +74,11 @@ internal static class RecoveryWindowsTokenGroupProbe
         return RecoveryWindowsTokenAceFinding.UnresolvedTokenCoverage;
     }
 
+    internal static RecoveryWindowsTokenAceFinding CompareAllow(
+        RecoveryWindowsAclAce ace, RecoveryWindowsTokenGroupEvidence evidence) =>
+        CompareAllow(ace, evidence.Groups ??
+            Array.Empty<RecoveryWindowsTokenGroup>());
+
     internal static RecoveryWindowsTokenGroupEvidence Summarize(
         IReadOnlyList<RecoveryWindowsTokenGroup> groups)
     {
@@ -95,7 +100,8 @@ internal static class RecoveryWindowsTokenGroupProbe
             }
         }
         return new RecoveryWindowsTokenGroupEvidence(groups.Count,
-            enabled, denyOnly, disabled, unreviewed);
+            enabled, denyOnly, disabled, unreviewed,
+            Array.AsReadOnly(groups.ToArray()));
     }
 
     /// <summary>
@@ -237,7 +243,8 @@ internal enum RecoveryWindowsTokenAceFinding
 /// </summary>
 internal readonly record struct RecoveryWindowsTokenGroupEvidence(
     int GroupCount, int EnabledCount, int DenyOnlyCount,
-    int DisabledCount, int UnreviewedCount)
+    int DisabledCount, int UnreviewedCount,
+    IReadOnlyList<RecoveryWindowsTokenGroup> Groups)
 {
     internal bool CanAuthorizeCapture => false;
 }
