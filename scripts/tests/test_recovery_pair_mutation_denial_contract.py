@@ -68,6 +68,16 @@ class RecoveryPairMutationSafetyContract(unittest.TestCase):
         self.assertIn("if (deleteFile is null) return;", self.store)
         self.assertNotIn("RecoveryPairMutationGate.CanAuthorizeNativeMutation(", self.store)
 
+    def test_capture_pressure_is_bounded_without_deleting_existing_copies(self):
+        self.assertIn("RequireCaptureBudget(", self.gate)
+        self.assertIn("maxManifests = 32", self.gate)
+        self.assertIn("if (++observed >= maxManifests)", self.gate)
+        self.assertIn("Directory.EnumerateFiles(folder, \"*.json\", SearchOption.TopDirectoryOnly)",
+                      self.store)
+        self.assertIn("RecoveryPairMutationGate.RequireCaptureBudget(", self.store)
+        self.assertLess(self.store.index("RecoveryPairMutationGate.RequireCaptureBudget("),
+                        self.store.index("await exportCopy(temporaryCopy);"))
+
     def test_existing_user_recovery_contract_tests_now_preserve_copy(self):
         for name in ("DiscardAfterConfirmedSavePreservesVerifiedCopiesWithoutNativeDelete",
                      "UnverifiedPathPruningPreservesFiveSnapshotsPendingNativeCleanup"):
@@ -76,12 +86,14 @@ class RecoveryPairMutationSafetyContract(unittest.TestCase):
         self.assertNotIn("RetainsOnlyThreeMostRecentValidatedCopies", self.legacy)
 
     def test_mstest_rejects_all_path_based_deletion(self):
-        self.assertEqual(10, self.test.count("[TestMethod]"))
+        self.assertEqual(12, self.test.count("[TestMethod]"))
         for name in (
             "PathBasedDeletionIsAlwaysDenied", "MissingNativeIdentityIsRejected",
             "CopyOrManifestSwapAcrossCheckpointsIsRejected",
             "EvenPlausibleHeldIdsAreNotWriteOrDeleteAuthority",
             "DefaultLegacyCleanupMustNeverDeleteAnUnownedNamedFile",
+            "DisabledPruningStopsAdmissionAtBoundedCommittedManifestLimit",
+            "CaptureBudgetRejectsUnknownOrInvalidThresholdAndDoesNotHideEnumerationErrors",
         ):
             self.assertIn(name, self.test)
 
