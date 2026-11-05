@@ -64,6 +64,8 @@ class LinuxAnchoredDirectoryAuditContract(unittest.TestCase):
             "system.posix_acl_default", 'name.StartsWith("security."',
             'name.StartsWith("trusted."',
             "StrictUtf8.GetString(source, start, pos - start)",
+            "SHA256.HashData(StrictUtf8.GetBytes(canonical))",
+            "unique.OrderBy(x => x,", "NamesSha256",
             "internal bool CanAuthorizeCapture => false;",
         ):
             self.assertIn(token, self.source)
@@ -99,11 +101,12 @@ class LinuxAnchoredDirectoryAuditContract(unittest.TestCase):
         self.assertIn("DangerousAddRef(ref pinned)", self.pinned)
 
     def test_synthetic_mstest_cases_cover_fail_closed_boundaries(self):
-        self.assertEqual(11, self.tests.count("[TestMethod]"))
+        self.assertEqual(12, self.tests.count("[TestMethod]"))
         for token in (
             "TraversalRepeatedSeparatorAndNonAbsolutePathsAreDenied",
             "FinalDirectoryMustBeOwnerOnlyAndSameEffectiveUid",
             "XattrListReportsAclAndSecurityLabelsWithoutAssumingSafety",
+            "XattrDigestIsOrderIndependentButDetectsSameCountNameReplacement",
             "MountAliasMismatchAndChangingAncestorEvidenceAreDenied",
             "NoLiveInspectionIsAllowedFromUnsupportedOrInvalidPath",
         ):
