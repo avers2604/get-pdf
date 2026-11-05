@@ -100,9 +100,13 @@ public sealed class RecoveryPairMutationSafetyTests
         {
             string first = Path.Combine(folder, "a.bin");
             string second = Path.Combine(folder, "b.bin");
+            string parentMarker = Path.Combine(folder, "parent.bin");
             File.WriteAllText(first, "FIRST");
             File.WriteAllText(second, "SECOND");
-            using SafeFileHandle parent = File.OpenHandle(folder, FileMode.Open,
+            File.WriteAllText(parentMarker, "NOT_A_TRUSTED_DIRECTORY");
+            // A regular file intentionally stands in for parent: this is
+            // ONLY a held-identity smoke test. It cannot attest a directory.
+            using SafeFileHandle parent = File.OpenHandle(parentMarker, FileMode.Open,
                 FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using SafeFileHandle copy = File.OpenHandle(first, FileMode.Open,
                 FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
