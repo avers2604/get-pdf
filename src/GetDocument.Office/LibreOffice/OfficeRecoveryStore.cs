@@ -376,6 +376,10 @@ public sealed class OfficeRecoveryStore
         string extension = AllowedExtension(source);
         string folder = FolderFor(source);
         RejectLinkedDirectories(folder);
+        // GD-31J.27bv: a verified copy is NOT an identity-bound deletion
+        // authorization. Until a tested native parent-held unlink backend
+        // exists, Discard must preserve all recovery artifacts after Save.
+        if (!RecoveryPairMutationGate.CanDeleteByPath) return;
         if (!RecoveryFolderExists(folder)) return;
         foreach (string manifest in Directory.EnumerateFiles(folder, "*.json"))
         {
@@ -452,6 +456,11 @@ public sealed class OfficeRecoveryStore
 
     private void Prune(string source)
     {
+        // Never prune by pathname: an uncooperative process could replace
+        // the copy or manifest between SHA/ZIP validation and File.Delete.
+        // Admission/disk pressure controls remain active, but no automatic
+        // file cleanup is authorized without a tested native backend.
+        if (!RecoveryPairMutationGate.CanDeleteByPath) return;
         string extension = AllowedExtension(source);
         string folder = FolderFor(source);
         var entries = Directory.EnumerateFiles(folder, "*.json")
@@ -805,26 +814,12 @@ public sealed class OfficeRecoveryStore
 
     private static bool TryDeleteVerifiedPart(string path)
     {
-        try
-        {
-            // The prior ReadValidCopy() check is not a durable lock. Recheck
-            // link/file type immediately before deletion and fail closed if
-            // an entry disappeared or became a symlink/other reparse object.
-            var file = new FileInfo(path);
-            file.Refresh();
-            if (!file.Exists || IsLinkedFile(file) ||
-                (file.Attributes & (FileAttributes.Directory |
-                                    FileAttributes.Device |
-                                    FileAttributes.ReparsePoint)) != 0)
-                return false;
-            File.Delete(path);
-            return !File.Exists(path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
-                                   System.Security.SecurityException)
-        {
-            return false;
-        }
+        // No namespace/path-based delete is defensible after a mutable
+        // FileInfo check, even if the candidate's SHA and ZIP were valid.
+        // Explicit refusal also protects test delegates that call this
+        // helper directly, rather than relying solely on a caller gate.
+        _ = path;
+        return false;
     }
 
     // Error/cancellation cleanup is best-effort: an ACL or OS security-policy
