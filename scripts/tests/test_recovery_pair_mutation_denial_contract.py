@@ -49,14 +49,14 @@ class RecoveryPairMutationSafetyContract(unittest.TestCase):
     def test_discard_declines_unbound_path_cleanup(self):
         fragment = self.store.split("public void Discard(string sourcePath)", 1)[1]
         fragment = fragment.split("ReadValidCopyWithPostHashMutation", 1)[0]
-        self.assertIn("_ = RecoveryPairMutationGate.CanDeleteByPath;", fragment)
+        self.assertIn("// No deletion callback is invoked.", fragment)
         self.assertNotIn("DeleteVerifiedPair(", fragment)
         self.assertNotIn("Directory.EnumerateFiles(", fragment)
 
     def test_prune_declines_unbound_path_cleanup(self):
         fragment = self.store.split("private void Prune(string source)", 1)[1]
         fragment = fragment.split("private static void RejectLinkedDirectories", 1)[0]
-        self.assertIn("_ = RecoveryPairMutationGate.CanDeleteByPath;", fragment)
+        self.assertIn("// No deletion callback is invoked.", fragment)
         self.assertNotIn("DeleteVerifiedPair(", fragment)
         self.assertNotIn("Directory.EnumerateFiles(", fragment)
 
