@@ -108,6 +108,10 @@ public sealed class RecoveryWindowsParentSecurityTests
             Assert.IsTrue(pinned.Security.FileId.IsComplete);
             Assert.IsTrue(pinned.Security.OwnerSid.StartsWith("S-1-",
                 StringComparison.Ordinal));
+            // ACL summary is a second read of the SAME held directory handle:
+            // it cannot establish effective access or authorize capture.
+            Assert.IsTrue(pinned.AclRisk.AceCount >= 0);
+            Assert.IsFalse(pinned.AclRisk.CanAuthorizeCapture);
             Assert.AreEqual(pinned.Security.FileId,
                 RecoveryNativeHandleIdProbe.ReadFromExistingHandle(pinned.Handle));
             Assert.IsFalse(RecoveryWindowsParentSecurityGate.CanAuthorizeCapture(
