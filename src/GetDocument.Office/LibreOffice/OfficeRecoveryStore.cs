@@ -822,21 +822,22 @@ public sealed class OfficeRecoveryStore
         return false;
     }
 
-    // Error/cancellation cleanup is best-effort: an ACL or OS security-policy
-    // denial must not replace the original exporter failure/cancellation.
-    // The optional internal delegate is solely a deterministic fault-injection
-    // seam for the offline test assembly; production always uses File.Delete.
+    // GD-31J.27bv: legacy internal cleanup test seam. Without an explicit
+    // synthetic delegate, a pathname is NEVER sufficient to authorize
+    // deletion. In production this method preserves unowned artifacts.
+    // Test callbacks can simulate faults; they must not be wired to a real
+    // destructive operation without a separate native identity-bound design.
     internal static void TryDelete(string path, Action<string>? deleteFile = null)
     {
+        if (deleteFile is null) return;
         try
         {
-            if (deleteFile is null) File.Delete(path);
-            else deleteFile(path);
+            deleteFile(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
                                    System.Security.SecurityException)
         {
-            // Do not hide the original export/cancellation exception.
+            // Do not hide the original exporter/cancellation exception.
             // Unexpected programming errors are intentionally not swallowed.
         }
     }
