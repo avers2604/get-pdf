@@ -74,8 +74,11 @@ internal static class RecoveryWindowsAclRiskObserver
                     break;
             }
         }
+        // Preserve a bounded read-only copy for optional token-group risk
+        // correlation, not an effective-access or publication capability.
         return new RecoveryWindowsAclRiskEvidence(
-            aces.Count, broadWrite, unreviewed, deny);
+            aces.Count, broadWrite, unreviewed, deny,
+            Array.AsReadOnly(aces.ToArray()));
     }
 
     internal static RecoveryWindowsAclRiskEvidence ObserveExistingHandle(
@@ -130,13 +133,15 @@ internal static class RecoveryWindowsAclRiskObserver
                         throw new InvalidDataException("SID выходит за границы ACE.");
                     uint access = unchecked((uint)Marshal.ReadInt32(address, 4));
                     string trustee = SidToString(IntPtr.Add(address, 8));
-                    entries.Add(new RecoveryWindowsAclAce(type, access, trustee));
+                    entries.Add(new RecoveryWindowsAclAce(type, access, trustee,
+                        Marshal.ReadByte(address, 1)));
                 }
                 else
                 {
                     // Never try to parse object/callback ACEs with the basic
                     // ACCESS_ALLOWED_ACE layout: unknown != safe.
-                    entries.Add(new RecoveryWindowsAclAce(type, 0, null));
+                    entries.Add(new RecoveryWindowsAclAce(type, 0, null,
+                        Marshal.ReadByte(address, 1)));
                 }
             }
             return Summarize(entries);
@@ -210,7 +215,7 @@ internal static class RecoveryWindowsAclRiskObserver
 }
 
 internal readonly record struct RecoveryWindowsAclAce(
-    byte Type, uint AccessMask, string? TrusteeSid);
+    byte Type, uint AccessMask, string? TrusteeSid, byte Flags = 0);
 
 internal enum RecoveryWindowsAceRisk
 {
@@ -226,7 +231,7 @@ internal enum RecoveryWindowsAceRisk
 /// </summary>
 internal readonly record struct RecoveryWindowsAclRiskEvidence(
     int AceCount, int BroadWriteAllowCount, int UnreviewedAceCount,
-    int DenyAceCount)
+    int DenyAceCount, IReadOnlyList<RecoveryWindowsAclAce> Aces)
 {
     internal bool CanAuthorizeCapture => false;
 }
