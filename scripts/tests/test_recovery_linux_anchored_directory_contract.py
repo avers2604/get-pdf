@@ -99,9 +99,16 @@ class LinuxAnchoredDirectoryAuditContract(unittest.TestCase):
         self.assertIn("ReadExistingDirectoryEvidence(", self.pinned)
         self.assertIn("ReadHeldDirectoryEvidence(handle)", self.pinned)
         self.assertIn("DangerousAddRef(ref pinned)", self.pinned)
+        self.assertIn("RecoveryPinnedLinuxParentProbe.ValidateChildName(childName)",
+                      self.source)
+        self.assertIn("RecoveryPinnedLinuxParentProbe.OpenChildRelative(", self.source)
+        self.assertIn("ancestry.LeafHandle, childName)", self.source)
+        self.assertIn("RecoveryLinuxAnchoredChildLease", self.source)
+        self.assertIn("try { child?.Dispose(); }", self.source)
+        self.assertIn("finally { ancestry?.Dispose(); }", self.source)
 
     def test_synthetic_mstest_cases_cover_fail_closed_boundaries(self):
-        self.assertEqual(12, self.tests.count("[TestMethod]"))
+        self.assertEqual(14, self.tests.count("[TestMethod]"))
         for token in (
             "TraversalRepeatedSeparatorAndNonAbsolutePathsAreDenied",
             "FinalDirectoryMustBeOwnerOnlyAndSameEffectiveUid",
@@ -109,6 +116,8 @@ class LinuxAnchoredDirectoryAuditContract(unittest.TestCase):
             "XattrDigestIsOrderIndependentButDetectsSameCountNameReplacement",
             "MountAliasMismatchAndChangingAncestorEvidenceAreDenied",
             "NoLiveInspectionIsAllowedFromUnsupportedOrInvalidPath",
+            "CombinedRelativeChildValidationRunsBeforeFilesystemAccess",
+            "DisposedDirectoryLeaseCannotExposeItsLeafHandle",
         ):
             self.assertIn(token, self.tests)
 
