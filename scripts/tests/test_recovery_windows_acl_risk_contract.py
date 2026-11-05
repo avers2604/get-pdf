@@ -17,6 +17,7 @@ class WindowsAclRiskSourceContract(unittest.TestCase):
         cls.runner = RUNNER.read_text(encoding="utf-8")
         cls.store = (OFFICE / "OfficeRecoveryStore.cs").read_text(encoding="utf-8")
         cls.coord = (OFFICE / "RecoverySharedVolumeCoordinator.cs").read_text(encoding="utf-8")
+        cls.pinned = (OFFICE / "RecoveryWindowsPinnedParentProbe.cs").read_text(encoding="utf-8")
 
     def test_native_inspection_from_existing_handle_only(self):
         for token in ("ObserveExistingHandle(", "SafeFileHandle handle",
@@ -44,6 +45,11 @@ class WindowsAclRiskSourceContract(unittest.TestCase):
     def test_p0_modules_are_still_not_wired_to_production(self):
         self.assertNotIn("RecoveryWindowsAclRiskObserver.", self.store)
         self.assertNotIn("RecoveryWindowsAclRiskObserver.", self.coord)
+        self.assertIn("RecoveryWindowsAclRiskObserver.ObserveExistingHandle(handle)", self.pinned)
+        self.assertIn("RecoveryWindowsAclRiskEvidence AclRisk", self.pinned)
+        self.assertIn("Assert.IsFalse(pinned.AclRisk.CanAuthorizeCapture)", (
+            ROOT / "tests" / "GetDocument.Office.Tests" /
+            "RecoveryWindowsParentSecurityTests.cs").read_text(encoding="utf-8"))
 
     def test_seven_regressions_cover_conservative_acl_observation(self):
         self.assertEqual(7, self.tests.count("[TestMethod]"))
