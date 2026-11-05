@@ -167,6 +167,24 @@ internal static class RecoveryPinnedLinuxParentProbe
         }
     }
 
+    /// <summary>
+    /// Read-only statx evidence for a directory handle already opened by a
+    /// trusted caller. No path traversal and no write/delete authority.
+    /// </summary>
+    internal static RecoveryLinuxParentEvidence ReadExistingDirectoryEvidence(
+        SafeFileHandle handle)
+    {
+        ArgumentNullException.ThrowIfNull(handle);
+        if (handle.IsClosed || handle.IsInvalid)
+            throw new ObjectDisposedException(nameof(handle));
+        if (!OperatingSystem.IsLinux() || !BitConverter.IsLittleEndian ||
+            RuntimeInformation.ProcessArchitecture is not
+                (Architecture.X64 or Architecture.Arm64))
+            throw new PlatformNotSupportedException(
+                "Linux statx directory read не подтверждён для этой ОС.");
+        return ReadHeldDirectoryEvidence(handle);
+    }
+
     private static RecoveryLinuxParentEvidence ReadHeldDirectoryEvidence(
         SafeFileHandle handle)
     {
