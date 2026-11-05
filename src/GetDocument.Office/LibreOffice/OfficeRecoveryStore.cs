@@ -369,31 +369,21 @@ public sealed class OfficeRecoveryStore
         return null;
     }
 
-    /// <summary>Call only after the original file has been saved successfully and without conflict.</summary>
+    /// <summary>
+    /// GD-31J.27bv: post-save notification. Name-based deletion is
+    /// intentionally suspended until an independently verified OS-native
+    /// identity-bound deletion backend exists. Preserves all copies.
+    /// </summary>
     public void Discard(string sourcePath)
     {
         string source = CanonicalSource(sourcePath);
-        string extension = AllowedExtension(source);
+        _ = AllowedExtension(source);
         string folder = FolderFor(source);
         RejectLinkedDirectories(folder);
-        // GD-31J.27bv: a verified copy is NOT an identity-bound deletion
-        // authorization. Until a tested native parent-held unlink backend
-        // exists, Discard must preserve all recovery artifacts after Save.
-        if (!RecoveryPairMutationGate.CanDeleteByPath) return;
-        if (!RecoveryFolderExists(folder)) return;
-        foreach (string manifest in Directory.EnumerateFiles(folder, "*.json"))
-        {
-            // Path equality in a manifest does NOT prove the sibling copy
-            // still belongs to us. It may have been corrupted, removed, or
-            // replaced by a symlink since the capture was published.
-            // The same read-only, bounded package/hash check used by
-            // FindLatest must pass before ANY deletion is attempted.
-            OfficeRecoveryCopy? verified = ReadValidCopy(source, extension, manifest);
-            if (verified is null) continue;
-            // Copy-first: a failed copy deletion must leave the recovery
-            // manifest in place so a still-valid snapshot stays discoverable.
-            DeleteVerifiedPair(verified.FilePath, manifest, TryDeleteVerifiedPart);
-        }
+        // A path, hash and FileInfo preflight are NOT a deletion capability.
+        // The caller's successful Save must not fail solely because cleanup
+        // cannot be proved safe. Expose preserved artifacts via diagnostics.
+        _ = RecoveryPairMutationGate.CanDeleteByPath;
     }
 
     // Internal-only test seam to simulate a file edit precisely after SHA
@@ -456,25 +446,11 @@ public sealed class OfficeRecoveryStore
 
     private void Prune(string source)
     {
-        // Never prune by pathname: an uncooperative process could replace
-        // the copy or manifest between SHA/ZIP validation and File.Delete.
-        // Admission/disk pressure controls remain active, but no automatic
-        // file cleanup is authorized without a tested native backend.
-        if (!RecoveryPairMutationGate.CanDeleteByPath) return;
-        string extension = AllowedExtension(source);
-        string folder = FolderFor(source);
-        var entries = Directory.EnumerateFiles(folder, "*.json")
-            .Select(manifest => new { Manifest = manifest, Copy = ReadValidCopy(source, extension, manifest) })
-            .Where(entry => entry.Copy is not null)
-            .OrderByDescending(entry => entry.Copy!.CapturedUtc)
-            .Skip(RetainedCopies);
-        foreach (var entry in entries)
-        {
-            // Retention is best-effort. If a copy is locked or deletion is
-            // denied, keep its manifest; never orphan a still-present copy
-            // merely to meet the three-snapshot limit.
-            DeleteVerifiedPair(entry.Copy!.FilePath, entry.Manifest, TryDeleteVerifiedPart);
-        }
+        // Retention target is suspended while native identity-bound unlink
+        // has not passed Windows/Astra/SMB E2E. Do NOT remove by mutable name.
+        // Capture admission still applies pressure limits to incomplete items.
+        _ = source;
+        _ = RecoveryPairMutationGate.CanDeleteByPath;
     }
 
     /// <summary>
@@ -810,16 +786,6 @@ public sealed class OfficeRecoveryStore
         ArgumentNullException.ThrowIfNull(tryDelete);
         if (!tryDelete(copyPath)) return false;
         return tryDelete(manifestPath);
-    }
-
-    private static bool TryDeleteVerifiedPart(string path)
-    {
-        // No namespace/path-based delete is defensible after a mutable
-        // FileInfo check, even if the candidate's SHA and ZIP were valid.
-        // Explicit refusal also protects test delegates that call this
-        // helper directly, rather than relying solely on a caller gate.
-        _ = path;
-        return false;
     }
 
     // GD-31J.27bv: legacy internal cleanup test seam. Without an explicit
