@@ -146,6 +146,26 @@ public sealed class RecoveryLinuxAnchoredDirectoryAuditTests
     }
 
     [TestMethod]
+    public void CombinedRelativeChildValidationRunsBeforeFilesystemAccess()
+    {
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            RecoveryLinuxAnchoredDirectoryAudit.InspectChildRelative(
+                "/definitely-not-mounted", "../untrusted"));
+    }
+
+    [TestMethod]
+    public void DisposedDirectoryLeaseCannotExposeItsLeafHandle()
+    {
+        var lease = new RecoveryLinuxAnchoredDirectoryLease(
+            Array.Empty<Microsoft.Win32.SafeHandles.SafeFileHandle>(),
+            Array.Empty<RecoveryLinuxAnchoredNode>());
+        lease.Dispose();
+        lease.Dispose();
+        Assert.ThrowsExactly<ObjectDisposedException>(() => _ = lease.LeafHandle);
+        Assert.IsFalse(lease.CanAuthorizeCapture);
+    }
+
+    [TestMethod]
     public void NoLiveInspectionIsAllowedFromUnsupportedOrInvalidPath()
     {
         Assert.ThrowsExactly<ArgumentException>(() =>
