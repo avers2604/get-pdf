@@ -76,6 +76,11 @@ public sealed class OfficeRecoveryStore
         RejectLinkedDirectories(folder);
         Directory.CreateDirectory(folder);
         RejectLinkedDirectories(folder);
+        // GD-31J.27bv: path-based Prune is suspended; admit at most 32
+        // committed recovery manifests per source. Do not begin exporter
+        // work when only unverified destructive cleanup could make space.
+        RecoveryPairMutationGate.RequireCaptureBudget(
+            Directory.EnumerateFiles(folder, "*.json", SearchOption.TopDirectoryOnly));
         string name = Guid.NewGuid().ToString("N");
         string temporaryCopy = Path.Combine(folder, name + ".part" + extension);
         string finalCopy = Path.Combine(folder, name + extension);
@@ -369,27 +374,21 @@ public sealed class OfficeRecoveryStore
         return null;
     }
 
-    /// <summary>Call only after the original file has been saved successfully and without conflict.</summary>
+    /// <summary>
+    /// GD-31J.27bv: post-save notification. Name-based deletion is
+    /// intentionally suspended until an independently verified OS-native
+    /// identity-bound deletion backend exists. Preserves all copies.
+    /// </summary>
     public void Discard(string sourcePath)
     {
         string source = CanonicalSource(sourcePath);
-        string extension = AllowedExtension(source);
+        _ = AllowedExtension(source);
         string folder = FolderFor(source);
         RejectLinkedDirectories(folder);
-        if (!RecoveryFolderExists(folder)) return;
-        foreach (string manifest in Directory.EnumerateFiles(folder, "*.json"))
-        {
-            // Path equality in a manifest does NOT prove the sibling copy
-            // still belongs to us. It may have been corrupted, removed, or
-            // replaced by a symlink since the capture was published.
-            // The same read-only, bounded package/hash check used by
-            // FindLatest must pass before ANY deletion is attempted.
-            OfficeRecoveryCopy? verified = ReadValidCopy(source, extension, manifest);
-            if (verified is null) continue;
-            // Copy-first: a failed copy deletion must leave the recovery
-            // manifest in place so a still-valid snapshot stays discoverable.
-            DeleteVerifiedPair(verified.FilePath, manifest, TryDeleteVerifiedPart);
-        }
+        // A path, hash and FileInfo preflight are NOT a deletion capability.
+        // The caller's successful Save must not fail solely because cleanup
+        // cannot be proved safe. Expose preserved artifacts via diagnostics.
+        // No deletion callback is invoked.
     }
 
     // Internal-only test seam to simulate a file edit precisely after SHA
@@ -452,20 +451,11 @@ public sealed class OfficeRecoveryStore
 
     private void Prune(string source)
     {
-        string extension = AllowedExtension(source);
-        string folder = FolderFor(source);
-        var entries = Directory.EnumerateFiles(folder, "*.json")
-            .Select(manifest => new { Manifest = manifest, Copy = ReadValidCopy(source, extension, manifest) })
-            .Where(entry => entry.Copy is not null)
-            .OrderByDescending(entry => entry.Copy!.CapturedUtc)
-            .Skip(RetainedCopies);
-        foreach (var entry in entries)
-        {
-            // Retention is best-effort. If a copy is locked or deletion is
-            // denied, keep its manifest; never orphan a still-present copy
-            // merely to meet the three-snapshot limit.
-            DeleteVerifiedPair(entry.Copy!.FilePath, entry.Manifest, TryDeleteVerifiedPart);
-        }
+        // Retention target is suspended while native identity-bound unlink
+        // has not passed Windows/Astra/SMB E2E. Do NOT remove by mutable name.
+        // Capture admission still applies pressure limits to incomplete items.
+        _ = source;
+        // No deletion callback is invoked.
     }
 
     /// <summary>
@@ -803,45 +793,22 @@ public sealed class OfficeRecoveryStore
         return tryDelete(manifestPath);
     }
 
-    private static bool TryDeleteVerifiedPart(string path)
-    {
-        try
-        {
-            // The prior ReadValidCopy() check is not a durable lock. Recheck
-            // link/file type immediately before deletion and fail closed if
-            // an entry disappeared or became a symlink/other reparse object.
-            var file = new FileInfo(path);
-            file.Refresh();
-            if (!file.Exists || IsLinkedFile(file) ||
-                (file.Attributes & (FileAttributes.Directory |
-                                    FileAttributes.Device |
-                                    FileAttributes.ReparsePoint)) != 0)
-                return false;
-            File.Delete(path);
-            return !File.Exists(path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
-                                   System.Security.SecurityException)
-        {
-            return false;
-        }
-    }
-
-    // Error/cancellation cleanup is best-effort: an ACL or OS security-policy
-    // denial must not replace the original exporter failure/cancellation.
-    // The optional internal delegate is solely a deterministic fault-injection
-    // seam for the offline test assembly; production always uses File.Delete.
+    // GD-31J.27bv: legacy internal cleanup test seam. Without an explicit
+    // synthetic delegate, a pathname is NEVER sufficient to authorize
+    // deletion. In production this method preserves unowned artifacts.
+    // Test callbacks can simulate faults; they must not be wired to a real
+    // destructive operation without a separate native identity-bound design.
     internal static void TryDelete(string path, Action<string>? deleteFile = null)
     {
+        if (deleteFile is null) return;
         try
         {
-            if (deleteFile is null) File.Delete(path);
-            else deleteFile(path);
+            deleteFile(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
                                    System.Security.SecurityException)
         {
-            // Do not hide the original export/cancellation exception.
+            // Do not hide the original exporter/cancellation exception.
             // Unexpected programming errors are intentionally not swallowed.
         }
     }
