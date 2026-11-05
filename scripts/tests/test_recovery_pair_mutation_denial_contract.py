@@ -49,23 +49,22 @@ class RecoveryPairMutationSafetyContract(unittest.TestCase):
     def test_discard_declines_unbound_path_cleanup(self):
         fragment = self.store.split("public void Discard(string sourcePath)", 1)[1]
         fragment = fragment.split("ReadValidCopyWithPostHashMutation", 1)[0]
-        self.assertIn("if (!RecoveryPairMutationGate.CanDeleteByPath) return;", fragment)
-        self.assertLess(fragment.index("if (!RecoveryPairMutationGate.CanDeleteByPath) return;"),
-                        fragment.index('Directory.EnumerateFiles(folder, "*.json")'))
+        self.assertIn("_ = RecoveryPairMutationGate.CanDeleteByPath;", fragment)
+        self.assertNotIn("DeleteVerifiedPair(", fragment)
+        self.assertNotIn("Directory.EnumerateFiles(", fragment)
 
     def test_prune_declines_unbound_path_cleanup(self):
         fragment = self.store.split("private void Prune(string source)", 1)[1]
         fragment = fragment.split("private static void RejectLinkedDirectories", 1)[0]
-        self.assertIn("if (!RecoveryPairMutationGate.CanDeleteByPath) return;", fragment)
-        self.assertLess(fragment.index("if (!RecoveryPairMutationGate.CanDeleteByPath) return;"),
-                        fragment.index("DeleteVerifiedPair("))
+        self.assertIn("_ = RecoveryPairMutationGate.CanDeleteByPath;", fragment)
+        self.assertNotIn("DeleteVerifiedPair(", fragment)
+        self.assertNotIn("Directory.EnumerateFiles(", fragment)
 
     def test_legacy_delete_paths_do_not_reach_file_delete(self):
         self.assertNotIn("File.Delete(", self.store)
-        fragment = self.store.split(
-            "private static bool TryDeleteVerifiedPart(string path)", 1)[1]
-        fragment = fragment.split("internal static void TryDelete", 1)[0]
-        self.assertIn("return false;", fragment)
+        self.assertNotIn("TryDeleteVerifiedPart(", self.store)
+        self.assertEqual(1, self.store.count("DeleteVerifiedPair("),
+            "Test-only pair ordering helper must have no production callers")
         self.assertIn("if (deleteFile is null) return;", self.store)
         self.assertNotIn("RecoveryPairMutationGate.CanAuthorizeNativeMutation(", self.store)
 
