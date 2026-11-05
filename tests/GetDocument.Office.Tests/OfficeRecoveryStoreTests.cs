@@ -279,21 +279,30 @@ public sealed class OfficeRecoveryStoreTests
     }
 
     [TestMethod]
-    public async Task DiscardAfterConfirmedSaveRemovesRecoveryButNotSource()
+    public async Task DiscardAfterConfirmedSavePreservesVerifiedCopiesWithoutNativeDelete()
     {
         using var fixture = new RecoveryFixture();
         string source = fixture.CreateOfficeFile("План.docx");
+        byte[] original = File.ReadAllBytes(source);
         var store = new OfficeRecoveryStore(fixture.RecoveryDirectory);
-        await store.CaptureAsync(source, target =>
+        OfficeRecoveryCopy copy = await store.CaptureAsync(source, target =>
         {
             File.Copy(source, target);
             return Task.CompletedTask;
         });
+        string manifest = Directory.GetFiles(fixture.RecoveryDirectory, "*.json",
+            SearchOption.AllDirectories).Single();
+        byte[] manifestBefore = File.ReadAllBytes(manifest);
 
+        // Source save is already successful; unsafe pathname cleanup MUST NOT
+        // delete a recovery copy after a FileInfo/SHA check.
         store.Discard(source);
 
-        Assert.IsNull(store.FindLatest(source));
-        Assert.IsTrue(File.Exists(source));
+        Assert.AreEqual(copy.FilePath, store.FindLatest(source)?.FilePath);
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(source));
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(copy.FilePath));
+        CollectionAssert.AreEqual(manifestBefore, File.ReadAllBytes(manifest));
+        Assert.IsFalse(RecoveryPairMutationGate.CanDeleteByPath);
     }
 
     [TestMethod]
@@ -389,7 +398,7 @@ public sealed class OfficeRecoveryStoreTests
     }
 
     [TestMethod]
-    public async Task RetainsOnlyThreeMostRecentValidatedCopies()
+    public async Task UnverifiedPathPruningPreservesFiveSnapshotsPendingNativeCleanup()
     {
         using var fixture = new RecoveryFixture();
         string source = fixture.CreateOfficeFile("План.docx");
@@ -402,8 +411,12 @@ public sealed class OfficeRecoveryStoreTests
                 return Task.CompletedTask;
             });
         }
-        Assert.AreEqual(3, Directory.GetFiles(fixture.RecoveryDirectory, "*.json", SearchOption.AllDirectories).Length);
+        // Retention target 3 is intentionally SUSPENDED: no path-based
+        // deletion authority exists; disk admission limits still apply.
+        Assert.AreEqual(5, Directory.GetFiles(fixture.RecoveryDirectory, "*.json",
+            SearchOption.AllDirectories).Length);
         Assert.IsNotNull(store.FindLatest(source));
+        Assert.IsFalse(RecoveryPairMutationGate.CanDeleteByPath);
     }
 
     private sealed class RecoveryFixture : IDisposable
