@@ -76,6 +76,11 @@ public sealed class OfficeRecoveryStore
         RejectLinkedDirectories(folder);
         Directory.CreateDirectory(folder);
         RejectLinkedDirectories(folder);
+        // GD-31J.27bv: path-based Prune is suspended; admit at most 32
+        // committed recovery manifests per source. Do not begin exporter
+        // work when only unverified destructive cleanup could make space.
+        RecoveryPairMutationGate.RequireCaptureBudget(
+            Directory.EnumerateFiles(folder, "*.json", SearchOption.TopDirectoryOnly));
         string name = Guid.NewGuid().ToString("N");
         string temporaryCopy = Path.Combine(folder, name + ".part" + extension);
         string finalCopy = Path.Combine(folder, name + extension);
