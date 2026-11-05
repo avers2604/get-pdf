@@ -125,6 +125,24 @@ public sealed class RecoveryPairMutationSafetyTests
     }
 
     [TestMethod]
+    public void DefaultLegacyCleanupMustNeverDeleteAnUnownedNamedFile()
+    {
+        string path = Path.Combine(Path.GetTempPath(),
+            "getdoc-bv-no-delete-" + Guid.NewGuid().ToString("N") + ".tmp");
+        File.WriteAllText(path, "KEEP_OWNER_FILE");
+        try
+        {
+            // No native owner receipt supplied: a path is not authorization.
+            OfficeRecoveryStore.TryDelete(path);
+            Assert.AreEqual("KEEP_OWNER_FILE", File.ReadAllText(path));
+        }
+        finally
+        {
+            File.Delete(path); // test's own uniquely named fixture only
+        }
+    }
+
+    [TestMethod]
     public void PairIdentityEvaluationRejectsMixedPlatforms()
     {
         var other = new RecoveryNativeFileId(RecoveryNativePlatform.Linux, 17, 2, 0);
