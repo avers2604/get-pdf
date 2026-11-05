@@ -103,6 +103,21 @@ public sealed class RecoveryLinuxAnchoredDirectoryAuditTests
     }
 
     [TestMethod]
+    public void XattrDigestIsOrderIndependentButDetectsSameCountNameReplacement()
+    {
+        byte[] first = Encoding.UTF8.GetBytes("user.one\\0user.two\\0".Replace("\\\\0", "\\0"));
+        byte[] reordered = Encoding.UTF8.GetBytes("user.two\\0user.one\\0".Replace("\\\\0", "\\0"));
+        byte[] changed = Encoding.UTF8.GetBytes("user.one\\0user.six\\0".Replace("\\\\0", "\\0"));
+        var a = RecoveryLinuxAnchoredDirectoryAudit.ParseXattrNames(first, first.Length);
+        var b = RecoveryLinuxAnchoredDirectoryAudit.ParseXattrNames(
+            reordered, reordered.Length);
+        var c = RecoveryLinuxAnchoredDirectoryAudit.ParseXattrNames(changed, changed.Length);
+        Assert.AreEqual(a.NamesSha256, b.NamesSha256);
+        Assert.AreNotEqual(a.NamesSha256, c.NamesSha256);
+        Assert.IsFalse(a.CanAuthorizeCapture);
+    }
+
+    [TestMethod]
     public void MalformedOrOversizedXattrListsAreDenied()
     {
         foreach (byte[] bytes in new[]
