@@ -62,10 +62,15 @@ internal static class RecoveryWindowsPinnedParentProbe
 
             RecoveryWindowsParentEvidence evidence =
                 RecoveryWindowsParentSecurityProbe.ObserveExistingHandle(handle);
+            // A second READ-ONLY observation of the same held handle.
+            // ACLs can still change between observations; neither grants
+            // effective rights or authorizes recovery publication/deletion.
+            RecoveryWindowsAclRiskEvidence aclRisk =
+                RecoveryWindowsAclRiskObserver.ObserveExistingHandle(handle);
 
             // OS handle stays pinned until lease.Dispose. No FileInfo-based
             // path re-check can establish immutable ancestry or safe ACEs.
-            return new RecoveryWindowsPinnedParentLease(handle, evidence);
+            return new RecoveryWindowsPinnedParentLease(handle, evidence, aclRisk);
         }
         catch
         {
@@ -99,15 +104,18 @@ internal sealed class RecoveryWindowsPinnedParentLease : IDisposable
 {
     private SafeFileHandle? _handle;
     internal RecoveryWindowsParentEvidence Security { get; }
+    internal RecoveryWindowsAclRiskEvidence AclRisk { get; }
 
     internal SafeFileHandle Handle =>
         _handle ?? throw new ObjectDisposedException(nameof(RecoveryWindowsPinnedParentLease));
 
     internal RecoveryWindowsPinnedParentLease(
-        SafeFileHandle handle, RecoveryWindowsParentEvidence security)
+        SafeFileHandle handle, RecoveryWindowsParentEvidence security,
+        RecoveryWindowsAclRiskEvidence aclRisk)
     {
         _handle = handle;
         Security = security;
+        AclRisk = aclRisk;
     }
 
     public void Dispose() =>
