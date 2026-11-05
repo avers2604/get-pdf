@@ -261,7 +261,7 @@ internal static class RecoveryLinuxAnchoredDirectoryAudit
     private static SafeFileHandle OpenChild(SafeFileHandle heldParent, string basename)
     {
         // All these fd are solely owned by this call and remain alive until
-        // lease disposal. openat2 has no insecure openat()/File.Open fallback.
+        // lease disposal. openat2 has no insecure pathname-based fallback.
         var how = new OpenHow
         {
             Flags = (ulong)(ODirectory | ONoFollow | OCloexec),
