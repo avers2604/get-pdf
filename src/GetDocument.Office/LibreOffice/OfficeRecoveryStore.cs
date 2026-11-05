@@ -388,7 +388,7 @@ public sealed class OfficeRecoveryStore
         // A path, hash and FileInfo preflight are NOT a deletion capability.
         // The caller's successful Save must not fail solely because cleanup
         // cannot be proved safe. Expose preserved artifacts via diagnostics.
-        _ = RecoveryPairMutationGate.CanDeleteByPath;
+        // No deletion callback is invoked.
     }
 
     // Internal-only test seam to simulate a file edit precisely after SHA
@@ -455,7 +455,7 @@ public sealed class OfficeRecoveryStore
         // has not passed Windows/Astra/SMB E2E. Do NOT remove by mutable name.
         // Capture admission still applies pressure limits to incomplete items.
         _ = source;
-        _ = RecoveryPairMutationGate.CanDeleteByPath;
+        // No deletion callback is invoked.
     }
 
     /// <summary>
