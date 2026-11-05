@@ -105,9 +105,9 @@ public sealed class RecoveryLinuxAnchoredDirectoryAuditTests
     [TestMethod]
     public void XattrDigestIsOrderIndependentButDetectsSameCountNameReplacement()
     {
-        byte[] first = Encoding.UTF8.GetBytes("user.one\\0user.two\\0".Replace("\\\\0", "\\0"));
-        byte[] reordered = Encoding.UTF8.GetBytes("user.two\\0user.one\\0".Replace("\\\\0", "\\0"));
-        byte[] changed = Encoding.UTF8.GetBytes("user.one\\0user.six\\0".Replace("\\\\0", "\\0"));
+        byte[] first = Encoding.UTF8.GetBytes("user.one\0user.two\0");
+        byte[] reordered = Encoding.UTF8.GetBytes("user.two\0user.one\0");
+        byte[] changed = Encoding.UTF8.GetBytes("user.one\0user.six\0");
         var a = RecoveryLinuxAnchoredDirectoryAudit.ParseXattrNames(first, first.Length);
         var b = RecoveryLinuxAnchoredDirectoryAudit.ParseXattrNames(
             reordered, reordered.Length);
