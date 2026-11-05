@@ -13,6 +13,34 @@ internal static class RecoveryPairMutationGate
     internal static bool CanDeleteByPath => false;
     internal static bool CanPublishByPath => false;
 
+    /// <summary>
+    /// Read-only bound on committed recovery manifests while unsafe path
+    /// pruning is disabled. At the limit, refuse the NEXT capture rather
+    /// than attempting any deletion. Invalid/lazy enumeration errors bubble.
+    /// This is a conservative admission gate, not an atomic disk quota.
+    /// </summary>
+    internal static void RequireCaptureBudget(
+        IEnumerable<string> observedManifestPaths, int maxManifests = 32)
+    {
+        ArgumentNullException.ThrowIfNull(observedManifestPaths);
+        if (maxManifests is < 1 or > 32)
+            throw new ArgumentOutOfRangeException(nameof(maxManifests));
+        int observed = 0;
+        foreach (string path in observedManifestPaths)
+        {
+            string name = Path.GetFileName(path);
+            if (name.Length == 37 &&
+                name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
+                Guid.TryParseExact(name[..32], "N", out _))
+            {
+                if (++observed >= maxManifests)
+                    throw new InvalidDataException(
+                        "Лимит аварийных копий достигнут: автоматическое " +
+                        "удаление по пути запрещено до native-проверки.");
+            }
+        }
+    }
+
     internal static RecoveryPairMutationDecision Evaluate(
         RecoveryPairIdentityEvidence evidence)
     {
