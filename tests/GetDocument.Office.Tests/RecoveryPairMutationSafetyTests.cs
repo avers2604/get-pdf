@@ -143,6 +143,37 @@ public sealed class RecoveryPairMutationSafetyTests
     }
 
     [TestMethod]
+    public void DisabledPruningStopsAdmissionAtBoundedCommittedManifestLimit()
+    {
+        static string Manifest(int i) =>
+            Guid.Parse($"00000000-0000-0000-0000-{i:000000000000}").ToString("N") +
+            ".json";
+        RecoveryPairMutationGate.RequireCaptureBudget(
+            Enumerable.Range(1, 31).Select(Manifest), maxManifests: 32);
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryPairMutationGate.RequireCaptureBudget(
+                Enumerable.Range(1, 32).Select(Manifest), maxManifests: 32));
+        // No delete callback or actual filesystem mutation is possible.
+        Assert.IsFalse(RecoveryPairMutationGate.CanDeleteByPath);
+    }
+
+    [TestMethod]
+    public void CaptureBudgetRejectsUnknownOrInvalidThresholdAndDoesNotHideEnumerationErrors()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            RecoveryPairMutationGate.RequireCaptureBudget(
+                Array.Empty<string>(), maxManifests: 0));
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryPairMutationGate.RequireCaptureBudget(
+                FailingIterator(), maxManifests: 32));
+        static IEnumerable<string> FailingIterator()
+        {
+            yield return Guid.NewGuid().ToString("N") + ".json";
+            throw new InvalidDataException("Injected enumeration failure");
+        }
+    }
+
+    [TestMethod]
     public void PairIdentityEvaluationRejectsMixedPlatforms()
     {
         var other = new RecoveryNativeFileId(RecoveryNativePlatform.Linux, 17, 2, 0);
