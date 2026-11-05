@@ -46,7 +46,9 @@ internal static class RecoveryWindowsTokenGroupProbe
     {
         // Validate all supplied evidence even if this ACE itself is harmless.
         _ = Summarize(groups);
-        if (ace.Type != 0 || (ace.AccessMask & PotentialWriteMask) == 0)
+        if (ace.Type != 0 && ace.Type != 1)
+            return RecoveryWindowsTokenAceFinding.UnresolvedTokenCoverage;
+        if (ace.Type == 1 || (ace.AccessMask & PotentialWriteMask) == 0)
             return RecoveryWindowsTokenAceFinding.NoRelevantAllowWrite;
         if ((ace.Flags & 0x08) != 0) // INHERIT_ONLY_ACE, excludes this object
             return RecoveryWindowsTokenAceFinding.InheritOnlyNotApplicableToObject;
@@ -78,6 +80,41 @@ internal static class RecoveryWindowsTokenGroupProbe
         RecoveryWindowsAclAce ace, RecoveryWindowsTokenGroupEvidence evidence) =>
         CompareAllow(ace, evidence.Groups ??
             Array.Empty<RecoveryWindowsTokenGroup>());
+
+    internal static RecoveryWindowsTokenAclCorrelation Correlate(
+        RecoveryWindowsAclRiskEvidence acl,
+        RecoveryWindowsTokenGroupEvidence tokenGroups)
+    {
+        if (acl.Aces is null || acl.Aces.Count != acl.AceCount ||
+            tokenGroups.Groups is null ||
+            tokenGroups.Groups.Count != tokenGroups.GroupCount)
+            throw new InvalidDataException("Неполные диагностические данные ACL/TOKEN_GROUPS.");
+        if (acl.AceCount > 256)
+            throw new InvalidDataException("Количество ACE превышает лимит.");
+        // Inputs are immutable private snapshots; still reject contradictory
+        // or duplicate group evidence. No authorization can result.
+        _ = Summarize(tokenGroups.Groups);
+        int exposed = 0, denyOnly = 0, disabled = 0;
+        int inheritOnly = 0, unresolved = 0;
+        foreach (RecoveryWindowsAclAce ace in acl.Aces)
+        {
+            switch (CompareAllow(ace, tokenGroups.Groups))
+            {
+                case RecoveryWindowsTokenAceFinding.EnabledGroupWriteAllowObserved:
+                    exposed++; break;
+                case RecoveryWindowsTokenAceFinding.DenyOnlyAllowIgnored:
+                    denyOnly++; break;
+                case RecoveryWindowsTokenAceFinding.DisabledGroupAllowIgnored:
+                    disabled++; break;
+                case RecoveryWindowsTokenAceFinding.InheritOnlyNotApplicableToObject:
+                    inheritOnly++; break;
+                case RecoveryWindowsTokenAceFinding.UnresolvedTokenCoverage:
+                    unresolved++; break;
+            }
+        }
+        return new RecoveryWindowsTokenAclCorrelation(acl.AceCount, exposed,
+            denyOnly, disabled, inheritOnly, unresolved);
+    }
 
     internal static RecoveryWindowsTokenGroupEvidence Summarize(
         IReadOnlyList<RecoveryWindowsTokenGroup> groups)
@@ -245,6 +282,19 @@ internal readonly record struct RecoveryWindowsTokenGroupEvidence(
     int GroupCount, int EnabledCount, int DenyOnlyCount,
     int DisabledCount, int UnreviewedCount,
     IReadOnlyList<RecoveryWindowsTokenGroup> Groups)
+{
+    internal bool CanAuthorizeCapture => false;
+}
+
+/// <summary>
+/// Conservative direct-group/ACE matching; NOT Windows effective access.
+/// User SID, restricted SIDs, privileges, integrity, inherited descendant
+/// rights, and complete AccessCheck semantics have not been established.
+/// </summary>
+internal readonly record struct RecoveryWindowsTokenAclCorrelation(
+    int AceCount, int EnabledGroupWriteAllowCount,
+    int DenyOnlyAllowIgnoredCount, int DisabledGroupAllowIgnoredCount,
+    int InheritOnlyAceCount, int UnresolvedAceCount)
 {
     internal bool CanAuthorizeCapture => false;
 }
