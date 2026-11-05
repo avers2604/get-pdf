@@ -117,6 +117,46 @@ public sealed class RecoveryWindowsTokenGroupEvidenceTests
     }
 
     [TestMethod]
+    public void CorrelationCountsDirectTokenGroupMatchesWithoutGrantingAccess()
+    {
+        var acl = RecoveryWindowsAclRiskObserver.Summarize(new[]
+        {
+            new RecoveryWindowsAclAce(0, 0x2, "S-1-5-11"),
+            new RecoveryWindowsAclAce(0, 0x2, "S-1-5-32-545"),
+            new RecoveryWindowsAclAce(0, 0x2, "S-1-1-0"),
+            new RecoveryWindowsAclAce(0, 0x2, "S-1-5-11", 0x08),
+            new RecoveryWindowsAclAce(0, 0x2, "S-1-5-21-1-2-3-1000")
+        });
+        var groups = RecoveryWindowsTokenGroupProbe.Summarize(new[]
+        {
+            new RecoveryWindowsTokenGroup("S-1-5-11", 0x4),
+            new RecoveryWindowsTokenGroup("S-1-5-32-545", 0x10),
+            new RecoveryWindowsTokenGroup("S-1-1-0", 0)
+        });
+        var review = RecoveryWindowsTokenGroupProbe.Correlate(acl, groups);
+        Assert.AreEqual(5, review.AceCount);
+        Assert.AreEqual(1, review.EnabledGroupWriteAllowCount);
+        Assert.AreEqual(1, review.DenyOnlyAllowIgnoredCount);
+        Assert.AreEqual(1, review.DisabledGroupAllowIgnoredCount);
+        Assert.AreEqual(1, review.InheritOnlyAceCount);
+        Assert.AreEqual(1, review.UnresolvedAceCount);
+        Assert.IsFalse(review.CanAuthorizeCapture);
+    }
+
+    [TestMethod]
+    public void MissingAclOrTokenEvidenceCannotCreateAPositiveFinding()
+    {
+        var groups = RecoveryWindowsTokenGroupProbe.Summarize(
+            Array.Empty<RecoveryWindowsTokenGroup>());
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryWindowsTokenGroupProbe.Correlate(default, groups));
+        var acl = RecoveryWindowsAclRiskObserver.Summarize(
+            Array.Empty<RecoveryWindowsAclAce>());
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryWindowsTokenGroupProbe.Correlate(acl, default));
+    }
+
+    [TestMethod]
     public void InvalidOrClosedTokenHandleIsRejectedBeforeNativeCall()
     {
         using var invalid = new SafeFileHandle(IntPtr.Zero, ownsHandle: false);
