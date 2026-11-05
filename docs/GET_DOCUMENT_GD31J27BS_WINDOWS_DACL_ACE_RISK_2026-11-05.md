@@ -12,6 +12,8 @@
 
 `ACCESS_DENIED_ACE` лишь учитывается и **не** отменяет риски ALLOW: правильный порядок ACE и effective token не вычисляются. Неизвестные/callback/object/conditional ACE учитываются в `UnreviewedAceCount`, но не интерпретируются как безопасные. **NULL DACL** вызывает отказ; превышение **256 ACE** — отказ. Native-ошибка — исключение, а не «чистый каталог». Из P/Invoke наружу выдаются только агрегированные счётчики; SID не записываются в отчёт.
 
+`RecoveryWindowsPinnedParentProbe.OpenForDiagnostics` теперь добавляет этот агрегат в `RecoveryWindowsPinnedParentLease.AclRisk` из **того же закреплённого каталожного handle**. Это два независимых чтения security descriptor, **не атомарный снимок**: DACL может измениться между наблюдениями. Публикация/удаление не разрешаются и контроль предков не заменяется.
+
 `RecoveryWindowsAclRiskEvidence.CanAuthorizeCapture` всегда `false`. Даже нулевой риск, отсутствующие ACE или совпадающий Owner SID **не дают никакой положительной авторизации**. Исходный `RecoveryWindowsParentSecurityGate.CanAuthorizeCapture` также остаётся `false`.
 
 ## Тесты и приёмка
