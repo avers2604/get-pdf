@@ -14,7 +14,7 @@ public sealed class RecoveryPairMutationSafetyTests
     private static RecoveryNativeFileId Win(ulong id) =>
         new(RecoveryNativePlatform.Windows, 17, id, 123);
 
-    private static RecoveryRecoveryPairIdentityEvidence Good() =>
+    private static RecoveryPairIdentityEvidence Good() =>
         new(Win(1), Win(2), Win(3), Win(2), Win(3),
             ParentHandleHeld: true, NamesOpenedRelativeToParent: true,
             NoFollowEnforced: true, WriterIsolationConfirmed: true,
