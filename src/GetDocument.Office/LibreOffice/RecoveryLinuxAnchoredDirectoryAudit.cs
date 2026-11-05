@@ -212,6 +212,35 @@ internal static class RecoveryLinuxAnchoredDirectoryAudit
         }
     }
 
+    /// <summary>
+    /// Combined READ-ONLY ancestry + already-existing relative child
+    /// diagnostic. Holds the entire ancestry and the BQ child lease together;
+    /// a caller cannot silently drop the anchor chain before child disposal.
+    /// This is NOT a trusted publication capability.
+    /// </summary>
+    internal static RecoveryLinuxAnchoredChildLease InspectChildRelative(
+        string absoluteParentDirectory, string childName,
+        CancellationToken cancellationToken = default)
+    {
+        RecoveryPinnedLinuxParentProbe.ValidateChildName(childName);
+        var ancestry = InspectExisting(absoluteParentDirectory, cancellationToken);
+        RecoveryPinnedLinuxParentLease? child = null;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            child = RecoveryPinnedLinuxParentProbe.OpenChildRelative(
+                ancestry.LeafHandle, childName);
+            cancellationToken.ThrowIfCancellationRequested();
+            return new RecoveryLinuxAnchoredChildLease(ancestry, child);
+        }
+        catch
+        {
+            child?.Dispose();
+            ancestry.Dispose();
+            throw;
+        }
+    }
+
     private static RecoveryLinuxAnchoredNode ObserveDirectory(SafeFileHandle handle)
     {
         RecoveryLinuxParentEvidence evidence =
@@ -334,6 +363,17 @@ internal sealed class RecoveryLinuxAnchoredDirectoryLease : IDisposable
     internal IReadOnlyList<RecoveryLinuxAnchoredNode> Nodes { get; }
     internal bool CanAuthorizeCapture => false;
 
+    internal SafeFileHandle LeafHandle
+    {
+        get
+        {
+            var handles = _handles;
+            if (handles is null || handles.Length == 0)
+                throw new ObjectDisposedException(nameof(RecoveryLinuxAnchoredDirectoryLease));
+            return handles[^1];
+        }
+    }
+
     internal RecoveryLinuxAnchoredDirectoryLease(
         SafeFileHandle[] handles, IReadOnlyList<RecoveryLinuxAnchoredNode> nodes)
     {
@@ -347,5 +387,33 @@ internal sealed class RecoveryLinuxAnchoredDirectoryLease : IDisposable
         if (handles is null) return;
         for (int i = handles.Length - 1; i >= 0; --i)
             handles[i].Dispose();
+    }
+}
+
+/// <summary>
+/// Retains the root-to-parent anchored diagnostic chain as long as the
+/// child directory lease is alive. Does NOT verify namespace authority,
+/// ongoing writer isolation, ACL values or post-check renames.
+/// </summary>
+internal sealed class RecoveryLinuxAnchoredChildLease : IDisposable
+{
+    private RecoveryLinuxAnchoredDirectoryLease? _ancestry;
+    private RecoveryPinnedLinuxParentLease? _child;
+    internal bool CanAuthorizeCapture => false;
+
+    internal RecoveryLinuxAnchoredChildLease(
+        RecoveryLinuxAnchoredDirectoryLease ancestry,
+        RecoveryPinnedLinuxParentLease child)
+    {
+        _ancestry = ancestry ?? throw new ArgumentNullException(nameof(ancestry));
+        _child = child ?? throw new ArgumentNullException(nameof(child));
+    }
+
+    public void Dispose()
+    {
+        var child = Interlocked.Exchange(ref _child, null);
+        var ancestry = Interlocked.Exchange(ref _ancestry, null);
+        try { child?.Dispose(); }
+        finally { ancestry?.Dispose(); }
     }
 }
