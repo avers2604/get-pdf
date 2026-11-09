@@ -219,6 +219,25 @@ public sealed class RecoveryNativeMutationSequenceTests
     }
 
     [TestMethod]
+    public void ForgedPhaseOrStepCounterCannotBeCancelledIntoAValidSuspension()
+    {
+        var initial = Start(RecoveryNativeMutationKind.PublishPair);
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryNativeMutationPlanner.Advance(
+                initial with { Phase = (RecoveryNativeMutationPhase)999 },
+                RecoveryNativeMutationEvent.CancelRequested));
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryNativeMutationPlanner.Advance(
+                initial with { Phase = RecoveryNativeMutationPhase.ParentPinned,
+                               ObservedSteps = 0 },
+                RecoveryNativeMutationEvent.CancelRequested));
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryNativeMutationPlanner.Advance(
+                initial with { ObservedSteps = 999 },
+                RecoveryNativeMutationEvent.ProcessInterrupted));
+    }
+
+    [TestMethod]
     public void CannotReplayCompletedClaimsToProduceAnAuthorization()
     {
         var plan = Apply(Start(RecoveryNativeMutationKind.DeletePair),
