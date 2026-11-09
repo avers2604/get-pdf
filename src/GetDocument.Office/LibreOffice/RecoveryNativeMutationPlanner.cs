@@ -44,7 +44,7 @@ internal static class RecoveryNativeMutationPlanner
                               RecoveryNativeMutationKind.DeletePair) ||
             RecoveryPairMutationGate.Evaluate(plan.Evidence) !=
                 RecoveryPairMutationDecision.NeedsNativeBoundOperation ||
-            plan.ObservedSteps < 0 || plan.ObservedSteps > 14)
+            plan.ObservedSteps != ExpectedStepCount(plan.Kind, plan.Phase))
             throw new InvalidDataException("Диагностический протокол недостоверен.");
 
         if (plan.Phase is RecoveryNativeMutationPhase.SequenceObserved or
@@ -131,6 +131,50 @@ internal static class RecoveryNativeMutationPlanner
             ObservedSteps = checked(plan.ObservedSteps + 1)
         };
     }
+
+    /// <summary>
+    /// Reject forged enum states, skipped steps and impossible phase/kind
+    /// combinations BEFORE processing crash/cancellation events. A synthetic
+    /// progress counter is still not native I/O attestation.
+    /// </summary>
+    private static int ExpectedStepCount(
+        RecoveryNativeMutationKind kind, RecoveryNativeMutationPhase phase) =>
+        (kind, phase) switch
+        {
+            (_, RecoveryNativeMutationPhase.Initialized) => 0,
+            (_, RecoveryNativeMutationPhase.ParentPinned) => 1,
+            (_, RecoveryNativeMutationPhase.WriterLockObserved) => 2,
+            (_, RecoveryNativeMutationPhase.PairNamesObserved) => 3,
+            (RecoveryNativeMutationKind.PublishPair,
+                RecoveryNativeMutationPhase.CopyBytesDurableClaimed) => 4,
+            (RecoveryNativeMutationKind.PublishPair,
+                RecoveryNativeMutationPhase.CopyNameRevalidated) => 5,
+            (RecoveryNativeMutationKind.DeletePair,
+                RecoveryNativeMutationPhase.CopyNameRevalidated) => 4,
+            (RecoveryNativeMutationKind.PublishPair,
+                RecoveryNativeMutationPhase.CopyNameChanged) => 6,
+            (RecoveryNativeMutationKind.DeletePair,
+                RecoveryNativeMutationPhase.CopyNameChanged) => 5,
+            (RecoveryNativeMutationKind.PublishPair,
+                RecoveryNativeMutationPhase.CopyDirectorySyncedClaimed) => 7,
+            (RecoveryNativeMutationKind.DeletePair,
+                RecoveryNativeMutationPhase.CopyDirectorySyncedClaimed) => 6,
+            (RecoveryNativeMutationKind.PublishPair,
+                RecoveryNativeMutationPhase.ManifestBytesDurableClaimed) => 8,
+            (RecoveryNativeMutationKind.PublishPair,
+                RecoveryNativeMutationPhase.ManifestNameRevalidated) => 9,
+            (RecoveryNativeMutationKind.DeletePair,
+                RecoveryNativeMutationPhase.ManifestNameRevalidated) => 7,
+            (RecoveryNativeMutationKind.PublishPair,
+                RecoveryNativeMutationPhase.ManifestNameChanged) => 10,
+            (RecoveryNativeMutationKind.DeletePair,
+                RecoveryNativeMutationPhase.ManifestNameChanged) => 8,
+            (RecoveryNativeMutationKind.PublishPair,
+                RecoveryNativeMutationPhase.SequenceObserved) => 11,
+            (RecoveryNativeMutationKind.DeletePair,
+                RecoveryNativeMutationPhase.SequenceObserved) => 9,
+            _ => -1
+        };
 
     private static bool HasClaimedMutation(RecoveryNativeMutationPhase phase) =>
         phase is RecoveryNativeMutationPhase.CopyNameChanged or
