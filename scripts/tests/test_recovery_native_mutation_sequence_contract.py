@@ -40,7 +40,8 @@ class NativeMutationSequenceContract(unittest.TestCase):
         for token in ("Enum.IsDefined(kind)", "transactionId == Guid.Empty",
                       "RecoveryPairMutationGate.Evaluate(evidence)",
                       "RecoveryPairMutationDecision.NeedsNativeBoundOperation",
-                      "RecoveryNativeMutationPhase.Initialized"):
+                      "RecoveryNativeMutationPhase.Initialized",
+                      "ExpectedStepCount(plan.Kind, plan.Phase)"):
             self.assertIn(token, self.planner)
 
     def test_publish_order_needs_no_replace_and_directory_sync(self):
@@ -73,14 +74,15 @@ class NativeMutationSequenceContract(unittest.TestCase):
         self.assertIn("CanPublishByPath => false;", self.pair_gate)
         self.assertIn("// No deletion callback is invoked.", self.store)
 
-    def test_fourteen_synthetic_mstest_methods_present(self):
-        self.assertEqual(14, self.tests.count("[TestMethod]"))
+    def test_fifteen_synthetic_mstest_methods_present(self):
+        self.assertEqual(15, self.tests.count("[TestMethod]"))
         for token in ("PublishRequiresCopyThenManifestAndTwoDirectorySyncClaims",
                       "CannotDeleteManifestBeforeCopyAndDirectorySync",
                       "CancellationAfterCopyPublishRequestsManualReviewNotRollback",
                       "CrashAfterCopyUnlinkCannotAuthorizeDeletingManifest",
                       "LockLossFailsClosedEvenBeforeFirstMutation",
-                      "CannotReplayCompletedClaimsToProduceAnAuthorization"):
+                      "CannotReplayCompletedClaimsToProduceAnAuthorization",
+                      "ForgedPhaseOrStepCounterCannotBeCancelledIntoAValidSuspension"):
             self.assertIn(token, self.tests)
 
     def test_manual_acceptance_gates_and_release_off(self):
