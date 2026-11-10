@@ -341,6 +341,74 @@ public sealed class RecoveryCrashJournalReconciliationTests
     }
 
     [TestMethod]
+    public void CanonicalJournalBytesRoundTripAsCandidateOnly()
+    {
+        Guid id = Guid.NewGuid();
+        var frames = Frames(id, RecoveryNativeMutationKind.PublishPair, StartEvents());
+        byte[] encoded = RecoveryCrashJournalCodec.EncodeSynthetic(frames);
+        var decoded = RecoveryCrashJournalCodec.DecodeCandidate(encoded);
+        CollectionAssert.AreEqual(frames, decoded);
+        var report = Analyze(id, RecoveryNativeMutationKind.PublishPair,
+            decoded, BothMissing);
+        Assert.IsFalse(report.HasIndependentJournalAuthentication);
+        Assert.IsFalse(RecoveryCrashJournalCodec.CanAuthorizeFileMutation);
+    }
+
+    [TestMethod]
+    public void DecoderRejectsNoncanonicalWhitespaceAndUnknownProperties()
+    {
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryCrashJournalCodec.DecodeCandidate(
+                System.Text.Encoding.UTF8.GetBytes(" []")));
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryCrashJournalCodec.DecodeCandidate(
+                System.Text.Encoding.UTF8.GetBytes("[{\\\"Unexpected\\\":true}]")));
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryCrashJournalCodec.DecodeCandidate(
+                System.Text.Encoding.UTF8.GetBytes("{not-json")));
+    }
+
+    [TestMethod]
+    public void DecoderEnforcesByteSizeAndRecordCountLimits()
+    {
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryCrashJournalCodec.DecodeCandidate(new byte[8193]));
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryCrashJournalCodec.DecodeCandidate(Array.Empty<byte>()));
+        var id = Guid.NewGuid();
+        var first = Frames(id, RecoveryNativeMutationKind.PublishPair, StartEvents())[0];
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            RecoveryCrashJournalCodec.EncodeSynthetic(
+                Enumerable.Repeat(first, 17).ToArray()));
+    }
+
+    [TestMethod]
+    public void CanonicalJsonDoesNotMeanAuthenticOrSemanticallyValid()
+    {
+        Guid id = Guid.NewGuid();
+        var frames = Frames(id, RecoveryNativeMutationKind.PublishPair, StartEvents());
+        frames[0] = frames[0] with { Event = RecoveryNativeMutationEvent.UnlinkCopyEntry };
+        byte[] encoded = RecoveryCrashJournalCodec.EncodeSynthetic(frames);
+        var decoded = RecoveryCrashJournalCodec.DecodeCandidate(encoded);
+        Assert.ThrowsExactly<InvalidDataException>(() =>
+            Analyze(id, RecoveryNativeMutationKind.PublishPair, decoded, BothMissing));
+        Assert.IsFalse(RecoveryCrashJournalCodec.CanAuthorizeFileMutation);
+    }
+
+    [TestMethod]
+    public void EmptyCanonicalJournalIsNotEvidenceOfNoInterruptedWork()
+    {
+        byte[] encoded = RecoveryCrashJournalCodec.EncodeSynthetic(
+            Array.Empty<RecoveryCrashJournalFrame>());
+        var decoded = RecoveryCrashJournalCodec.DecodeCandidate(encoded);
+        Assert.AreEqual(0, decoded.Length);
+        var report = Analyze(Guid.NewGuid(), RecoveryNativeMutationKind.DeletePair,
+            decoded, BothMissing);
+        Assert.AreEqual(RecoveryCrashReconciliationDisposition.NoJournalEvidence,
+            report.Disposition);
+    }
+
+    [TestMethod]
     public void UnknownEventOrTerminalReplayIsRejected()
     {
         Guid id = Guid.NewGuid();
