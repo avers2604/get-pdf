@@ -362,7 +362,7 @@ public sealed class RecoveryCrashJournalReconciliationTests
                 System.Text.Encoding.UTF8.GetBytes(" []")));
         Assert.ThrowsExactly<InvalidDataException>(() =>
             RecoveryCrashJournalCodec.DecodeCandidate(
-                System.Text.Encoding.UTF8.GetBytes("[{\\\"Unexpected\\\":true}]")));
+                System.Text.Encoding.UTF8.GetBytes("[{\"Unexpected\":true}]")));
         Assert.ThrowsExactly<InvalidDataException>(() =>
             RecoveryCrashJournalCodec.DecodeCandidate(
                 System.Text.Encoding.UTF8.GetBytes("{not-json")));
