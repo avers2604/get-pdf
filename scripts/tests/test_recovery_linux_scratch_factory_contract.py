@@ -127,6 +127,13 @@ class LinuxHeldScratchFactorySourceContracts(unittest.TestCase):
         self.assertIn("On any failure after O_CREAT", self.factory)
         self.assertIn("NEVER unlink it.", self.factory)
 
+    def test_native_create_needs_explicit_lab_opt_in(self):
+        self.assertIn('Environment.GetEnvironmentVariable("GD31J27CB_NATIVE_LAB")',
+                      self.factory)
+        self.assertIn('throw new InvalidOperationException(', self.factory)
+        self.assertLess(self.factory.index('Environment.GetEnvironmentVariable("GD31J27CB_NATIVE_LAB")'),
+                        self.factory.index("SyscallOpenAt2(OpenAt2Syscall,"))
+
     def test_windows_pathname_fallback_unavailable(self):
         self.assertIn("internal static class RecoveryWindowsJournalScratchGate", self.factory)
         for token in ("NativeRelativeCreateReady => false;",
@@ -135,13 +142,14 @@ class LinuxHeldScratchFactorySourceContracts(unittest.TestCase):
             self.assertIn(token, self.factory)
 
     def test_synthetic_tests_and_opt_in_platform_fixture(self):
-        self.assertEqual(15, self.tests.count("[TestMethod]"))
+        self.assertEqual(16, self.tests.count("[TestMethod]"))
         for token in (
             "CanonicalNonceAndSuffixAccepted",
             "TraversalSlashBackslashAndEmbeddedNullRejected",
             "CrossMountAndDeviceChangeRejected",
             "HardLinkAndAliasedFileIdRejected",
             "WindowsCannotUsePathFallback",
+            "NativeCreateWithoutExplicitLabOptInIsBlockedBeforeSyscall",
             "GD31J27CB_NATIVE_LAB",
             "File.SetUnixFileMode(dir, UnixFileMode.UserRead |",
             "ExplicitOptInLinuxScratchCreateIsExclusiveAndNeverDeletesOnDispose",
