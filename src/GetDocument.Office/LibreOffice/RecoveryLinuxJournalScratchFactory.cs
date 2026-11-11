@@ -99,6 +99,13 @@ internal static class RecoveryLinuxJournalScratchFactory
         ArgumentNullException.ThrowIfNull(heldParent);
         if (heldParent.IsClosed || heldParent.IsInvalid)
             throw new ObjectDisposedException(nameof(heldParent));
+        // The environment gate is only an accidental-use safeguard, NOT
+        // evidence of authorization or a substitute for trusted ancestry.
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("GD31J27CB_NATIVE_LAB"),
+                "1", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Создание scratch разрешено только для явно включённой изолированной лаборатории.");
         cancellationToken.ThrowIfCancellationRequested();
         if (!OperatingSystem.IsLinux() || !BitConverter.IsLittleEndian ||
             RuntimeInformation.ProcessArchitecture is not
