@@ -86,7 +86,7 @@ class HeldStreamWriteReadbackContracts(unittest.TestCase):
         for term in (
             "RealOwnedFixtureFileCanBeReopenedButRemainsUntrusted",
             "InjectedPartialWriteFaultIsNotRolledBackOrDeleted",
-            "CancellationAfterPartialWriteLeavesDataForManualReview",
+            "CancellationAfterWriteLeavesDataForManualReview",
             "TruncatedExistingHeldStreamIsInvalidJournal",
             "OversizedHeldStreamIsRejectedBeforeAllocation",
             "InvalidOrderInValidCanonicalEnvelopeFailsBeforeWrite",
