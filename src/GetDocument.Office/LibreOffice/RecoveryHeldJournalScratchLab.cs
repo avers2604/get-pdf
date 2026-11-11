@@ -53,7 +53,10 @@ internal static class RecoveryHeldJournalScratchLab
         // Intentionally NO catch/rollback/delete/truncate on partial I/O or
         // cancellation. Such bytes are untrusted orphan artifacts owned by
         // the external scratch-file provider and need manual reconciliation.
-        await ownedEmptyScratch.WriteAsync(encodedJournal, cancellationToken);
+        // Write the exact private snapshot that passed canonical/chain checks.
+        // Never dereference caller-owned ReadOnlyMemory after validation:
+        // its underlying array may be changed by another thread.
+        await ownedEmptyScratch.WriteAsync(bytes, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         await ownedEmptyScratch.FlushAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
