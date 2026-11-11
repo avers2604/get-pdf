@@ -86,7 +86,7 @@ internal static class RecoveryHeldLinuxDirectorySyncLab
                     "Изменились каталог, его права или эффективный UID во время fsync.");
             cancellationToken.ThrowIfCancellationRequested();
             return new RecoveryHeldDirectorySyncReceipt(
-                first.FileId, DirectorySyncAttempted: true,
+                first.FileId, true,
                 RecoveryHeldDirectorySyncFinding.MatchedButUntrusted);
         }
         finally
