@@ -25,7 +25,7 @@ internal static class RecoveryWindowsJournalScratchFactory
     private const uint FileAttributeDirectory = 0x00000010;
     private const uint FileAttributeReparsePoint = 0x00000400;
     private const uint FileCreate = 0x00000002; // create-new only
-    private const nuint FileCreated = 0x00000002;
+    private const uint FileCreated = 0x00000002;
     private const uint FileSynchronousIoNonAlert = 0x00000020;
     private const uint FileNonDirectoryFile = 0x00000040;
     private const uint FileOpenReparsePoint = 0x00200000;
@@ -98,6 +98,27 @@ internal static class RecoveryWindowsJournalScratchFactory
             newFile.DeviceOrVolume != parentAtOpen.DeviceOrVolume)
             return RecoveryWindowsScratchFileFinding.CrossVolumeOrAlias;
         return RecoveryWindowsScratchFileFinding.ObservedButNotTrusted;
+    }
+
+    internal static bool SameAclSnapshot(
+        RecoveryWindowsAclRiskEvidence before,
+        RecoveryWindowsAclRiskEvidence after) =>
+        before.Aces is not null && after.Aces is not null &&
+        before.AceCount == after.AceCount &&
+        before.AceCount == before.Aces.Count &&
+        after.AceCount == after.Aces.Count &&
+        before.BroadWriteAllowCount == after.BroadWriteAllowCount &&
+        before.UnreviewedAceCount == after.UnreviewedAceCount &&
+        before.DenyAceCount == after.DenyAceCount &&
+        before.Aces.SequenceEqual(after.Aces);
+
+    internal static RecoveryWindowsScratchTagFinding EvaluateTag(
+        uint attributes, bool wantDirectory)
+    {
+        if (attributes == 0 || (attributes & FileAttributeReparsePoint) != 0 ||
+            ((attributes & FileAttributeDirectory) != 0) != wantDirectory)
+            return RecoveryWindowsScratchTagFinding.ReparseOrWrongType;
+        return RecoveryWindowsScratchTagFinding.NormalTypeButUntrusted;
     }
 
     /// <summary>
@@ -182,7 +203,7 @@ internal static class RecoveryWindowsJournalScratchFactory
             if (raw != 0 && raw != new nint(-1))
                 newlyCreated = new SafeFileHandle(raw, ownsHandle: true);
             if (status != 0 || newlyCreated is null ||
-                newlyCreated.IsInvalid || ioStatus.Information != FileCreated)
+                newlyCreated.IsInvalid || ioStatus.Information != (nuint)FileCreated)
                 throw new IOException(
                     $"NtCreateFile(FILE_CREATE) отказал: NTSTATUS 0x{status:X8}; " +
                     "созданный объект (если существует) не удаляется.");
@@ -198,8 +219,11 @@ internal static class RecoveryWindowsJournalScratchFactory
                 RecoveryWindowsParentSecurityProbe.ObserveExistingHandle(newlyCreated);
             RecoveryWindowsAclRiskEvidence childAcl =
                 RecoveryWindowsAclRiskObserver.ObserveExistingHandle(newlyCreated);
+            RequireNormalDirectory(heldParent);
 
-            if (EvaluateParent(after, aclAfter, expectedOwnerSid) !=
+            if (!SameAclSnapshot(aclBefore, aclAfter) ||
+                childSecurity.FileId != childId ||
+                EvaluateParent(after, aclAfter, expectedOwnerSid) !=
                     RecoveryWindowsScratchParentFinding.ObservedButNotTrusted ||
                 EvaluateParent(childSecurity, childAcl, expectedOwnerSid) !=
                     RecoveryWindowsScratchParentFinding.ObservedButNotTrusted ||
@@ -244,8 +268,8 @@ internal static class RecoveryWindowsJournalScratchFactory
                 FileAttributeTagInfoClass, out FileAttributeTagInfo data, 8))
             throw new IOException("Windows не вернула FILE_ATTRIBUTE_TAG_INFO.",
                 new Win32Exception(Marshal.GetLastPInvokeError()));
-        if ((data.Attributes & FileAttributeReparsePoint) != 0 ||
-            ((data.Attributes & FileAttributeDirectory) != 0) != wantDirectory)
+        if (EvaluateTag(data.Attributes, wantDirectory) !=
+            RecoveryWindowsScratchTagFinding.NormalTypeButUntrusted)
             throw new InvalidDataException(
                 "Новый file/parent fd не соответствует обычному типу без reparse.");
     }
@@ -297,6 +321,12 @@ internal static class RecoveryWindowsJournalScratchFactory
     private static extern bool GetFileInformationByHandleEx(
         SafeFileHandle handle, int fileInformationClass,
         out FileAttributeTagInfo info, uint bufferSize);
+}
+
+internal enum RecoveryWindowsScratchTagFinding
+{
+    ReparseOrWrongType,
+    NormalTypeButUntrusted
 }
 
 internal enum RecoveryWindowsScratchParentFinding
