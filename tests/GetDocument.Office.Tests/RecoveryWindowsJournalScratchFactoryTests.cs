@@ -151,6 +151,42 @@ public sealed class RecoveryWindowsJournalScratchFactoryTests
     }
 
     [TestMethod]
+    public void DirectoryAndRegularFileTagsAreDistinguished()
+    {
+        Assert.AreEqual(RecoveryWindowsScratchTagFinding.NormalTypeButUntrusted,
+            RecoveryWindowsJournalScratchFactory.EvaluateTag(0x10, wantDirectory: true));
+        Assert.AreEqual(RecoveryWindowsScratchTagFinding.NormalTypeButUntrusted,
+            RecoveryWindowsJournalScratchFactory.EvaluateTag(0x80, wantDirectory: false));
+        Assert.AreEqual(RecoveryWindowsScratchTagFinding.ReparseOrWrongType,
+            RecoveryWindowsJournalScratchFactory.EvaluateTag(0x10, wantDirectory: false));
+        Assert.AreEqual(RecoveryWindowsScratchTagFinding.ReparseOrWrongType,
+            RecoveryWindowsJournalScratchFactory.EvaluateTag(0x80, wantDirectory: true));
+    }
+
+    [TestMethod]
+    public void ReparsePointIsRejectedEvenWhenDirectoryBitMatches()
+    {
+        Assert.AreEqual(RecoveryWindowsScratchTagFinding.ReparseOrWrongType,
+            RecoveryWindowsJournalScratchFactory.EvaluateTag(0x410, wantDirectory: true));
+        Assert.AreEqual(RecoveryWindowsScratchTagFinding.ReparseOrWrongType,
+            RecoveryWindowsJournalScratchFactory.EvaluateTag(0x480, wantDirectory: false));
+        Assert.AreEqual(RecoveryWindowsScratchTagFinding.ReparseOrWrongType,
+            RecoveryWindowsJournalScratchFactory.EvaluateTag(0, wantDirectory: false));
+    }
+
+    [TestMethod]
+    public void DaclChangeDetectionDoesNotProveEffectiveAccess()
+    {
+        var before = RecoveryWindowsAclRiskObserver.Summarize(
+            new[] { new RecoveryWindowsAclAce(0, 0x20000, Owner) });
+        var after = RecoveryWindowsAclRiskObserver.Summarize(
+            new[] { new RecoveryWindowsAclAce(0, 0x20000, "S-1-5-18") });
+        Assert.IsFalse(RecoveryWindowsJournalScratchFactory.SameAclSnapshot(before, after));
+        Assert.IsTrue(RecoveryWindowsJournalScratchFactory.SameAclSnapshot(before, before));
+        Assert.IsFalse(RecoveryWindowsJournalScratchFactory.HasVerifiedEffectiveAccess);
+    }
+
+    [TestMethod]
     public void MissingLabOptInDeniedBeforeWindowsNativeInvocation()
     {
         if (Environment.GetEnvironmentVariable("GD31J27CC_NATIVE_LAB") == "1")
