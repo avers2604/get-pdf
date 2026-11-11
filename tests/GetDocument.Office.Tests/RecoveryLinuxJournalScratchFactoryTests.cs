@@ -164,6 +164,19 @@ public sealed class RecoveryLinuxJournalScratchFactoryTests
     }
 
     [TestMethod]
+    public void NativeCreateWithoutExplicitLabOptInIsBlockedBeforeSyscall()
+    {
+        if (Environment.GetEnvironmentVariable("GD31J27CB_NATIVE_LAB") == "1")
+            return;
+        // A nonzero synthetic wrapper is sufficient to prove that the lab
+        // opt-in check runs before OS calls on both Windows and Linux.
+        using var neverOpened = new SafeFileHandle((IntPtr)0x765432, ownsHandle: false);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            RecoveryLinuxJournalScratchFactory.CreateExistingParentLab(
+                neverOpened, Name()));
+    }
+
+    [TestMethod]
     public void WindowsCannotUsePathFallback()
     {
         Assert.IsFalse(RecoveryWindowsJournalScratchGate.NativeRelativeCreateReady);
