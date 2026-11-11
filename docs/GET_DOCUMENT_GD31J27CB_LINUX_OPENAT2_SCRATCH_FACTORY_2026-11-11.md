@@ -4,7 +4,7 @@
 
 ## Блок 1. Создание относительно удерживаемого Linux parent dirfd
 
-Новый RecoveryLinuxJournalScratchFactory.CreateExistingParentLab получает:
+Новый RecoveryLinuxJournalScratchFactory.CreateExistingParentLab **отказывается выполнять native create без явного лабораторного opt-in GD31J27CB_NATIVE_LAB=1**; флаг — только защита от случайного использования, не OS authorization. Метод получает:
 - уже открытый и принадлежащий вызывающему коду SafeFileHandle каталога;
 - строгое имя «32 строчных шестнадцатеричных символа GUID-N + .gdjournal.tmp»;
 - CancellationToken.
@@ -44,11 +44,11 @@ RecoveryWindowsJournalScratchGate сохраняет отказ:
 
 ## Блок 4. Тесты и ручные испытания
 
-Подготовлено **15 C# MSTest**: формат имени, traversal, неверный UID/mode, подменённый File ID, mount/device, hardlink/alias, недействительный handle, Windows denial и один **opt-in** Linux-тест создания.
+Подготовлено **16 C# MSTest**: формат имени, traversal, неверный UID/mode, подменённый File ID, mount/device, hardlink/alias, недействительный handle, Windows denial и один **opt-in** Linux-тест создания.
 
 Linux-тест разрешается только при OperatingSystem.IsLinux() и GD31J27CB_NATIVE_LAB=1. Он создаёт уникальный тестовый каталог с режимом 0700, открывает его как dirfd, создаёт новый scratch, проверяет отказ повторного O_EXCL, оставляет файл после Dispose и удаляет тестовый каталог лишь в тестовом finally. Factory не выполняет test-fixture cleanup.
 
-Подготовлено **12 Python source-only контрактов**, зарегистрировано 8 новых manual gates, всего **187**:
+Подготовлено **13 Python source-only контрактов**, зарегистрировано 8 новых manual gates, всего **187**:
 
 - gd31j27cb-astra-openat2-excl-no-follow-manual-e2e
 - gd31j27cb-astra-existing-name-no-overwrite-manual-e2e
