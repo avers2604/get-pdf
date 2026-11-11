@@ -77,8 +77,7 @@ internal static class RecoveryHeldJournalScratchLab
         byte[] observed = new byte[bytes.Length];
         await ownedEmptyScratch.ReadExactlyAsync(observed, cancellationToken);
         if (ownedEmptyScratch.Length != bytes.Length ||
-            !CryptographicOperations.FixedTimeEquals(observed, expectedSha.Length == 0
-                ? Array.Empty<byte>() : bytes))
+            !CryptographicOperations.FixedTimeEquals(observed, bytes))
             throw new InvalidDataException("Повторно прочитанные байты журнала отличаются.");
         cancellationToken.ThrowIfCancellationRequested();
 
