@@ -56,7 +56,7 @@ public sealed class RecoveryHeldJournalScratchLabTests
         Assert.IsFalse(receipt.DirectoryEntryDurabilityVerified);
         Assert.IsFalse(receipt.ContentDurabilityVerified);
         Assert.IsTrue(scratch.CanRead);
-        Assert.AreEqual(bytes.Length, scratch.Length);
+        Assert.AreEqual((long)bytes.Length, scratch.Length);
         var report = await Read(scratch, id);
         Assert.AreEqual(3, report.ClaimedEvents);
         Assert.IsFalse(report.CanRestore);
@@ -166,14 +166,14 @@ public sealed class RecoveryHeldJournalScratchLabTests
     }
 
     [TestMethod]
-    public async Task CancellationAfterPartialWriteLeavesDataForManualReview()
+    public async Task CancellationAfterWriteLeavesDataForManualReview()
     {
         var (id, bytes) = Candidate();
         using var cts = new CancellationTokenSource();
         using var scratch = new CancelAfterWriteStream(cts);
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(
             () => Stage(scratch, bytes, id, cts.Token));
-        Assert.AreEqual(bytes.Length, scratch.Length);
+        Assert.AreEqual((long)bytes.Length, scratch.Length);
         Assert.IsFalse(RecoveryHeldJournalScratchLab.ProductionWriterEnabled);
     }
 
@@ -184,8 +184,8 @@ public sealed class RecoveryHeldJournalScratchLabTests
         using var scratch = new PartialFailureStream();
         await Assert.ThrowsExactlyAsync<IOException>(
             () => Stage(scratch, bytes, id));
-        Assert.IsGreaterThan(0, scratch.Length);
-        Assert.IsLessThan(bytes.Length, scratch.Length);
+        Assert.IsTrue(scratch.Length > 0);
+        Assert.IsTrue(scratch.Length < bytes.Length);
         Assert.IsFalse(RecoveryHeldJournalScratchLab.CanCleanupByPath);
     }
 
