@@ -218,6 +218,20 @@ public sealed class RecoveryHeldJournalScratchLabTests
     }
 
     [TestMethod]
+    public async Task CallerBufferMutationAtWriteCannotChangeValidatedSnapshot()
+    {
+        var (id, encoded) = Candidate();
+        byte[] original = (byte[])encoded.Clone();
+        using var scratch = new MutateCallerBeforeWriteStream(
+            () => Array.Fill(encoded, (byte)0x21));
+        var receipt = await Stage(scratch, encoded, id);
+        Assert.AreEqual((long)original.Length, scratch.Length);
+        CollectionAssert.AreEqual(original, scratch.ToArray());
+        Assert.AreEqual(3, (await Read(scratch, id)).ClaimedEvents);
+        Assert.IsFalse(receipt.CanAuthorizeRecovery);
+    }
+
+    [TestMethod]
     public async Task InvalidOrderInValidCanonicalEnvelopeFailsBeforeWrite()
     {
         var (id, bytes) = Candidate();
@@ -241,6 +255,16 @@ public sealed class RecoveryHeldJournalScratchLabTests
         await Assert.ThrowsExactlyAsync<InvalidDataException>(
             () => Read(scratch, Guid.NewGuid()));
         Assert.IsFalse(RecoveryHeldJournalScratchLab.ProductionWriterEnabled);
+    }
+
+    private sealed class MutateCallerBeforeWriteStream(Action mutate) : MemoryStream
+    {
+        public override ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            mutate();
+            return base.WriteAsync(buffer, cancellationToken);
+        }
     }
 
     private sealed class CancelAfterWriteStream(CancellationTokenSource cancellation)
