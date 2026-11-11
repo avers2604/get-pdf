@@ -72,7 +72,7 @@ Opt-in fixture запускается лишь на Windows при GD31J27CC_NAT
     python -m unittest discover -s scripts/tests -p test_recovery_windows_nt_rooted_scratch_contract.py -v
     dotnet test tests/GetDocument.Office.Tests/GetDocument.Office.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~RecoveryWindowsJournalScratchFactoryTests
 
-Нативный fixture требует явного предоставления GDPR31J27CC_PRIVATE_LAB_DIRECTORY (исправление: точное имя переменной **GD31J27CC_PRIVATE_LAB_DIRECTORY**) и флага GD31J27CC_NATIVE_LAB=1. Запрещено использовать production/shared recovery directory.
+Нативный fixture требует явного предоставления **GD31J27CC_PRIVATE_LAB_DIRECTORY** и флага **GD31J27CC_NATIVE_LAB=1**. Запрещено использовать production/shared recovery directory.
 
 ## Не закрытые P0
 
