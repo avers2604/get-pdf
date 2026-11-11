@@ -181,6 +181,10 @@ public sealed class RecoveryLinuxJournalScratchFactoryTests
         string dir = Path.Combine(Path.GetTempPath(), "getdoc-cb-lab-" +
             Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        // A default umask might produce 0755; the native lab explicitly
+        // requires owner-only 0700 before issuing openat2(O_CREAT|O_EXCL).
+        File.SetUnixFileMode(dir, UnixFileMode.UserRead |
+            UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         SafeFileHandle? heldParent = null;
         string scratch = Name(Guid.NewGuid().ToString("N"));
         try
