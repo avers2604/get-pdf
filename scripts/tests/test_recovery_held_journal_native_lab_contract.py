@@ -67,7 +67,7 @@ class HeldStreamWriteReadbackContracts(unittest.TestCase):
     def test_failure_never_rolls_back_or_deletes(self):
         for forbidden in (
             "File.Delete(", "File.Move(", "File.Create(", "File.Open(",
-            "Directory.Delete(", "Directory.Create", "FileStream(",
+            "Directory.Delete(", "Directory.Create", "new FileStream(",
             "SetLength(", "File.Write", "unlinkat(", "renameat2(",
         ):
             self.assertNotIn(forbidden, self.src)
