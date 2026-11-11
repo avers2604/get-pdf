@@ -23,7 +23,7 @@ public sealed class RecoveryLinuxJournalScratchFactoryTests
         ushort mode = 0x41C0) =>
         new(Linux(id), owner, mode, mount);
 
-    private static RecoveryLinuxRegularEntryObservation File(
+    private static RecoveryLinuxRegularEntryObservation Created(
         ulong id = 10, ulong mount = 13, uint owner = 1000,
         uint links = 1, ulong volume = 87) =>
         new(Linux(id, volume), mount, owner, links);
@@ -82,7 +82,7 @@ public sealed class RecoveryLinuxJournalScratchFactoryTests
     {
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.ObservedButNotAuthorized,
             RecoveryLinuxJournalScratchFactory.Evaluate(Parent(), Parent(),
-                File(), 1000));
+                Created(), 1000));
         Assert.IsFalse(RecoveryLinuxJournalScratchFactory.ProductionCreateEnabled);
         Assert.IsFalse(RecoveryLinuxJournalScratchFactory.CanAuthorizePublish);
         Assert.IsFalse(RecoveryLinuxJournalScratchFactory.CanAuthorizeDelete);
@@ -93,7 +93,7 @@ public sealed class RecoveryLinuxJournalScratchFactoryTests
     {
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.ParentChanged,
             RecoveryLinuxJournalScratchFactory.Evaluate(Parent(), Parent(id: 44),
-                File(), 1000));
+                Created(), 1000));
     }
 
     [TestMethod]
@@ -101,10 +101,10 @@ public sealed class RecoveryLinuxJournalScratchFactoryTests
     {
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.CrossMountOrDevice,
             RecoveryLinuxJournalScratchFactory.Evaluate(Parent(), Parent(),
-                File(mount: 99), 1000));
+                Created(mount: 99), 1000));
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.CrossMountOrDevice,
             RecoveryLinuxJournalScratchFactory.Evaluate(Parent(), Parent(),
-                File(volume: 99), 1000));
+                Created(volume: 99), 1000));
     }
 
     [TestMethod]
@@ -112,10 +112,10 @@ public sealed class RecoveryLinuxJournalScratchFactoryTests
     {
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.IneligibleNewFile,
             RecoveryLinuxJournalScratchFactory.Evaluate(Parent(), Parent(),
-                File(links: 2), 1000));
+                Created(links: 2), 1000));
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.IneligibleNewFile,
             RecoveryLinuxJournalScratchFactory.Evaluate(Parent(), Parent(),
-                File(id: 9), 1000));
+                Created(id: 9), 1000));
     }
 
     [TestMethod]
@@ -123,13 +123,13 @@ public sealed class RecoveryLinuxJournalScratchFactoryTests
     {
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.IneligibleParent,
             RecoveryLinuxJournalScratchFactory.Evaluate(
-                Parent(owner: 42), Parent(owner: 42), File(), 1000));
+                Parent(owner: 42), Parent(owner: 42), Created(), 1000));
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.IneligibleParent,
             RecoveryLinuxJournalScratchFactory.Evaluate(
-                Parent(mode: 0x41F0), Parent(mode: 0x41F0), File(), 1000));
+                Parent(mode: 0x41F0), Parent(mode: 0x41F0), Created(), 1000));
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.IneligibleNewFile,
             RecoveryLinuxJournalScratchFactory.Evaluate(
-                Parent(), Parent(), File(owner: 77), 1000));
+                Parent(), Parent(), Created(owner: 77), 1000));
     }
 
     [TestMethod]
@@ -137,12 +137,12 @@ public sealed class RecoveryLinuxJournalScratchFactoryTests
     {
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.IneligibleParent,
             RecoveryLinuxJournalScratchFactory.Evaluate(default, default,
-                File(), 1000));
+                Created(), 1000));
         var foreign = Parent() with {
             FileId = new RecoveryNativeFileId(RecoveryNativePlatform.Windows, 87, 9, 3)
         };
         Assert.AreEqual(RecoveryLinuxJournalScratchFinding.IneligibleParent,
-            RecoveryLinuxJournalScratchFactory.Evaluate(foreign, foreign, File(), 1000));
+            RecoveryLinuxJournalScratchFactory.Evaluate(foreign, foreign, Created(), 1000));
     }
 
     [TestMethod]
