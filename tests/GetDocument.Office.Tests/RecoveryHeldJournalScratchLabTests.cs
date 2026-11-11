@@ -75,7 +75,7 @@ public sealed class RecoveryHeldJournalScratchLabTests
         {
             await using (var created = new FileStream(path, FileMode.CreateNew,
                 FileAccess.ReadWrite, FileShare.Read | FileShare.Delete,
-                bufferSize: 4096, FileOptions.Asynchronous))
+                bufferSize: 4096, options: FileOptions.Asynchronous))
             {
                 var receipt = await Stage(created, bytes, id);
                 Assert.IsTrue(receipt.FileContentFlushAttempted);
@@ -83,7 +83,7 @@ public sealed class RecoveryHeldJournalScratchLabTests
             }
             await using (var reopened = new FileStream(path, FileMode.Open,
                 FileAccess.Read, FileShare.Read | FileShare.Delete,
-                bufferSize: 4096, FileOptions.Asynchronous))
+                bufferSize: 4096, options: FileOptions.Asynchronous))
             {
                 var report = await Read(reopened, id);
                 Assert.IsTrue(report.WasReadFromHeldFileStream);
