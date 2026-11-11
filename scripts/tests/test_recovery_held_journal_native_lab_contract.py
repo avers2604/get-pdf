@@ -25,7 +25,7 @@ class HeldStreamWriteReadbackContracts(unittest.TestCase):
             "ownedEmptyScratch.Position != 0", "!ownedEmptyScratch.CanSeek",
             "!ownedEmptyScratch.CanWrite", "!ownedEmptyScratch.CanRead",
             "ReferenceEquals(ownedEmptyScratch, Stream.Null)",
-            "ownedEmptyScratch.WriteAsync(encodedJournal, cancellationToken)"
+            "ownedEmptyScratch.WriteAsync(bytes, cancellationToken)"
         ):
             self.assertIn(term, self.src)
 
@@ -39,7 +39,7 @@ class HeldStreamWriteReadbackContracts(unittest.TestCase):
             self.assertIn(term, self.src)
         self.assertLess(
             self.src.index("RecoveryCrashJournalReconciler.Analyze(frames, expectedTransactionId,"),
-            self.src.index("ownedEmptyScratch.WriteAsync(encodedJournal, cancellationToken)"))
+            self.src.index("ownedEmptyScratch.WriteAsync(bytes, cancellationToken)"))
         self.assertIn("MaxEnvelopeBytes = 8192", self.codec)
 
     def test_real_filedescriptor_flush_but_not_directory_durability(self):
@@ -81,10 +81,11 @@ class HeldStreamWriteReadbackContracts(unittest.TestCase):
         ):
             self.assertIn(term, self.src)
 
-    def test_fifteen_authored_mstest_cases_including_faults(self):
-        self.assertEqual(15, self.tests.count("[TestMethod]"))
+    def test_sixteen_authored_mstest_cases_including_faults(self):
+        self.assertEqual(16, self.tests.count("[TestMethod]"))
         for term in (
             "RealOwnedFixtureFileCanBeReopenedButRemainsUntrusted",
+            "CallerBufferMutationAtWriteCannotChangeValidatedSnapshot",
             "InjectedPartialWriteFaultIsNotRolledBackOrDeleted",
             "CancellationAfterWriteLeavesDataForManualReview",
             "TruncatedExistingHeldStreamIsInvalidJournal",
