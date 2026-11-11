@@ -8,7 +8,7 @@ RecoveryHeldJournalScratchLab.StageOnHeldStreamAsync принимает толь
 
 Прежде чем записать первый байт, он проверяет полный канонический JSON журнала BY (до 8192 байт), GUID транзакции, вид операции, хеш-цепь и порядок всех событий через RecoveryCrashJournalReconciler + RecoveryNativeMutationPlanner. Пустой журнал не допускается.
 
-Затем выполняется WriteAsync и FlushAsync. Для переданного FileStream вызывается **реальная попытка сброса файлового содержимого через Flush(flushToDisk:true)**. После записи байты читаются через тот же held Stream, повторно проверяются размер и побайтовое совпадение. Native File ID открытого FileStream сравнивается до/после через уже существующий RecoveryNativeHandleIdProbe. При отмене или частичной записи **нет rollback, SetLength, unlink, File.Delete**: данные сохраняются на ответственности владельца потока для диагностики.
+Для WriteAsync используются именно **приватные проверенные байты**, а не переданный вызывающим кодом изменяемый массив: регрессионный тест изменяет исходный буфер непосредственно перед WriteAsync и проверяет отсутствие TOCTOU. Затем выполняется WriteAsync и FlushAsync. Для переданного FileStream вызывается **реальная попытка сброса файлового содержимого через Flush(flushToDisk:true)**. После записи байты читаются через тот же held Stream, повторно проверяются размер и побайтовое совпадение. Native File ID открытого FileStream сравнивается до/после через уже существующий RecoveryNativeHandleIdProbe. При отмене или частичной записи **нет rollback, SetLength, unlink, File.Delete**: данные сохраняются на ответственности владельца потока для диагностики.
 
 Успешная квитанция **не** доказывает OS durability, сохранность имени, trusted ownership, достаточность ACL или реальную безопасность: ContentDurabilityVerified=false, DirectoryEntryDurabilityVerified=false, CanAuthorizeRecovery=false.
 
@@ -28,7 +28,7 @@ RecoveryHeldLinuxDirectorySyncLab.SyncExistingDirectoryForLab получает �
 
 ## Блок CA-4. Тесты и приёмка
 
-Подготовлены **26 C# MSTest** (15 held journal lab + 11 Linux held directory fsync) и **12 Python source-only unit tests**. Python-тесты зарегистрированы в scripts/office_acceptance.py до offline NuGet restore.
+Подготовлены **27 C# MSTest** (16 held journal lab + 11 Linux held directory fsync) и **12 Python source-only unit tests**. Python-тесты зарегистрированы в scripts/office_acceptance.py до offline NuGet restore.
 
 Добавлено 8 новых обязательных **ручных, не выполненных** gate, суммарно **179**:
 - gd31j27ca-windows-held-file-content-flush-manual-e2e
