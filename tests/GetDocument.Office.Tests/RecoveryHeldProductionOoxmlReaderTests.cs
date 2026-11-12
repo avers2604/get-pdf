@@ -142,6 +142,25 @@ public sealed class RecoveryHeldProductionOoxmlReaderTests
     }
 
     [TestMethod]
+    public async Task DuplicateCaseInsensitiveZipPartIsRejected()
+    {
+        byte[] copy = BuildZip(extraName: "WORD/DOCUMENT.XML");
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(
+            () => Inspect(copy));
+    }
+
+    [TestMethod]
+    public async Task VirtualCopyOver128MiBIsRejectedBeforeHashing()
+    {
+        byte[] copy = BuildZip();
+        using var c = new OversizedCopyStream(copy);
+        using var m = new MemoryStream(Manifest(copy));
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
+            RecoveryHeldProductionOoxmlReader.ReadOnHeldStreamsAsync(
+                c, m, Source, ".docx"));
+    }
+
+    [TestMethod]
     public async Task DtdXmlRejected()
     {
         byte[] copy = BuildZip(mainPayload: "<!DOCTYPE a [<!ENTITY x 'exp'>]><a>&x;</a>");
@@ -264,6 +283,13 @@ public sealed class RecoveryHeldProductionOoxmlReaderTests
             // Cleanup belongs only to this uniquely named TEST fixture.
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
         }
+    }
+
+    private sealed class OversizedCopyStream(byte[] data) :
+        MemoryStream(data)
+    {
+        public override long Length =>
+            RecoveryHeldProductionOoxmlReader.MaxCopyBytes + 1;
     }
 
     private sealed class MutateOnLaterAsyncHashRead(byte[] bytes, int triggerRead = 3) :
