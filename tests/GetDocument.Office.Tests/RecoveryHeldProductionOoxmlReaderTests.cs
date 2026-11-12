@@ -45,7 +45,6 @@ public sealed class RecoveryHeldProductionOoxmlReaderTests
         byte[] copy, byte[]? manifest = null, string source = Source,
         string extension = ".docx", CancellationToken token = default)
     {
-        using var dummy = new MemoryStream();
         // The actual stream lifetime is owned by the returned async helper.
         return InspectStreams(new MemoryStream(copy),
             new MemoryStream(manifest ?? Manifest(copy, source)), source,
@@ -186,7 +185,7 @@ public sealed class RecoveryHeldProductionOoxmlReaderTests
         cts.Cancel();
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(
             () => Inspect(copy, manifest, token: cts.Token));
-        Assert.AreEqual(copy.Length, copy.Length);
+        CollectionAssert.AreEqual(copy, BuildZip());
         Assert.IsFalse(RecoveryHeldProductionOoxmlReader.CanAuthorizeCleanup);
     }
 
@@ -206,7 +205,7 @@ public sealed class RecoveryHeldProductionOoxmlReaderTests
     {
         byte[] copy = BuildZip();
         using var c = new MemoryStream(copy);
-        using var m = new MutateOnLaterAsyncHashRead(Manifest(copy));
+        using var m = new MutateOnLaterAsyncHashRead(Manifest(copy), triggerRead: 2);
         await Assert.ThrowsExactlyAsync<InvalidDataException>(() =>
             RecoveryHeldProductionOoxmlReader.ReadOnHeldStreamsAsync(
                 c, m, Source, ".docx"));
@@ -266,14 +265,14 @@ public sealed class RecoveryHeldProductionOoxmlReaderTests
         }
     }
 
-    private sealed class MutateOnLaterAsyncHashRead(byte[] bytes) :
+    private sealed class MutateOnLaterAsyncHashRead(byte[] bytes, int triggerRead = 3) :
         MemoryStream((byte[])bytes.Clone())
     {
         private int _reads;
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer,
             CancellationToken cancellationToken = default)
         {
-            if (++_reads == 3)
+            if (++_reads == triggerRead)
             {
                 long position = Position;
                 Position = 0;
