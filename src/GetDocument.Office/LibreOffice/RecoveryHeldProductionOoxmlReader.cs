@@ -39,7 +39,7 @@ internal static class RecoveryHeldProductionOoxmlReader
             string.IsNullOrWhiteSpace(expectedSourcePath))
             throw new ArgumentException(
                 "Нужны внешний ожидаемый SourcePath и формат DOCX/XLSX/PPTX.");
-        if (heldCopy is FileStream != heldProductionManifest is FileStream)
+        if ((heldCopy is FileStream) != (heldProductionManifest is FileStream))
             throw new ArgumentException(
                 "Оба потока должны быть либо FileStream, либо тестовыми потоками.");
         if (!heldCopy.CanRead || !heldCopy.CanSeek ||
