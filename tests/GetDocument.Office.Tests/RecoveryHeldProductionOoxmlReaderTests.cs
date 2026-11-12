@@ -180,12 +180,13 @@ public sealed class RecoveryHeldProductionOoxmlReaderTests
     public async Task CanceledBeforeReadingPreservesCallerBytes()
     {
         byte[] copy = BuildZip();
+        byte[] copyBefore = (byte[])copy.Clone();
         byte[] manifest = Manifest(copy);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(
             () => Inspect(copy, manifest, token: cts.Token));
-        CollectionAssert.AreEqual(copy, BuildZip());
+        CollectionAssert.AreEqual(copyBefore, copy);
         Assert.IsFalse(RecoveryHeldProductionOoxmlReader.CanAuthorizeCleanup);
     }
 
