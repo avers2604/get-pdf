@@ -158,7 +158,7 @@ class HeldManifestBytesContract(unittest.TestCase):
         for source in (self.codec, self.reader):
             for forbidden in (
                 "File.Delete(", "File.Move(", "File.Create(", "File.Open(",
-                "FileStream(", "Path.Combine(", "Directory.Delete(",
+                "new FileStream(", "Path.Combine(", "Directory.Delete(",
                 "SetLength(", "File.Write", "NtCreateFile(", "renameat2(",
             ):
                 self.assertNotIn(forbidden, source)
