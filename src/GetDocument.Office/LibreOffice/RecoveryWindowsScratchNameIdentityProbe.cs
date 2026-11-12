@@ -8,8 +8,11 @@ namespace GetDocument.Office.LibreOffice;
 /// GD-31J.27cd: lab-only READ-ONLY NtOpenFile with a caller-held
 /// OBJECT_ATTRIBUTES.RootDirectory. Double name-open against a held scratch
 /// descriptor. A matching ID cannot prevent a rename immediately afterwards.
-/// The CC creator uses ShareAccess=0: Windows may return STATUS_SHARING_VIOLATION
-/// until the creator is closed. That is an UNAVAILABLE observation, not proof.
+/// The CC creator uses ShareAccess=0 BY DEFAULT: Windows may return
+/// STATUS_SHARING_VIOLATION until the creator is closed. CE's separate
+/// FILE_SHARE_READ laboratory mode can permit read-only observers, but
+/// compatibility is NOT independently verified for NTFS/SMB.
+/// A sharing failure is UNAVAILABLE observation, never proof.
 /// No production binding to OfficeRecoveryStore and no mutation capability.
 /// </summary>
 internal static class RecoveryWindowsScratchNameIdentityProbe
