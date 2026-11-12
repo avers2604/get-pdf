@@ -17,6 +17,7 @@ internal static class RecoveryWindowsJournalScratchFactory
 {
     private const string ScratchSuffix = ".gdjournal.tmp";
     private const uint FileReadData = 0x00000001;
+    private const uint FileShareRead = 0x00000001;
     private const uint FileWriteData = 0x00000002;
     private const uint FileReadAttributes = 0x00000080;
     private const uint ReadControl = 0x00020000;
@@ -41,6 +42,14 @@ internal static class RecoveryWindowsJournalScratchFactory
     internal static bool HasTrustedAncestry => false;
     internal static bool HasVerifiedReparseIsolation => false;
     internal static bool HasVerifiedDirectoryDurability => false;
+
+    internal static uint GetLabShareMask(RecoveryWindowsScratchShareMode mode) =>
+        mode switch
+        {
+            RecoveryWindowsScratchShareMode.Exclusive => 0,
+            RecoveryWindowsScratchShareMode.ReadOnlyObservers => FileShareRead,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode))
+        };
 
     internal static string ValidateName(string? basename)
     {
@@ -129,7 +138,9 @@ internal static class RecoveryWindowsJournalScratchFactory
     /// </summary>
     internal static RecoveryWindowsJournalScratchLease CreateOnHeldParentForLab(
         SafeFileHandle heldParent, string basename, string expectedOwnerSid,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        RecoveryWindowsScratchShareMode shareMode =
+            RecoveryWindowsScratchShareMode.Exclusive)
     {
         ValidateName(basename);
         ArgumentNullException.ThrowIfNull(heldParent);
@@ -140,6 +151,15 @@ internal static class RecoveryWindowsJournalScratchFactory
                 "1", StringComparison.Ordinal))
             throw new InvalidOperationException(
                 "Нативный Windows create разрешён только в явно включённой лаборатории.");
+        uint shareAccess = GetLabShareMask(shareMode);
+        // The default retains exclusive CC behavior. Separate CE opt-in
+        // enables FILE_SHARE_READ *only*, never FILE_SHARE_WRITE/DELETE.
+        if (shareMode == RecoveryWindowsScratchShareMode.ReadOnlyObservers &&
+            !string.Equals(
+                Environment.GetEnvironmentVariable("GD31J27CE_READ_SHARE_LAB"),
+                "1", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Read-shared NtCreateFile разрешён только в CE лаборатории.");
         cancellationToken.ThrowIfCancellationRequested();
         if (!OperatingSystem.IsWindows() ||
             RuntimeInformation.ProcessArchitecture is not
@@ -193,7 +213,7 @@ internal static class RecoveryWindowsJournalScratchFactory
                 ReadControl | Synchronize,
                 ref attributes, out IoStatusBlock ioStatus,
                 0, FileAttributeNormal,
-                0, // deny concurrent opens while this lab handle is held
+                shareAccess, // exclusive by default; CE allows read-only observers
                 FileCreate,
                 FileSynchronousIoNonAlert | FileNonDirectoryFile |
                 FileOpenReparsePoint,
@@ -321,6 +341,23 @@ internal static class RecoveryWindowsJournalScratchFactory
     private static extern bool GetFileInformationByHandleEx(
         SafeFileHandle handle, int fileInformationClass,
         out FileAttributeTagInfo info, uint bufferSize);
+}
+
+internal enum RecoveryWindowsScratchShareMode
+{
+    Exclusive,
+    ReadOnlyObservers
+}
+
+internal static class RecoveryWindowsScratchSharePolicy
+{
+    internal static RecoveryWindowsScratchShareMode DefaultMode =>
+        RecoveryWindowsScratchShareMode.Exclusive;
+    internal static bool ProductionReadSharingEnabled => false;
+    internal static bool HasVerifiedNtfsSharingSemantics => false;
+    internal static bool HasVerifiedSmbSharingSemantics => false;
+    internal static bool CanAuthorizePublication => false;
+    internal static bool CanAuthorizeCleanup => false;
 }
 
 internal enum RecoveryWindowsScratchTagFinding
