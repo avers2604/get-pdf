@@ -55,7 +55,7 @@ class WindowsNtScratchFactorySourceContracts(unittest.TestCase):
             "FileCreated = 0x00000002",
             "FileNonDirectoryFile = 0x00000040",
             "FileSynchronousIoNonAlert = 0x00000020",
-            "0, // deny concurrent opens while this lab handle is held",
+            "shareAccess, // exclusive by default; CE allows read-only observers",
             "new SafeFileHandle(raw, ownsHandle: true)",
         ):
             self.assertIn(token, self.source)

@@ -77,7 +77,8 @@ class RecoveryScratchNameAndPairSourceTests(unittest.TestCase):
         self.assertIn("StatusSharingViolation = unchecked((int)0xC0000043)", self.windows)
         self.assertIn("ExclusiveShareDenied", self.windows)
         self.assertIn("STATUS_SHARING_VIOLATION", self.windows)
-        self.assertIn("0, // deny concurrent opens while this lab handle is held", self.cc)
+        self.assertIn("RecoveryWindowsScratchShareMode.Exclusive => 0", self.cc)
+        self.assertIn("shareAccess, // exclusive by default; CE allows read-only observers", self.cc)
         self.assertNotIn("CreatorSharePolicyAllowsReopen => true", self.windows)
 
     def test_windows_owner_acl_reparse_and_fileids(self):
