@@ -10,6 +10,44 @@ internal static class RecoveryRestartCheckpointReview
 {
     internal static bool NativeRestartAttestationEnabled => false;
 
+    /// <summary>
+    /// GD-31J.27ca / BLOCK 3. Parse a single bounded transport envelope
+    /// before performing the existing in-memory anchor/journal reconciliation.
+    /// This method does not touch storage, authorize mutation or attest fsync.
+    /// </summary>
+    internal static RecoveryRestartReviewResult InspectEnvelope(
+        ReadOnlyMemory<byte> envelopeBytes,
+        RecoveryProtectedAnchorCandidate anchor,
+        ReadOnlySpan<byte> callerSuppliedKey,
+        Guid expectedTransactionId,
+        RecoveryNativeMutationKind kind,
+        ulong expectedGeneration,
+        string expectedPreviousAnchorMac,
+        RecoveryPairIdentityEvidence claimedPairIdentity,
+        RecoveryCrashArtifactSnapshot artifacts,
+        RecoveryRestartFileIdSnapshot reopenedIds,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        byte[] journal;
+        try
+        {
+            journal = RecoveryCrashJournalWireEnvelope.DecodeCandidate(
+                envelopeBytes.Span);
+        }
+        catch (InvalidDataException)
+        {
+            return new RecoveryRestartReviewResult(
+                RecoveryRestartFinding.InvalidJournal,
+                RecoveryCrashReconciliationDisposition.NoJournalEvidence);
+        }
+
+        return Inspect(journal, anchor, callerSuppliedKey,
+            expectedTransactionId, kind, expectedGeneration,
+            expectedPreviousAnchorMac, claimedPairIdentity, artifacts,
+            reopenedIds, cancellationToken);
+    }
+
     internal static RecoveryRestartReviewResult Inspect(
         ReadOnlyMemory<byte> journalBytes,
         RecoveryProtectedAnchorCandidate anchor,
